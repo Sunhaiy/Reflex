@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": false,
+    "noEmit": false,
+    "outDir": "dist-electron",
+    "rootDir": "src",
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": ["src/main/**/*", "src/shared/**/*"]
+}
