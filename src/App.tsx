@@ -14,6 +14,7 @@ import { ResizableLayout } from './components/ResizableLayout';
 import { useThemeStore } from './store/themeStore';
 import { useSettingsStore } from './store/settingsStore';
 import { RightPanel } from './components/RightPanel';
+import { AICommandInput } from './components/AICommandInput';
 
 interface AppSession {
   uniqueId: string;
@@ -148,10 +149,20 @@ function App() {
                       </div>
                     }
                     middleContent={
-                      <div className="h-full bg-background/50 backdrop-blur-sm">
-                        <ErrorBoundary name="Terminal">
-                          <TerminalView connectionId={session.uniqueId} />
-                        </ErrorBoundary>
+                      <div className="h-full bg-background/50 backdrop-blur-sm flex flex-col overflow-hidden">
+                        <div className="flex-1 min-h-0 relative overflow-hidden">
+                          <ErrorBoundary name="Terminal">
+                            <TerminalView connectionId={session.uniqueId} />
+                          </ErrorBoundary>
+                        </div>
+                        <div className="flex-shrink-0 border-t border-border p-2 bg-background/80">
+                          <AICommandInput
+                            onCommandGenerated={(cmd) => {
+                              // Send command to terminal via electron
+                              window.electron?.writeTerminal(session.uniqueId, cmd);
+                            }}
+                          />
+                        </div>
                       </div>
                     }
                     rightContent={

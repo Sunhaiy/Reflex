@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { Language } from '../shared/locales';
+import { AIProvider, AIConfig, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
+import { aiService } from '../services/aiService';
 
 interface SettingsState {
     language: Language;
@@ -17,6 +19,13 @@ interface SettingsState {
     // Sound
     bellStyle: 'none' | 'visual' | 'sound';
 
+    // AI Settings
+    aiProvider: AIProvider;
+    aiApiKey: string;
+    aiBaseUrl: string;
+    aiModel: string;
+    aiPrivacyMode: boolean;
+
     setLanguage: (lang: Language) => void;
     setUiFontFamily: (font: string) => void;
     setTerminalFontFamily: (font: string) => void;
@@ -31,6 +40,13 @@ interface SettingsState {
     setScrollback: (lines: number) => void;
     setBrightBold: (enabled: boolean) => void;
     setBellStyle: (style: 'none' | 'visual' | 'sound') => void;
+
+    // AI Actions
+    setAiProvider: (provider: AIProvider) => void;
+    setAiApiKey: (key: string) => void;
+    setAiBaseUrl: (url: string) => void;
+    setAiModel: (model: string) => void;
+    setAiPrivacyMode: (enabled: boolean) => void;
 
     initSettings: () => Promise<void>;
 }
@@ -50,6 +66,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     scrollback: 5000,
     brightBold: true,
     bellStyle: 'none',
+
+    // AI Defaults
+    aiProvider: 'deepseek',
+    aiApiKey: '',
+    aiBaseUrl: '',
+    aiModel: '',
+    aiPrivacyMode: false,
 
     setLanguage: (lang: Language) => {
         set({ language: lang });
@@ -111,6 +134,56 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         window.electron.storeSet('bellStyle', style);
     },
 
+    setAiProvider: (provider: AIProvider) => {
+        set({ aiProvider: provider });
+        window.electron.storeSet('aiProvider', provider);
+        // Update AI service config
+        const state = useSettingsStore.getState();
+        aiService.setConfig({
+            provider,
+            apiKey: state.aiApiKey,
+            baseUrl: state.aiBaseUrl || undefined,
+            model: state.aiModel || undefined,
+            privacyMode: state.aiPrivacyMode
+        });
+    },
+
+    setAiApiKey: (key: string) => {
+        set({ aiApiKey: key });
+        window.electron.storeSet('aiApiKey', key);
+        const state = useSettingsStore.getState();
+        aiService.setConfig({
+            provider: state.aiProvider,
+            apiKey: key,
+            baseUrl: state.aiBaseUrl || undefined,
+            model: state.aiModel || undefined,
+            privacyMode: state.aiPrivacyMode
+        });
+    },
+
+    setAiBaseUrl: (url: string) => {
+        set({ aiBaseUrl: url });
+        window.electron.storeSet('aiBaseUrl', url);
+    },
+
+    setAiModel: (model: string) => {
+        set({ aiModel: model });
+        window.electron.storeSet('aiModel', model);
+    },
+
+    setAiPrivacyMode: (enabled: boolean) => {
+        set({ aiPrivacyMode: enabled });
+        window.electron.storeSet('aiPrivacyMode', enabled);
+        const state = useSettingsStore.getState();
+        aiService.setConfig({
+            provider: state.aiProvider,
+            apiKey: state.aiApiKey,
+            baseUrl: state.aiBaseUrl || undefined,
+            model: state.aiModel || undefined,
+            privacyMode: enabled
+        });
+    },
+
     initSettings: async () => {
         const savedLang = await window.electron.storeGet('language');
         const savedUiFont = await window.electron.storeGet('uiFontFamily');
@@ -144,5 +217,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             brightBold: typeof savedBrightBold === 'boolean' ? savedBrightBold : true,
             bellStyle: (savedBellStyle as 'none' | 'visual' | 'sound') || 'none',
         });
+
+        // Load AI settings
+        const savedAiProvider = await window.electron.storeGet('aiProvider');
+        const savedAiApiKey = await window.electron.storeGet('aiApiKey');
+        const savedAiBaseUrl = await window.electron.storeGet('aiBaseUrl');
+        const savedAiModel = await window.electron.storeGet('aiModel');
+        const savedAiPrivacyMode = await window.electron.storeGet('aiPrivacyMode');
+
+        const aiProvider = (savedAiProvider as AIProvider) || 'deepseek';
+        const aiApiKey = (savedAiApiKey as string) || '';
+        const aiBaseUrl = (savedAiBaseUrl as string) || '';
+        const aiModel = (savedAiModel as string) || '';
+        const aiPrivacyMode = typeof savedAiPrivacyMode === 'boolean' ? savedAiPrivacyMode : false;
+
+        set({ aiProvider, aiApiKey, aiBaseUrl, aiModel, aiPrivacyMode });
+
+        // Initialize AI service
+        if (aiApiKey) {
+            aiService.setConfig({
+                provider: aiProvider,
+                apiKey: aiApiKey,
+                baseUrl: aiBaseUrl || undefined,
+                model: aiModel || undefined,
+                privacyMode: aiPrivacyMode
+            });
+        }
     }
 }));
