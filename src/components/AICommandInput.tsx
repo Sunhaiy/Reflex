@@ -1,7 +1,7 @@
 // AI Command Input - Natural Language to Shell Command Component
 
 import { useState, useRef, KeyboardEvent } from 'react';
-import { Sparkles, Send, Loader2, X, Terminal } from 'lucide-react';
+import { Sparkles, Send, Loader2, Terminal } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { cn } from '../lib/utils';
 
@@ -14,7 +14,6 @@ interface AICommandInputProps {
 export function AICommandInput({ onCommandGenerated, currentPath, className }: AICommandInputProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
     const [generatedCommand, setGeneratedCommand] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +45,6 @@ export function AICommandInput({ onCommandGenerated, currentPath, className }: A
             e.preventDefault();
             handleGenerate();
         } else if (e.key === 'Escape') {
-            setIsExpanded(false);
             setGeneratedCommand(null);
             setError(null);
         }
@@ -57,7 +55,6 @@ export function AICommandInput({ onCommandGenerated, currentPath, className }: A
             onCommandGenerated(generatedCommand);
             setInput('');
             setGeneratedCommand(null);
-            setIsExpanded(false);
         }
     };
 
@@ -67,27 +64,6 @@ export function AICommandInput({ onCommandGenerated, currentPath, className }: A
         setError(null);
         inputRef.current?.focus();
     };
-
-    if (!isExpanded) {
-        return (
-            <button
-                onClick={() => {
-                    setIsExpanded(true);
-                    setTimeout(() => inputRef.current?.focus(), 100);
-                }}
-                className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm",
-                    "bg-primary/10 hover:bg-primary/20 text-primary transition-colors",
-                    "border border-primary/20 hover:border-primary/40",
-                    className
-                )}
-                title="AI 命令助手 (Ctrl+Shift+A)"
-            >
-                <Sparkles className="w-4 h-4" />
-                <span className="hidden sm:inline">AI 助手</span>
-            </button>
-        );
-    }
 
     return (
         <div className={cn(
@@ -125,17 +101,6 @@ export function AICommandInput({ onCommandGenerated, currentPath, className }: A
                     ) : (
                         <Send className="w-4 h-4" />
                     )}
-                </button>
-                <button
-                    onClick={() => {
-                        setIsExpanded(false);
-                        setGeneratedCommand(null);
-                        setError(null);
-                    }}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                    title="关闭"
-                >
-                    <X className="w-4 h-4" />
                 </button>
             </div>
 

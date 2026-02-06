@@ -37,6 +37,7 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
     brightBold, setBrightBold,
     bellStyle, setBellStyle,
     // AI Settings
+    aiEnabled, setAiEnabled,
     aiProvider, setAiProvider,
     aiApiKey, setAiApiKey,
     aiBaseUrl, setAiBaseUrl,
@@ -469,96 +470,122 @@ export function Settings({ onBack }: SettingsProps) { // Kept original SettingsP
             </CardHeader>
             <CardContent>
               <div className="grid gap-6">
-                {/* Provider Selection */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-medium text-sm">AI 服务提供商</span>
-                  <span className="text-xs text-muted-foreground mb-2">
-                    选择你的 AI API 提供商
-                  </span>
-                  <select
-                    className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
-                    value={aiProvider}
-                    onChange={(e) => setAiProvider(e.target.value as AIProvider)}
-                  >
-                    {Object.entries(AI_PROVIDER_CONFIGS).map(([key, config]) => (
-                      <option key={key} value={key}>{config.displayName}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* API Key */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-medium text-sm">API Key</span>
-                  <span className="text-xs text-muted-foreground mb-2">
-                    填入你的 API 密钥 (将安全存储在本地)
-                  </span>
-                  <div className="relative">
-                    <input
-                      type="password"
-                      className="w-full sm:w-96 p-2 pr-10 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm font-mono"
-                      placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                      value={aiApiKey}
-                      onChange={(e) => setAiApiKey(e.target.value)}
-                    />
-                  </div>
-                  {aiApiKey && (
-                    <span className="text-xs text-green-500 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> API Key 已配置
+                {/* AI Enable Toggle */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-sm">启用 AI 功能</span>
+                    <span className="text-xs text-muted-foreground">
+                      开启后在终端下方显示 AI 对话框
                     </span>
-                  )}
-                </div>
-
-                {/* Custom Base URL (for custom providers) */}
-                {aiProvider === 'custom' && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-medium text-sm">自定义 Base URL</span>
-                    <span className="text-xs text-muted-foreground mb-2">
-                      输入你的 API 端点地址
-                    </span>
-                    <input
-                      type="text"
-                      className="w-full sm:w-96 p-2 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm font-mono"
-                      placeholder="https://api.example.com"
-                      value={aiBaseUrl}
-                      onChange={(e) => setAiBaseUrl(e.target.value)}
-                    />
                   </div>
-                )}
-
-                {/* Model Override */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-medium text-sm">模型 (可选)</span>
-                  <span className="text-xs text-muted-foreground mb-2">
-                    留空使用默认模型: {AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
-                  </span>
-                  <input
-                    type="text"
-                    className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm"
-                    placeholder={AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
-                    value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                  />
-                </div>
-
-                {/* Privacy Mode Toggle */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-medium text-sm">隐私模式</span>
-                  <span className="text-xs text-muted-foreground mb-2">
-                    开启后将自动脱敏 IP、密码等敏感信息
-                  </span>
                   <button
-                    onClick={() => setAiPrivacyMode(!aiPrivacyMode)}
+                    onClick={() => setAiEnabled(!aiEnabled)}
                     className={cn(
-                      "flex items-center gap-2 w-fit px-4 py-2 rounded-md text-sm transition-colors",
-                      aiPrivacyMode
-                        ? "bg-green-500/20 text-green-500 border border-green-500/50"
-                        : "bg-muted text-muted-foreground border border-input hover:bg-accent"
+                      "w-11 h-6 rounded-full transition-colors relative",
+                      aiEnabled ? "bg-primary" : "bg-muted-foreground/30"
                     )}
                   >
-                    {aiPrivacyMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    {aiPrivacyMode ? '已开启' : '已关闭'}
+                    <div className={cn(
+                      "w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all shadow-sm",
+                      aiEnabled ? "left-[22px]" : "left-0.5"
+                    )} />
                   </button>
                 </div>
+
+                {/* Provider Selection - show only when enabled */}
+                {aiEnabled && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium text-sm">AI 服务提供商</span>
+                      <span className="text-xs text-muted-foreground mb-2">
+                        选择你的 AI API 提供商
+                      </span>
+                      <select
+                        className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent hover:text-accent-foreground text-sm"
+                        value={aiProvider}
+                        onChange={(e) => setAiProvider(e.target.value as AIProvider)}
+                      >
+                        {Object.entries(AI_PROVIDER_CONFIGS).map(([key, config]) => (
+                          <option key={key} value={key}>{config.displayName}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* API Key */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium text-sm">API Key</span>
+                      <span className="text-xs text-muted-foreground mb-2">
+                        填入你的 API 密钥 (将安全存储在本地)
+                      </span>
+                      <div className="relative">
+                        <input
+                          type="password"
+                          className="w-full sm:w-96 p-2 pr-10 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm font-mono"
+                          placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+                          value={aiApiKey}
+                          onChange={(e) => setAiApiKey(e.target.value)}
+                        />
+                      </div>
+                      {aiApiKey && (
+                        <span className="text-xs text-green-500 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> API Key 已配置
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Custom Base URL (for custom providers) */}
+                    {aiProvider === 'custom' && (
+                      <div className="flex flex-col gap-1.5">
+                        <span className="font-medium text-sm">自定义 Base URL</span>
+                        <span className="text-xs text-muted-foreground mb-2">
+                          输入你的 API 端点地址
+                        </span>
+                        <input
+                          type="text"
+                          className="w-full sm:w-96 p-2 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm font-mono"
+                          placeholder="https://api.example.com"
+                          value={aiBaseUrl}
+                          onChange={(e) => setAiBaseUrl(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    {/* Model Override */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium text-sm">模型 (可选)</span>
+                      <span className="text-xs text-muted-foreground mb-2">
+                        留空使用默认模型: {AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
+                      </span>
+                      <input
+                        type="text"
+                        className="w-full sm:w-64 p-2 rounded-md border border-input bg-background/50 hover:bg-accent/30 text-sm"
+                        placeholder={AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
+                        value={aiModel}
+                        onChange={(e) => setAiModel(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Privacy Mode Toggle */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-medium text-sm">隐私模式</span>
+                      <span className="text-xs text-muted-foreground mb-2">
+                        开启后将自动脱敏 IP、密码等敏感信息
+                      </span>
+                      <button
+                        onClick={() => setAiPrivacyMode(!aiPrivacyMode)}
+                        className={cn(
+                          "flex items-center gap-2 w-fit px-4 py-2 rounded-md text-sm transition-colors",
+                          aiPrivacyMode
+                            ? "bg-green-500/20 text-green-500 border border-green-500/50"
+                            : "bg-muted text-muted-foreground border border-input hover:bg-accent"
+                        )}
+                      >
+                        {aiPrivacyMode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        {aiPrivacyMode ? '已开启' : '已关闭'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

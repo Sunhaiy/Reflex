@@ -41,6 +41,21 @@ class AIService {
             .replace(/export\s+\w+_SECRET=\S+/gi, 'export [SECRET_REDACTED]');
     }
 
+    // Build the final API endpoint URL
+    private getEndpoint(baseUrl: string, isOllama: boolean): string {
+        const cleanBase = baseUrl.replace(/\/+$/, '');
+
+        if (isOllama) {
+            if (cleanBase.endsWith('/api/chat')) return cleanBase;
+            return `${cleanBase}/api/chat`;
+        } else {
+            if (cleanBase.endsWith('/v1/chat/completions')) return cleanBase;
+            // Handle common base URL suffix provided by many proxies
+            if (cleanBase.endsWith('/v1')) return `${cleanBase}/chat/completions`;
+            return `${cleanBase}/v1/chat/completions`;
+        }
+    }
+
     // Non-streaming completion
     async complete(request: AICompletionRequest): Promise<AICompletionResponse> {
         if (!this.config) {
@@ -64,15 +79,13 @@ class AIService {
 
         // Choose endpoint and headers based on provider
         const isOllama = this.config.provider === 'ollama';
-        const endpoint = isOllama
-            ? `${baseUrl}/api/chat`
-            : `${baseUrl}/v1/chat/completions`;
+        const endpoint = this.getEndpoint(baseUrl, isOllama);
 
         const headers: Record<string, string> = {
             'Content-Type': 'application/json'
         };
 
-        if (!isOllama && this.config.apiKey) {
+        if (this.config.apiKey) {
             headers['Authorization'] = `Bearer ${this.config.apiKey}`;
         }
 
@@ -124,8 +137,13 @@ class AIService {
 
     // Streaming completion with callback
     async *streamComplete(request: AICompletionRequest): AsyncGenerator<string, void, unknown> {
-        if (!this.config || !this.config.apiKey) {
+        if (!this.config) {
             throw new Error('AI service not configured. Please set your API key in Settings.');
+        }
+
+        // For non-Ollama providers, require API key
+        if (this.config.provider !== 'ollama' && !this.config.apiKey) {
+            throw new Error('API key required. Please set your API key in Settings.');
         }
 
         const providerConfig = AI_PROVIDER_CONFIGS[this.config.provider];
@@ -138,19 +156,38 @@ class AIService {
             content: this.sanitize(msg.content)
         }));
 
-        const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        const isOllama = this.config.provider === 'ollama';
+        const endpoint = this.getEndpoint(baseUrl, isOllama);
+
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+
+        if (this.config.apiKey) {
+            headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        }
+
+        if (this.config.provider === 'openrouter') {
+            headers['HTTP-Referer'] = 'https://sshtool.app';
+            headers['X-Title'] = 'SSH Tool';
+        }
+
+        const requestBody = isOllama ? {
+            model,
+            messages: sanitizedMessages,
+            stream: true
+        } : {
+            model,
+            messages: sanitizedMessages,
+            temperature: request.temperature ?? 0.7,
+            max_tokens: request.maxTokens ?? 2048,
+            stream: true
+        };
+
+        const response = await fetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.config.apiKey}`
-            },
-            body: JSON.stringify({
-                model,
-                messages: sanitizedMessages,
-                temperature: request.temperature ?? 0.7,
-                max_tokens: request.maxTokens ?? 2048,
-                stream: true
-            })
+            headers,
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -179,7 +216,12 @@ class AIService {
 
                     try {
                         const parsed = JSON.parse(data);
-                        const content = parsed.choices?.[0]?.delta?.content;
+
+                        // Ollama format is slightly different 
+                        const content = isOllama
+                            ? parsed.message?.content
+                            : parsed.choices?.[0]?.delta?.content;
+
                         if (content) {
                             yield content;
                         }
@@ -218,6 +260,17 @@ class AIService {
         const messages: ChatMessage[] = [
             { role: 'system', content: (await import('../shared/aiTypes')).AI_SYSTEM_PROMPTS.logSummary },
             { role: 'user', content: logText }
+        ];
+
+        const response = await this.complete({ messages, temperature: 0.3 });
+        return response.content;
+    }
+
+    // Helper: Explain command/output
+    async explainCommand(text: string): Promise<string> {
+        const messages: ChatMessage[] = [
+            { role: 'system', content: (await import('../shared/aiTypes')).AI_SYSTEM_PROMPTS.explainCommand },
+            { role: 'user', content: text }
         ];
 
         const response = await this.complete({ messages, temperature: 0.3 });

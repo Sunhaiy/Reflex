@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, RefreshCw, Power } from 'lucide-react';
 
 interface Process {
@@ -52,8 +53,8 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-card border border-border rounded-lg shadow-xl w-[800px] h-[600px] flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
@@ -132,6 +133,7 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

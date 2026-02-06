@@ -20,6 +20,7 @@ interface SettingsState {
     bellStyle: 'none' | 'visual' | 'sound';
 
     // AI Settings
+    aiEnabled: boolean;
     aiProvider: AIProvider;
     aiApiKey: string;
     aiBaseUrl: string;
@@ -42,6 +43,7 @@ interface SettingsState {
     setBellStyle: (style: 'none' | 'visual' | 'sound') => void;
 
     // AI Actions
+    setAiEnabled: (enabled: boolean) => void;
     setAiProvider: (provider: AIProvider) => void;
     setAiApiKey: (key: string) => void;
     setAiBaseUrl: (url: string) => void;
@@ -68,6 +70,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     bellStyle: 'none',
 
     // AI Defaults
+    aiEnabled: true,
     aiProvider: 'deepseek',
     aiApiKey: '',
     aiBaseUrl: '',
@@ -134,6 +137,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         window.electron.storeSet('bellStyle', style);
     },
 
+    setAiEnabled: (enabled: boolean) => {
+        set({ aiEnabled: enabled });
+        window.electron.storeSet('aiEnabled', enabled);
+    },
+
     setAiProvider: (provider: AIProvider) => {
         set({ aiProvider: provider });
         window.electron.storeSet('aiProvider', provider);
@@ -142,7 +150,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         aiService.setConfig({
             provider,
             apiKey: state.aiApiKey,
-            baseUrl: state.aiBaseUrl || undefined,
+            // Only use custom URL/model if provider is 'custom'
+            baseUrl: provider === 'custom' ? (state.aiBaseUrl || undefined) : undefined,
             model: state.aiModel || undefined,
             privacyMode: state.aiPrivacyMode
         });
@@ -155,7 +164,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         aiService.setConfig({
             provider: state.aiProvider,
             apiKey: key,
-            baseUrl: state.aiBaseUrl || undefined,
+            baseUrl: state.aiProvider === 'custom' ? (state.aiBaseUrl || undefined) : undefined,
             model: state.aiModel || undefined,
             privacyMode: state.aiPrivacyMode
         });
@@ -178,7 +187,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         aiService.setConfig({
             provider: state.aiProvider,
             apiKey: state.aiApiKey,
-            baseUrl: state.aiBaseUrl || undefined,
+            baseUrl: state.aiProvider === 'custom' ? (state.aiBaseUrl || undefined) : undefined,
             model: state.aiModel || undefined,
             privacyMode: enabled
         });
@@ -219,26 +228,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         });
 
         // Load AI settings
+        const savedAiEnabled = await window.electron.storeGet('aiEnabled');
         const savedAiProvider = await window.electron.storeGet('aiProvider');
         const savedAiApiKey = await window.electron.storeGet('aiApiKey');
         const savedAiBaseUrl = await window.electron.storeGet('aiBaseUrl');
         const savedAiModel = await window.electron.storeGet('aiModel');
         const savedAiPrivacyMode = await window.electron.storeGet('aiPrivacyMode');
 
+        const aiEnabled = typeof savedAiEnabled === 'boolean' ? savedAiEnabled : true;
         const aiProvider = (savedAiProvider as AIProvider) || 'deepseek';
         const aiApiKey = (savedAiApiKey as string) || '';
         const aiBaseUrl = (savedAiBaseUrl as string) || '';
         const aiModel = (savedAiModel as string) || '';
         const aiPrivacyMode = typeof savedAiPrivacyMode === 'boolean' ? savedAiPrivacyMode : false;
 
-        set({ aiProvider, aiApiKey, aiBaseUrl, aiModel, aiPrivacyMode });
+        set({ aiEnabled, aiProvider, aiApiKey, aiBaseUrl, aiModel, aiPrivacyMode });
 
         // Initialize AI service
-        if (aiApiKey) {
+        if (aiApiKey || aiProvider === 'ollama') {
             aiService.setConfig({
                 provider: aiProvider,
                 apiKey: aiApiKey,
-                baseUrl: aiBaseUrl || undefined,
+                baseUrl: aiProvider === 'custom' ? (aiBaseUrl || undefined) : undefined,
                 model: aiModel || undefined,
                 privacyMode: aiPrivacyMode
             });

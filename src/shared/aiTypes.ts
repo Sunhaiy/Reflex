@@ -1,6 +1,6 @@
 // AI Service Types for SSH Tool
 
-export type AIProvider = 'deepseek' | 'openai' | 'anthropic' | 'groq' | 'openrouter' | 'ollama' | 'custom';
+export type AIProvider = 'deepseek' | 'openai' | 'anthropic' | 'groq' | 'openrouter' | 'ollama' | 'qwen' | 'custom';
 
 export interface AIConfig {
     provider: AIProvider;
@@ -68,6 +68,13 @@ export const AI_PROVIDER_CONFIGS: Record<AIProvider, { baseUrl: string; defaultM
         displayName: 'Anthropic',
         hasFreeTier: false
     },
+    qwen: {
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        defaultModel: 'qwen-plus',
+        displayName: '通义千问 (AliCloud)',
+        hasFreeTier: true,
+        note: '新用户有免费额度'
+    },
     custom: {
         baseUrl: '',
         defaultModel: '',
@@ -106,5 +113,12 @@ export const AI_SYSTEM_PROMPTS = {
 2. 指出是否有异常或错误
 3. 如果有问题，给出检查建议
 
-保持简洁，重点突出。`
+保持简洁，重点突出。`,
+
+    explainCommand: `你是一个 Linux/Unix 技术专家。用户会提供一段终端输出或一个 Shell 命令，你需要：
+
+1. 如果是命令：详细解释该命令的目的及每个参数的作用。
+2. 如果是终端输出/日志：解释其含义，指出是否正常，如果有错误，简要说明原因。
+
+回答要简洁专业，使用中文，字数控制在 200 字以内。`
 };

@@ -19,8 +19,8 @@ export function RightPanel({ connectionId }: RightPanelProps) {
                 <button
                     onClick={() => setActiveTab('monitor')}
                     className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-background whitespace-nowrap ${activeTab === 'monitor'
-                            ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
-                            : 'text-muted-foreground'
+                        ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
+                        : 'text-muted-foreground'
                         }`}
                 >
                     <Monitor className="w-3.5 h-3.5" />
@@ -29,8 +29,8 @@ export function RightPanel({ connectionId }: RightPanelProps) {
                 <button
                     onClick={() => setActiveTab('docker')}
                     className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-background whitespace-nowrap ${activeTab === 'docker'
-                            ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
-                            : 'text-muted-foreground'
+                        ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
+                        : 'text-muted-foreground'
                         }`}
                 >
                     <Container className="w-3.5 h-3.5" />
@@ -39,8 +39,8 @@ export function RightPanel({ connectionId }: RightPanelProps) {
                 <button
                     onClick={() => setActiveTab('tunnels')}
                     className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-background whitespace-nowrap ${activeTab === 'tunnels'
-                            ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
-                            : 'text-muted-foreground'
+                        ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
+                        : 'text-muted-foreground'
                         }`}
                 >
                     <Network className="w-3.5 h-3.5" />

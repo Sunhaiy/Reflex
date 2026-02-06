@@ -1,5 +1,3 @@
-
-
 import { useState, useEffect } from 'react';
 import { TerminalView } from './components/TerminalView';
 import { FileBrowser } from './components/FileBrowser';
@@ -27,6 +25,9 @@ function App() {
   // Multi-session state
   const [sessions, setSessions] = useState<AppSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const { aiEnabled } = useSettingsStore();
+
+  const activeSessionIdx = sessions.findIndex(s => s.uniqueId === activeSessionId);
 
   useEffect(() => {
     const cleanup = window.electron.onSSHStatus((_, { id, status }) => {
@@ -155,14 +156,15 @@ function App() {
                             <TerminalView connectionId={session.uniqueId} />
                           </ErrorBoundary>
                         </div>
-                        <div className="flex-shrink-0 border-t border-border p-2 bg-background/80">
-                          <AICommandInput
-                            onCommandGenerated={(cmd) => {
-                              // Send command to terminal via electron
-                              window.electron?.writeTerminal(session.uniqueId, cmd);
-                            }}
-                          />
-                        </div>
+                        {aiEnabled && (
+                          <div className="flex-shrink-0 border-t border-border p-2 bg-background/80">
+                            <AICommandInput
+                              onCommandGenerated={(cmd) => {
+                                window.electron?.writeTerminal(session.uniqueId, cmd);
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
                     }
                     rightContent={

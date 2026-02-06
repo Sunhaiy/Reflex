@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { TerminalContextMenu } from './TerminalContextMenu';
+import { AIPopover } from './AIPopover';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -27,6 +29,14 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     brightBold,
     bellStyle
   } = useSettingsStore();
+
+  // Context Menu State
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [selectionText, setSelectionText] = useState('');
+  const [hasSelection, setHasSelection] = useState(false);
+
+  // AI Popover State
+  const [aiPopover, setAiPopover] = useState<{ x: number; y: number; text: string; type: 'explain' | 'fix' } | null>(null);
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -140,6 +150,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       });
 
       const handleResize = () => {
+        if (!containerRef.current) return;
         try {
           fitAddon.fit();
           if (term.cols > 0 && term.rows > 0) {
@@ -150,17 +161,30 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         }
       };
 
-      window.addEventListener('resize', handleResize);
-      handleResize(); // Initial resize
+      const nativeContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        const selection = term.getSelection();
+        setSelectionText(selection || '');
+        setHasSelection(!!selection && selection.length > 0);
+        setMenuPos({ x: e.clientX, y: e.clientY });
+      };
+
+      containerRef.current?.addEventListener('contextmenu', nativeContextMenu);
+
+      const resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(containerRef.current);
 
       // Cleanup function for useEffect
       return () => {
+        containerRef.current?.removeEventListener('contextmenu', nativeContextMenu);
         try {
           cleanup();
         } catch (e) {
           console.warn('Terminal data listener cleanup failed:', e);
         }
-        window.removeEventListener('resize', handleResize);
+        resizeObserver.disconnect();
         try {
           // Dispose terminal - wrapped in try-catch to handle WebGL addon issues
           if (term && !term.element?.parentElement) {
@@ -185,6 +209,69 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     };
   }, [connectionId, rendererType]); // Only re-init if connectionId or renderer type changes (canvas vs webgl)
 
-  return <div ref={containerRef} className="h-full w-full" style={{ background: theme.terminal.background }} />;
+  const handleCopy = () => {
+    if (selectionText) {
+      navigator.clipboard.writeText(selectionText);
+    }
+  };
+
+  const handleExplain = () => {
+    if (selectionText && menuPos) {
+      setAiPopover({
+        x: menuPos.x,
+        y: menuPos.y,
+        text: selectionText,
+        type: 'explain'
+      });
+    }
+  };
+
+  const handleFix = () => {
+    if (selectionText && menuPos) {
+      setAiPopover({
+        x: menuPos.x,
+        y: menuPos.y,
+        text: selectionText,
+        type: 'fix'
+      });
+    }
+  };
+
+  return (
+    <div
+      className="h-full w-full relative"
+    >
+      <div
+        ref={containerRef}
+        className="h-full w-full"
+        style={{ background: theme.terminal.background }}
+      />
+
+      {menuPos && (
+        <TerminalContextMenu
+          x={menuPos.x}
+          y={menuPos.y}
+          hasSelection={hasSelection}
+          onCopy={handleCopy}
+          onExplain={handleExplain}
+          onFix={handleFix}
+          onClose={() => setMenuPos(null)}
+        />
+      )}
+
+      {aiPopover && (
+        <AIPopover
+          x={aiPopover.x}
+          y={aiPopover.y}
+          text={aiPopover.text}
+          type={aiPopover.type}
+          onClose={() => setAiPopover(null)}
+          onApplyFix={(cmd) => {
+            window.electron?.writeTerminal(connectionId, cmd);
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
