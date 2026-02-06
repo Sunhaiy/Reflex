@@ -13,7 +13,7 @@ interface SettingsProps {
 }
 
 export function Settings({ onBack }: SettingsProps) {
-  const { currentThemeId, setTheme } = useThemeStore();
+  const { currentThemeId, setTheme, opacity, setOpacity } = useThemeStore();
   const { language, setLanguage, fontFamily, setFontFamily } = useSettingsStore();
   const { t } = useTranslation();
 
@@ -29,7 +29,7 @@ export function Settings({ onBack }: SettingsProps) {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-background p-6 max-w-4xl mx-auto">
+    <div className="flex flex-col h-full bg-background/80 p-6 max-w-4xl mx-auto overflow-y-auto custom-scrollbar">
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="w-4 h-4" />
@@ -77,6 +77,26 @@ export function Settings({ onBack }: SettingsProps) {
                     <option key={font.value} value={font.value}>{font.label}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* Opacity */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center w-full sm:w-64">
+                  <span className="font-medium text-sm">Window Opacity</span>
+                  <span className="text-xs text-muted-foreground">{Math.round(opacity * 100)}%</span>
+                </div>
+                <span className="text-xs text-muted-foreground mb-2">
+                  Adjust the transparency of the window background.
+                </span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.0"
+                  step="0.01"
+                  value={opacity}
+                  onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                  className="w-full sm:w-64 accent-primary cursor-pointer"
+                />
               </div>
 
               {/* Theme */}

@@ -8,19 +8,19 @@ export function TitleBar() {
         SSH Tool
       </div>
       <div className="flex h-full" style={{ WebkitAppRegion: "no-drag" } as any}>
-        <button 
+        <button
           onClick={() => window.electron.minimize()}
           className="h-full w-10 flex items-center justify-center hover:bg-secondary text-muted-foreground transition-colors"
         >
           <Minus className="w-4 h-4" />
         </button>
-        <button 
+        <button
           onClick={() => window.electron.maximize()}
           className="h-full w-10 flex items-center justify-center hover:bg-secondary text-muted-foreground transition-colors"
         >
           <Square className="w-3 h-3" />
         </button>
-        <button 
+        <button
           onClick={() => window.electron.close()}
           className="h-full w-10 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground text-muted-foreground transition-colors"
         >

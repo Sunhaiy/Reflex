@@ -85,7 +85,7 @@ function App() {
   const activeSession = sessions.find(s => s.uniqueId === activeSessionId);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden border border-border">
+    <div className="h-screen w-screen flex flex-col text-foreground overflow-hidden border border-border">
       <TitleBar />
 
       <div className="flex-1 overflow-hidden relative flex flex-col">
@@ -123,21 +123,21 @@ function App() {
                 >
                   <ResizableLayout
                     leftContent={
-                      <div className="h-full flex flex-col bg-card border-r border-border">
+                      <div className="h-full flex flex-col bg-card/40 border-r border-border backdrop-blur-sm">
                         <ErrorBoundary name="FileBrowser">
                           <FileBrowser connectionId={session.uniqueId} />
                         </ErrorBoundary>
                       </div>
                     }
                     middleContent={
-                      <div className="h-full bg-black">
+                      <div className="h-full bg-background/50 backdrop-blur-sm">
                         <ErrorBoundary name="Terminal">
                           <TerminalView connectionId={session.uniqueId} />
                         </ErrorBoundary>
                       </div>
                     }
                     rightContent={
-                      <div className="h-full bg-card border-l border-border">
+                      <div className="h-full bg-card/40 border-l border-border backdrop-blur-sm">
                         <ErrorBoundary name="RightPanel">
                           <RightPanel connectionId={session.uniqueId} />
                         </ErrorBoundary>

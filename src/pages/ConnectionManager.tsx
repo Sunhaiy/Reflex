@@ -67,7 +67,7 @@ export function ConnectionManager({ onConnect, onNavigate }: ConnectionManagerPr
   };
 
   return (
-    <div className="flex flex-col h-full bg-background p-6">
+    <div className="flex flex-col h-full p-6">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold tracking-tight">SSH Tool</h1>
         <Button variant="outline" size="icon" onClick={() => onNavigate('settings')}>

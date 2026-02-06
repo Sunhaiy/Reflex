@@ -4,13 +4,16 @@ import { Theme, ThemeId, themes } from '../shared/themes';
 interface ThemeState {
   currentThemeId: ThemeId;
   theme: Theme;
+  opacity: number;
   setTheme: (id: ThemeId) => void;
+  setOpacity: (opacity: number) => void;
   initTheme: () => Promise<void>;
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   currentThemeId: 'dark',
   theme: themes['dark'],
+  opacity: 0.9,
 
   setTheme: (id: ThemeId) => {
     const theme = themes[id];
@@ -26,20 +29,41 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       root.classList.remove('dark');
     }
 
-    // Set custom font (Managed by settingsStore now)
-    // document.body.style.fontFamily = theme.fontFamily;
-
     // Set CSS variables
     Object.entries(theme.colors).forEach(([key, value]) => {
       root.style.setProperty(`--${key}`, value);
     });
 
     // Persist
-    window.electron.storeSet('theme', id);
+    (window as any).electron.storeSet('theme', id);
+  },
+
+  setOpacity: (opacity: number) => {
+    set({ opacity });
+    const root = document.getElementById('root');
+    if (root) {
+      root.style.setProperty('--app-opacity', opacity.toString());
+    }
+    (window as any).electron.storeSet('opacity', opacity);
   },
 
   initTheme: async () => {
-    const savedThemeId = await window.electron.storeGet('theme');
+    const savedThemeId = await (window as any).electron.storeGet('theme');
+    const savedOpacity = await (window as any).electron.storeGet('opacity');
+
+    if (savedOpacity) {
+      set({ opacity: parseFloat(savedOpacity) });
+      const root = document.getElementById('root');
+      if (root) {
+        root.style.setProperty('--app-opacity', savedOpacity.toString());
+      }
+    } else {
+      const root = document.getElementById('root');
+      if (root) {
+        root.style.setProperty('--app-opacity', '0.9');
+      }
+    }
+
     if (savedThemeId && themes[savedThemeId as ThemeId]) {
       get().setTheme(savedThemeId as ThemeId);
     } else {

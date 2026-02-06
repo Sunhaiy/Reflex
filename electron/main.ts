@@ -7,6 +7,8 @@ import { setupIpcHandlers } from './ipcHandlers';
 //   app.quit();
 // }
 
+// app.disableHardwareAcceleration();
+
 let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
@@ -14,7 +16,7 @@ const createWindow = () => {
   // In dev: ./electron/preload.ts -> compiled to dist-electron/preload.js
   // In prod: ./resources/app/dist-electron/preload.js
   const preloadPath = path.join(__dirname, 'preload.js');
-  
+
   console.log('Main Process Starting...');
   console.log('Preload Path:', preloadPath);
 
@@ -23,6 +25,11 @@ const createWindow = () => {
     height: 800,
     frame: false, // Frameless window
     titleBarStyle: 'hidden',
+    transparent: true,
+    backgroundColor: '#00000000',
+    // @ts-ignore
+    // backgroundMaterial: 'mica', // Disable temporarily to verify basic transparency
+    vibrancy: 'fullscreen-ui', // macOS
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -31,8 +38,8 @@ const createWindow = () => {
   });
 
   if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    mainWindow.loadURL('http://localhost:3000');
+    // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
