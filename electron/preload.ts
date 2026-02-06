@@ -5,7 +5,8 @@ console.log('Preload script loading...');
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
 
-  connectSSH: (connection: any) => ipcRenderer.invoke('ssh-connect', connection),
+  connectSSH: ({ connection, sessionId, profileId }: { connection: any, sessionId: string, profileId?: string }) =>
+    ipcRenderer.invoke('ssh-connect', { connection, sessionId, profileId }),
   onTerminalData: (callback: (event: any, payload: { id: string, data: string }) => void) => {
     const subscription = (event: any, payload: any) => callback(event, payload);
     ipcRenderer.on('terminal-data', subscription);
@@ -41,8 +42,9 @@ contextBridge.exposeInMainWorld('electron', {
   getDockerContainers: (id: string) => ipcRenderer.invoke('docker-list', id),
   dockerAction: (id: string, containerId: string, action: string) => ipcRenderer.invoke('docker-action', { id, containerId, action }),
 
-  addTunnel: (id: string, type: 'L' | 'R', config: any) => ipcRenderer.invoke('tunnel-add', { id, type, config }),
+  addTunnel: (id: string, type: 'L' | 'R', config: any, name?: string) => ipcRenderer.invoke('tunnel-add', { id, type, config, name }),
   removeTunnel: (id: string, tunnelId: string) => ipcRenderer.invoke('tunnel-remove', { id, tunnelId }),
+  tunnelToggle: ({ id, tunnelId, active }: { id: string, tunnelId: string, active: boolean }) => ipcRenderer.invoke('tunnel-toggle', { id, tunnelId, active }),
   getTunnels: (id: string) => ipcRenderer.invoke('tunnel-list', id),
 
   onSSHStatus: (callback: (event: any, payload: { id: string, status: string }) => void) => {
@@ -60,6 +62,8 @@ contextBridge.exposeInMainWorld('electron', {
   storeGet: (key: string) => ipcRenderer.invoke('store-get', key),
   storeSet: (key: string, value: any) => ipcRenderer.invoke('store-set', key, value),
   storeDelete: (key: string) => ipcRenderer.invoke('store-delete', key),
+  clipboardWriteText: (text: string) => ipcRenderer.send('clipboard-write', text),
+  clipboardReadText: () => ipcRenderer.invoke('clipboard-read'),
 });
 
 console.log('Preload script loaded');

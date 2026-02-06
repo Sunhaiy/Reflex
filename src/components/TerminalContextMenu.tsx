@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Copy, Clipboard, HelpCircle, AlertTriangle } from 'lucide-react';
 
 interface TerminalContextMenuProps {
     x: number;
@@ -8,6 +8,7 @@ interface TerminalContextMenuProps {
     hasSelection: boolean;
     aiEnabled: boolean;
     onCopy: () => void;
+    onPaste: () => void;
     onExplain: () => void;
     onFix: () => void;
     onClose: () => void;
@@ -19,6 +20,7 @@ export function TerminalContextMenu({
     hasSelection,
     aiEnabled,
     onCopy,
+    onPaste,
     onExplain,
     onFix,
     onClose
@@ -58,6 +60,18 @@ export function TerminalContextMenu({
                     <Copy className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
                     <span>复制 (Copy)</span>
                     <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+C</span>
+                </button>
+
+                <button
+                    onClick={() => {
+                        onPaste();
+                        onClose();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-secondary transition-colors group"
+                >
+                    <Clipboard className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                    <span>粘贴 (Paste)</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+V</span>
                 </button>
 
                 {aiEnabled && (

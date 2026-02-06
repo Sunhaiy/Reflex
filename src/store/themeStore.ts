@@ -14,10 +14,10 @@ interface ThemeState {
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  currentThemeId: 'dark',
-  currentTerminalThemeId: 'default',
-  theme: themes['dark'],
-  terminalTheme: terminalThemes['default'],
+  currentThemeId: 'zangqing',
+  currentTerminalThemeId: 'zangqing',
+  theme: themes['zangqing'],
+  terminalTheme: terminalThemes['zangqing'],
   opacity: 0.9,
 
   setTheme: (id: ThemeId) => {
@@ -79,15 +79,15 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     if (savedThemeId && themes[savedThemeId as ThemeId]) {
       get().setTheme(savedThemeId as ThemeId);
     } else {
-      // Default to dark
-      get().setTheme('dark');
+      // Default to zangqing
+      get().setTheme('zangqing');
     }
 
     if (savedTerminalThemeId && terminalThemes[savedTerminalThemeId as TerminalThemeId]) {
       get().setTerminalTheme(savedTerminalThemeId as TerminalThemeId);
     } else {
-      // Use default terminal theme
-      get().setTerminalTheme('default');
+      // Use zangqing terminal theme
+      get().setTerminalTheme('zangqing');
     }
   }
 }));

@@ -30,7 +30,8 @@ function App() {
   const activeSessionIdx = sessions.findIndex(s => s.uniqueId === activeSessionId);
 
   useEffect(() => {
-    const cleanup = window.electron.onSSHStatus((_, { id, status }) => {
+    const eWindow = window as any;
+    const cleanup = eWindow.electron.onSSHStatus((_: any, { id, status }: any) => {
       setSessions(prev => prev.map(s =>
         s.uniqueId === id ? { ...s, status: status as 'connected' | 'disconnected' } : s
       ));
@@ -53,7 +54,13 @@ function App() {
   const handleConnect = async (connection: SSHConnection) => {
     // Create new session
     const uniqueId = Date.now().toString();
-    const result = await window.electron.connectSSH({ ...connection, id: uniqueId }); // Use unique ID for this session
+    const result = await (window as any).electron.connectSSH({
+      connection,
+      sessionId: uniqueId,
+      profileId: connection.id
+    });
+    // @ts-ignore
+    window.lastSessionId = uniqueId; // For debugging if needed
 
     if (result.success) {
       const newSession: AppSession = { uniqueId, connection, status: 'connected' };
@@ -160,7 +167,8 @@ function App() {
                           <div className="flex-shrink-0 border-t border-border p-1.5 bg-background/40 backdrop-blur-sm">
                             <AICommandInput
                               onCommandGenerated={(cmd) => {
-                                window.electron?.writeTerminal(session.uniqueId, cmd);
+                                const eWindow = window as any;
+                                eWindow.electron?.writeTerminal(session.uniqueId, cmd);
                               }}
                             />
                           </div>

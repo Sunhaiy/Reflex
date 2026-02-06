@@ -1,5 +1,5 @@
 {
-  "name": "sshtool",
+  "name": "zangqing",
   "private": true,
   "version": "1.0.0",
   "main": "dist-electron/electron/main.js",
@@ -13,8 +13,8 @@
   },
   "build": {
     "asar": false,
-    "appId": "com.sshtool.app",
-    "productName": "SSHTool",
+    "appId": "com.zangqing.app",
+    "productName": "藏青",
     "directories": {
       "output": "release-new"
     },

@@ -1,6 +1,6 @@
-export type ThemeId = 'light' | 'dark' | 'dracula' | 'githubLight' | 'solarizedDark' | 'monokaiPro' | 'bounds' | 'cyberpunk' | 'taxuexunmei' | 'pixel';
+export type ThemeId = 'light' | 'dark' | 'dracula' | 'githubLight' | 'solarizedDark' | 'monokaiPro' | 'bounds' | 'cyberpunk' | 'taxuexunmei' | 'pixel' | 'zangqing';
 
-export type TerminalThemeId = 'default' | 'adventureTime' | 'afterglow' | 'alienBlood' | 'argonaut' | 'dracula' | 'githubLight' | 'solarizedDark' | 'monokaiPro' | 'bounds' | 'cyberpunk' | 'taxuexunmei' | 'pixel';
+export type TerminalThemeId = 'default' | 'adventureTime' | 'afterglow' | 'alienBlood' | 'argonaut' | 'dracula' | 'githubLight' | 'solarizedDark' | 'monokaiPro' | 'bounds' | 'cyberpunk' | 'taxuexunmei' | 'pixel' | 'zangqing';
 
 export interface ThemeColors {
   background: string;
@@ -561,6 +561,56 @@ export const themes: Record<ThemeId, Theme> = {
       brightCyan: '#33ffff',
       brightWhite: '#ffffff',
     },
+  },
+  zangqing: {
+    id: 'zangqing',
+    name: '藏青 (Zangqing)',
+    type: 'dark',
+    fontFamily: "'Inter', sans-serif",
+    colors: {
+      background: "216 65% 9%",     // Deep Navy #081426
+      foreground: "0 0% 100%",      // White
+      card: "216 65% 12%",
+      cardForeground: "0 0% 100%",
+      popover: "216 65% 10%",
+      popoverForeground: "0 0% 100%",
+      primary: "224 76% 48%",       // #1d4ed8
+      primaryForeground: "0 0% 100%",
+      secondary: "216 40% 18%",
+      secondaryForeground: "0 0% 100%",
+      muted: "216 30% 14%",
+      mutedForeground: "216 20% 65%",
+      accent: "224 76% 48%",
+      accentForeground: "0 0% 100%",
+      destructive: "0 84% 60%",
+      destructiveForeground: "0 0% 100%",
+      border: "216 40% 18%",
+      input: "216 40% 20%",
+      ring: "224 76% 48%",
+    },
+    terminal: {
+      name: '藏青 (Terminal)',
+      background: '#081426',
+      foreground: '#ffffff',
+      cursor: '#1d4ed8',
+      selectionBackground: '#1e3a8a',
+      black: '#000000',
+      red: '#cd3131',
+      green: '#0dbc79',
+      yellow: '#e5e510',
+      blue: '#2472c8',
+      magenta: '#bc3fbc',
+      cyan: '#11a8cd',
+      white: '#e5e5e5',
+      brightBlack: '#666666',
+      brightRed: '#f14c4c',
+      brightGreen: '#23d18b',
+      brightYellow: '#f5f543',
+      brightBlue: '#3b8eea',
+      brightMagenta: '#d670d6',
+      brightCyan: '#29b8db',
+      brightWhite: '#ffffff',
+    }
   }
 };
 
@@ -862,6 +912,29 @@ export const terminalThemes: Record<TerminalThemeId, TerminalTheme> = {
     brightBlue: '#3333ff',
     brightMagenta: '#ff33ff',
     brightCyan: '#33ffff',
+    brightWhite: '#ffffff',
+  },
+  zangqing: {
+    name: '藏青 (Terminal)',
+    background: '#081426',
+    foreground: '#ffffff',
+    cursor: '#1d4ed8',
+    selectionBackground: '#1e3a8a',
+    black: '#000000',
+    red: '#cd3131',
+    green: '#0dbc79',
+    yellow: '#e5e510',
+    blue: '#2472c8',
+    magenta: '#bc3fbc',
+    cyan: '#11a8cd',
+    white: '#e5e5e5',
+    brightBlack: '#666666',
+    brightRed: '#f14c4c',
+    brightGreen: '#23d18b',
+    brightYellow: '#f5f543',
+    brightBlue: '#3b8eea',
+    brightMagenta: '#d670d6',
+    brightCyan: '#29b8db',
     brightWhite: '#ffffff',
   }
 };

@@ -5,7 +5,7 @@ export function TitleBar() {
     <div className="h-8 bg-background border-b flex items-center justify-between select-none" style={{ WebkitAppRegion: "drag" } as any}>
       <div className="px-4 text-xs font-medium text-muted-foreground flex items-center gap-2">
         <div className="w-3 h-3 rounded-full bg-primary/20"></div>
-        SSH Tool
+        藏青
       </div>
       <div className="flex h-full" style={{ WebkitAppRegion: "no-drag" } as any}>
         <button

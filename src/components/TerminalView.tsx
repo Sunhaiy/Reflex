@@ -69,7 +69,8 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     termRef.current.options.cursorBlink = cursorBlink;
     termRef.current.options.scrollback = scrollback;
     termRef.current.options.drawBoldTextInBrightColors = brightBold;
-    termRef.current.options.bellStyle = bellStyle as any;
+    // @ts-ignore
+    termRef.current.options.bellStyle = bellStyle;
 
     // Handle WebGL toggle dynamically?
     // It's tricky to toggle WebGL without disposing.
@@ -104,7 +105,8 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         lineHeight: settings.lineHeight,
         scrollback: settings.scrollback,
         drawBoldTextInBrightColors: settings.brightBold,
-        bellStyle: settings.bellStyle as any,
+        // @ts-ignore
+        bellStyle: settings.bellStyle,
         allowProposedApi: true,
         theme: {
           ...(currentTerminalTheme || {}),
@@ -138,14 +140,15 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       } catch (e) {
         console.warn('Initial fit failed:', e);
       }
-      termRef.current = term;
+      term.open(containerRef.current!);
+      term.focus(); // Focus immediately on mount
 
       term.onData(data => {
-        window.electron.writeTerminal(connectionId, data);
+        (window as any).electron.writeTerminal(connectionId, data);
       });
 
       // Store cleanup function
-      const cleanup = window.electron.onTerminalData((_, { id, data }) => {
+      const cleanup = (window as any).electron.onTerminalData((_: any, { id, data }: { id: string, data: string }) => {
         if (id === connectionId) {
           term.write(data);
         }
@@ -156,36 +159,34 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         try {
           fitAddon.fit();
           if (term.cols > 0 && term.rows > 0) {
-            window.electron.resizeTerminal(connectionId, term.cols, term.rows);
+            (window as any).electron.resizeTerminal(connectionId, term.cols, term.rows);
           }
         } catch (e) {
           console.warn('Resize fit failed:', e);
         }
       };
 
-      const nativeContextMenu = (e: MouseEvent) => {
-        const selection = term.getSelection();
+      const handleNativeContextMenu = (e: MouseEvent) => {
+        if (containerRef.current?.contains(e.target as Node)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
 
-        // Capture selection immediately
-        const hasSel = !!selection && selection.length > 0;
-        setSelectionText(selection || '');
-        setHasSelection(hasSel);
-
-        // Always prevent default and show our context menu
-        e.preventDefault();
-        setMenuPos({ x: e.clientX, y: e.clientY });
+          const selection = term.getSelection();
+          setSelectionText(selection || '');
+          setHasSelection(!!selection && selection.length > 0);
+          setMenuPos({ x: e.clientX, y: e.clientY });
+        }
       };
-
-      containerRef.current?.addEventListener('contextmenu', nativeContextMenu);
+      window.addEventListener('contextmenu', handleNativeContextMenu, true);
 
       const resizeObserver = new ResizeObserver(() => {
         handleResize();
       });
-      resizeObserver.observe(containerRef.current);
+      resizeObserver.observe(containerRef.current!);
 
       // Cleanup function for useEffect
       return () => {
-        containerRef.current?.removeEventListener('contextmenu', nativeContextMenu);
+        window.removeEventListener('contextmenu', handleNativeContextMenu, true);
         try {
           cleanup();
         } catch (e) {
@@ -227,8 +228,20 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
   }, [connectionId, rendererType]); // Only re-init if connectionId or renderer type changes (canvas vs webgl)
 
   const handleCopy = () => {
+    console.log('handleCopy called, selection:', selectionText);
     if (selectionText) {
-      navigator.clipboard.writeText(selectionText);
+      (window as any).electron.clipboardWriteText(selectionText);
+    }
+  };
+
+  const handlePaste = async () => {
+    try {
+      const text = await (window as any).electron.clipboardReadText();
+      if (text) {
+        (window as any).electron.writeTerminal(connectionId, text);
+      }
+    } catch (err) {
+      console.error('Failed to read clipboard:', err);
     }
   };
 
@@ -257,6 +270,10 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
   return (
     <div
       className="h-full w-full relative"
+      onMouseDown={() => {
+        // Ensure terminal gets focus when clicking anywhere in its container
+        termRef.current?.focus();
+      }}
     >
       <div
         ref={containerRef}
@@ -271,6 +288,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
           hasSelection={hasSelection}
           aiEnabled={aiEnabled}
           onCopy={handleCopy}
+          onPaste={handlePaste}
           onExplain={handleExplain}
           onFix={handleFix}
           onClose={() => setMenuPos(null)}
@@ -285,7 +303,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
           type={aiPopover.type}
           onClose={() => setAiPopover(null)}
           onApplyFix={(cmd) => {
-            window.electron?.writeTerminal(connectionId, cmd);
+            (window as any).electron?.writeTerminal(connectionId, cmd);
           }}
         />
       )}
