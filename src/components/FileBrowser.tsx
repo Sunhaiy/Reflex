@@ -443,7 +443,7 @@ export function FileBrowser({ connectionId }: FileBrowserProps) {
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full bg-transparent border-r border-border text-foreground relative select-none overflow-hidden min-w-0"
+      className="flex flex-col h-full bg-transparent text-foreground relative select-none overflow-hidden min-w-0"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

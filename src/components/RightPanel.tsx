@@ -17,8 +17,8 @@ export function RightPanel({ connectionId }: RightPanelProps) {
             <div className="flex items-center border-b border-border bg-muted/40 text-xs overflow-x-auto no-scrollbar">
                 <button
                     onClick={() => setActiveTab('monitor')}
-                    className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-background whitespace-nowrap ${activeTab === 'monitor'
-                        ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
+                    className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-muted/30 whitespace-nowrap ${activeTab === 'monitor'
+                        ? 'bg-transparent text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
                         : 'text-muted-foreground'
                         }`}
                 >
@@ -27,8 +27,8 @@ export function RightPanel({ connectionId }: RightPanelProps) {
                 </button>
                 <button
                     onClick={() => setActiveTab('docker')}
-                    className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-background whitespace-nowrap ${activeTab === 'docker'
-                        ? 'bg-background text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
+                    className={`flex items-center gap-2 px-3 py-2 border-r border-border transition-colors hover:bg-muted/30 whitespace-nowrap ${activeTab === 'docker'
+                        ? 'bg-transparent text-foreground font-medium border-b-2 border-b-primary -mb-[1px]'
                         : 'text-muted-foreground'
                         }`}
                 >

@@ -11,6 +11,10 @@ import { setupIpcHandlers } from './ipcHandlers';
 
 let mainWindow: BrowserWindow | null = null;
 
+export function getMainWindow() {
+  return mainWindow;
+}
+
 const createWindow = () => {
   // Preload path resolution
   // In dev: ./electron/preload.ts -> compiled to dist-electron/preload.js
@@ -27,8 +31,6 @@ const createWindow = () => {
     titleBarStyle: 'hidden',
     transparent: true,
     backgroundColor: '#00000000',
-    // @ts-ignore
-    // backgroundMaterial: 'mica', // Disable temporarily to verify basic transparency
     vibrancy: 'fullscreen-ui', // macOS
     webPreferences: {
       preload: preloadPath,

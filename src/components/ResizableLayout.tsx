@@ -83,7 +83,7 @@ export function ResizableLayout({
 
             {/* Left Resizer */}
             <div
-                className="w-1 cursor-col-resize hover:bg-primary/50 transition-colors bg-border relative z-10"
+                className="w-1 cursor-col-resize hover:bg-primary/50 transition-colors bg-transparent relative z-10"
                 onMouseDown={startResizeLeft}
             />
 
@@ -94,12 +94,12 @@ export function ResizableLayout({
 
             {/* Right Resizer */}
             <div
-                className="w-1 cursor-col-resize hover:bg-primary/50 transition-colors bg-border relative z-10"
+                className="w-1 cursor-col-resize hover:bg-primary/50 transition-colors bg-transparent relative z-10"
                 onMouseDown={startResizeRight}
             />
 
             {/* Right Panel */}
-            <div style={{ width: rightWidth, padding: 'var(--panel-gap)' }} className="flex-shrink-0 flex flex-col min-w-0 border-l border-border overflow-hidden">
+            <div style={{ width: rightWidth, padding: 'var(--panel-gap)' }} className="flex-shrink-0 flex flex-col min-w-0 overflow-hidden">
                 {rightContent}
             </div>
         </div>

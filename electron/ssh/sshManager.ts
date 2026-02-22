@@ -403,9 +403,12 @@ export class SSHManager {
         return new Promise((resolve, reject) => {
             conn.exec(`docker ${action} ${containerId}`, (err, stream) => {
                 if (err) return reject(err);
+                let stderr = '';
+                stream.on('data', () => { }); // must consume stdout
+                stream.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
                 stream.on('close', (code: any) => {
                     if (code === 0) resolve();
-                    else reject(new Error(`Docker action failed with code ${code}`));
+                    else reject(new Error(stderr || `Docker action failed with code ${code}`));
                 });
             });
         });

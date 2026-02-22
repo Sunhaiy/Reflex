@@ -57,7 +57,7 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
     };
 
     return (
-        <div className="h-full flex flex-col bg-background text-foreground">
+        <div className="h-full flex flex-col bg-transparent text-foreground">
             {/* Header */}
             <div className="p-4 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2 font-medium">
@@ -86,31 +86,38 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
                 )}
 
                 {containers.map(container => (
-                    <div key={container.id} className="bg-card border border-border rounded-lg p-3 shadow-none hover:border-primary/50 transition-colors">
+                    <div key={container.id} className="bg-card/50 border border-border rounded-lg p-3 shadow-none hover:border-primary/50 transition-colors">
                         <div className="flex items-start justify-between mb-2">
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                                 <div className="font-medium text-sm truncate flex items-center gap-2" title={container.name}>
                                     <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusColor(container.status)}`} />
                                     {container.name}
                                 </div>
-                                <div className="text-xs text-muted-foreground truncate opacity-80" title={container.image}>
+                                <div className="text-xs text-muted-foreground truncate opacity-80 mt-0.5" title={container.image}>
                                     {container.image}
                                 </div>
                             </div>
-                            <div className="text-[10px] font-medium text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded ml-2 whitespace-nowrap">
-                                {container.id.substring(0, 12)}
-                            </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ml-2 whitespace-nowrap ${container.status.toLowerCase().includes('up')
+                                    ? 'bg-green-500/15 text-green-500'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}>
+                                {container.state || (container.status.toLowerCase().includes('up') ? 'running' : 'exited')}
+                            </span>
                         </div>
 
-                        <div className="flex items-center justify-between mt-3">
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]" title={container.status}>
-                                {container.status}
+                        <div className="text-[11px] text-muted-foreground mb-2 truncate" title={container.status}>
+                            {container.status}
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-muted-foreground/60">
+                                {container.id.substring(0, 12)}
                             </span>
 
                             <div className="flex items-center gap-1">
                                 <button
                                     onClick={() => handleAction(container.id, 'start')}
-                                    disabled={!!actionLoading || container.status.toLowerCase().includes('running')}
+                                    disabled={!!actionLoading || container.status.toLowerCase().includes('up')}
                                     className="p-1.5 hover:bg-green-500/10 hover:text-green-500 rounded disabled:opacity-30 transition-colors"
                                     title="Start"
                                 >
@@ -126,16 +133,12 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
                                 </button>
                                 <button
                                     onClick={() => handleAction(container.id, 'stop')}
-                                    disabled={!!actionLoading || !container.status.toLowerCase().includes('running')}
+                                    disabled={!!actionLoading || !container.status.toLowerCase().includes('up')}
                                     className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded disabled:opacity-30 transition-colors"
                                     title="Stop"
                                 >
                                     <Square className="w-3.5 h-3.5 fill-current" />
                                 </button>
-                                {/* Logs future feature */}
-                                {/* <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
-                                <FileCode className="w-3.5 h-3.5" />
-                            </button> */}
                             </div>
                         </div>
                     </div>
