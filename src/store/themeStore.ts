@@ -75,13 +75,13 @@ const applyTheme = (baseId: BaseThemeId, accentId: AccentColorId) => {
 };
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  baseThemeId: 'dark',
+  baseThemeId: 'black',
   accentColorId: 'indigo',
   currentTerminalThemeId: 'default',
 
   theme: {
     type: 'dark',
-    colors: generateThemeColors('dark', 'indigo')
+    colors: generateThemeColors('black', 'indigo')
   },
 
   terminalTheme: terminalThemes['default'],
@@ -139,7 +139,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     const savedOpacity = await (window as any).electron.storeGet('opacity');
 
     // Default values
-    let baseTheme: BaseThemeId = 'dark';
+    let baseTheme: BaseThemeId = 'black';
     let accentColor: AccentColorId = 'indigo';
 
     // Legacy migration or load

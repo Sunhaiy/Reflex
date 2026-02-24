@@ -132,7 +132,11 @@
   background: transparent;
 }
 
-/* Force xterm transparency */
+/* Force xterm transparency + padding */
+.xterm {
+  padding: 12px;
+}
+
 .xterm-viewport,
 .xterm-screen {
   background-color: transparent !important;

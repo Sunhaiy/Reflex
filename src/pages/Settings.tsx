@@ -144,22 +144,6 @@ export function Settings({ onBack }: SettingsProps) {
                   />
                 </div>
 
-                {/* Opacity */}
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between items-center w-full sm:w-64">
-                    <span className="font-medium text-sm">{t('settings.appearance.opacity')}</span>
-                    <span className="text-xs text-muted-foreground">{Math.round(opacity * 100)}%</span>
-                  </div>
-                  <Input
-                    type="range"
-                    min="0.5"
-                    max="1.0"
-                    step="0.01"
-                    value={opacity}
-                    onChange={(e) => setOpacity(parseFloat(e.target.value))}
-                    className="w-full sm:w-64 accent-primary cursor-pointer h-auto border-none bg-transparent hover:bg-transparent p-0"
-                  />
-                </div>
 
                 {/* Base Theme */}
                 <div className="flex flex-col gap-1.5">
@@ -167,7 +151,7 @@ export function Settings({ onBack }: SettingsProps) {
                   <span className="text-xs text-muted-foreground mb-2">
                     {t('settings.appearance.backgroundThemeDesc')}
                   </span>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     {Object.values(baseThemes).map((theme) => (
                       <div
                         key={theme.id}
@@ -242,8 +226,11 @@ export function Settings({ onBack }: SettingsProps) {
                   <span className="text-xs text-muted-foreground mb-2">
                     {t('settings.appearance.themeDesc')}
                   </span>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {Object.entries(terminalThemes).map(([id, theme]) => (
+
+                  {/* Dark themes */}
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">🌙 Dark 暗色</span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                    {Object.entries(terminalThemes).filter(([, t]) => t.category === 'dark').map(([id, theme]) => (
                       <button
                         key={id}
                         onClick={() => setTerminalTheme(id as any)}
@@ -257,6 +244,32 @@ export function Settings({ onBack }: SettingsProps) {
                       >
                         <div className="flex gap-1">
                           <div className="w-3 h-3 rounded-full" style={{ background: theme.background }}></div>
+                          <div className="w-3 h-3 rounded-full" style={{ background: theme.foreground }}></div>
+                          <div className="w-3 h-3 rounded-full" style={{ background: theme.blue }}></div>
+                          <div className="w-3 h-3 rounded-full" style={{ background: theme.red }}></div>
+                        </div>
+                        <span className="text-xs font-medium truncate w-full">{theme.name}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Light themes */}
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">☀️ Light 亮色</span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {Object.entries(terminalThemes).filter(([, t]) => t.category === 'light').map(([id, theme]) => (
+                      <button
+                        key={id}
+                        onClick={() => setTerminalTheme(id as any)}
+                        className={`
+                          flex flex-col gap-2 p-2 rounded-md border text-left transition-all h-full
+                          ${currentTerminalThemeId === id
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary'
+                            : 'border-input hover:bg-accent hover:text-accent-foreground'
+                          }
+                        `}
+                      >
+                        <div className="flex gap-1">
+                          <div className="w-3 h-3 rounded-full border border-border/20" style={{ background: theme.background }}></div>
                           <div className="w-3 h-3 rounded-full" style={{ background: theme.foreground }}></div>
                           <div className="w-3 h-3 rounded-full" style={{ background: theme.blue }}></div>
                           <div className="w-3 h-3 rounded-full" style={{ background: theme.red }}></div>
