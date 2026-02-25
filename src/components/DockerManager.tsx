@@ -390,6 +390,7 @@ function LogViewer({ connectionId, containerId, containerName }: { connectionId:
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const logRef = useRef<HTMLDivElement>(null);
+    const { t } = useTranslation();
 
     const fetchLogs = async () => {
         setLoading(true);

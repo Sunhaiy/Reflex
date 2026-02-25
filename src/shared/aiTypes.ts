@@ -52,6 +52,12 @@ export interface ToolCompletionResponse {
     content: string | null;
     toolCalls: ToolCall[] | null;
     finishReason: string;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    modelUsed?: string;
 }
 
 // Agent tools definition

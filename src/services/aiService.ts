@@ -238,6 +238,7 @@ class AIService {
         messages: ChatMessage[];
         tools: ToolDefinition[];
         temperature?: number;
+        overrideModel?: string;  // switch model per-request without changing config
     }): Promise<ToolCompletionResponse> {
         if (!this.config) {
             throw new Error('AI service not configured.');
@@ -248,7 +249,8 @@ class AIService {
 
         const providerConfig = AI_PROVIDER_CONFIGS[this.config.provider];
         const baseUrl = this.config.baseUrl || providerConfig.baseUrl;
-        const model = this.config.model || providerConfig.defaultModel;
+        // overrideModel > config model > provider default
+        const model = request.overrideModel || this.config.model || providerConfig.defaultModel;
         const isOllama = this.config.provider === 'ollama';
         const endpoint = this.getEndpoint(baseUrl, isOllama);
 
@@ -314,6 +316,11 @@ class AIService {
         const data = await response.json();
         const choice = data.choices?.[0];
         const message = choice?.message;
+        const usage = data.usage ? {
+            promptTokens: data.usage.prompt_tokens ?? 0,
+            completionTokens: data.usage.completion_tokens ?? 0,
+            totalTokens: data.usage.total_tokens ?? 0,
+        } : undefined;
 
         // If model returned tool_calls natively, use them
         if (message?.tool_calls?.length) {
@@ -321,6 +328,8 @@ class AIService {
                 content: message.content || null,
                 toolCalls: message.tool_calls,
                 finishReason: choice?.finish_reason || 'tool_calls',
+                usage,
+                modelUsed: model,
             };
         }
 
@@ -339,6 +348,8 @@ class AIService {
                     }
                 }],
                 finishReason: 'tool_calls',
+                usage,
+                modelUsed: model,
             };
         }
 
@@ -346,6 +357,8 @@ class AIService {
             content: content || null,
             toolCalls: null,
             finishReason: choice?.finish_reason || 'stop',
+            usage,
+            modelUsed: model,
         };
     }
 

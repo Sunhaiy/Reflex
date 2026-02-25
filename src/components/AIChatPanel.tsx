@@ -1,6 +1,6 @@
 // AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
@@ -18,6 +18,12 @@ export interface AgentMessage {
         status: 'pending' | 'executed';
     };
     isStreaming?: boolean;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    modelUsed?: string;
 }
 
 interface AIChatPanelProps {
@@ -37,6 +43,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [isLoading, setIsLoading] = useState(false);
     const [pendingCommands, setPendingCommands] = useState<{ cmd: string; msgId: string; aiMessages: any[] }[]>([]);
     const [showModeMenu, setShowModeMenu] = useState(false);
+    const [showModelMenu, setShowModelMenu] = useState(false);
+    const [agentModel, setAgentModel] = useState('');     // '' = use config default
+    const [modelInput, setModelInput] = useState('');      // text field in picker
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const latestMessagesRef = useRef(messages);
@@ -203,6 +212,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     messages: chatMessages,
                     tools: AGENT_TOOLS,
                     temperature: 0.7,
+                    overrideModel: agentModel || undefined,
                 });
 
                 // Remove thinking indicator
@@ -213,10 +223,12 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         role: 'assistant',
                         content: response.content || '（无回复）',
                         timestamp: Date.now(),
+                        usage: response.usage,
+                        modelUsed: response.modelUsed,
                     };
                     loopMessages = [...loopMessages, assistantMsg];
                     onMessagesChange(loopMessages);
-                    break; // Loop ends — AI is done
+                    break;
                 }
 
                 // Case 2: AI wants to call a tool
@@ -510,8 +522,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             <div className="border-t border-border p-3 bg-background/50">
                 {/* Mode selector bar */}
                 <div className="flex items-center gap-2 mb-2 relative">
+                    {/* Control Mode Selector */}
                     <button
-                        onClick={() => setShowModeMenu(!showModeMenu)}
+                        onClick={() => { setShowModeMenu(!showModeMenu); setShowModelMenu(false); }}
                         className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40"
                     >
                         {agentControlMode === 'auto' && <><Zap className="w-3 h-3 text-green-500" />完全 AI 控制</>}
@@ -540,6 +553,62 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                         <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
                                     </div>
                                     {agentControlMode === opt.id && <Check className="w-3 h-3 text-primary ml-auto mt-0.5" />}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Model picker chip ── */}
+                <div className="flex items-center gap-2 mb-2 relative">
+                    <button
+                        onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40 max-w-[200px]"
+                        title={agentModel || 'Default model from settings'}
+                    >
+                        <Cpu className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{agentModel || aiService.getConfig()?.model || 'default'}</span>
+                        <ChevronDown className="w-2.5 h-2.5 flex-shrink-0 ml-0.5" />
+                    </button>
+                    {showModelMenu && (
+                        <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1.5 z-50 w-[240px]">
+                            <div className="px-3 pb-1.5 border-b border-border/40 mb-1">
+                                <input
+                                    value={modelInput}
+                                    onChange={e => setModelInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && modelInput.trim()) {
+                                            setAgentModel(modelInput.trim());
+                                            setShowModelMenu(false);
+                                            e.preventDefault();
+                                        }
+                                    }}
+                                    placeholder="自定义模型名称…"
+                                    className="w-full px-2 py-1.5 text-[11px] bg-secondary/50 rounded border border-border/40 focus:border-primary/50 outline-none"
+                                    autoFocus
+                                />
+                            </div>
+                            {[
+                                { label: '默认 (配置中的模型)', value: '' },
+                                { label: 'DeepSeek V3', value: 'deepseek-chat' },
+                                { label: 'DeepSeek R1（推理）', value: 'deepseek-reasoner' },
+                                { label: 'GPT-4o', value: 'gpt-4o' },
+                                { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
+                                { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
+                                { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
+                                { label: 'Qwen-Plus', value: 'qwen-plus' },
+                                { label: 'Llama 3.3 70B', value: 'llama-3.3-70b-versatile' },
+                            ].map(opt => (
+                                <button
+                                    key={opt.label}
+                                    onClick={() => { setAgentModel(opt.value); setShowModelMenu(false); }}
+                                    className={cn(
+                                        'w-full text-left px-3 py-1.5 text-[11px] hover:bg-accent transition-colors',
+                                        agentModel === opt.value && 'text-primary font-medium bg-accent/40'
+                                    )}
+                                >
+                                    {opt.label}
+                                    {agentModel === opt.value && <Check className="w-3 h-3 text-primary inline ml-1" />}
                                 </button>
                             ))}
                         </div>
@@ -651,37 +720,52 @@ function MessageBubble({ message }: { message: AgentMessage }) {
     }
 
     const isUser = message.role === 'user';
+    const tokenInfo = !isUser && message.usage ? message.usage : null;
 
     return (
-        <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
-            {/* Avatar */}
-            <div className={cn(
-                "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
-                isUser ? "bg-primary/20" : "bg-secondary"
-            )}>
-                {isUser ? (
-                    <User className="w-3.5 h-3.5 text-primary" />
-                ) : (
-                    <Bot className="w-3.5 h-3.5 text-muted-foreground" />
-                )}
-            </div>
+        <div className={cn("flex flex-col gap-0.5", isUser && "items-end")}>
+            <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
+                {/* Avatar */}
+                <div className={cn(
+                    "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
+                    isUser ? "bg-primary/20" : "bg-secondary"
+                )}>
+                    {isUser ? (
+                        <User className="w-3.5 h-3.5 text-primary" />
+                    ) : (
+                        <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                </div>
 
-            {/* Content */}
-            <div className={cn(
-                "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                isUser
-                    ? "bg-primary text-primary-foreground rounded-tr-md"
-                    : "bg-secondary/60 text-foreground rounded-tl-md"
-            )}>
-                {message.isStreaming && !message.content && (
-                    <div className="flex gap-1 py-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                )}
-                <MessageContent content={message.content} isUser={isUser} />
+                {/* Content */}
+                <div className={cn(
+                    "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                    isUser
+                        ? "bg-primary text-primary-foreground rounded-tr-md"
+                        : "bg-secondary/60 text-foreground rounded-tl-md"
+                )}>
+                    {message.isStreaming && !message.content && (
+                        <div className="flex gap-1 py-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                    )}
+                    <MessageContent content={message.content} isUser={isUser} />
+                </div>
             </div>
+            {/* Token usage badge */}
+            {tokenInfo && (
+                <div className="flex items-center gap-1.5 pl-10 text-[10px] text-muted-foreground/40 select-none">
+                    <Cpu className="w-2.5 h-2.5" />
+                    {message.modelUsed && <span className="font-mono opacity-70">{message.modelUsed.split('/').pop()}</span>}
+                    <span className="opacity-50">·</span>
+                    <span title="Prompt tokens">↑{tokenInfo.promptTokens.toLocaleString()}</span>
+                    <span title="Completion tokens">↓{tokenInfo.completionTokens.toLocaleString()}</span>
+                    <span className="opacity-50">=</span>
+                    <span title="Total tokens" className="font-medium opacity-60">{tokenInfo.totalTokens.toLocaleString()} tok</span>
+                </div>
+            )}
         </div>
     );
 }
