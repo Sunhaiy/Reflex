@@ -2,6 +2,17 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { setupIpcHandlers } from './ipcHandlers';
 
+// Prevent ssh2 zlib/channel errors and other third-party crashes from killing the process
+process.on('uncaughtException', (err) => {
+  console.error('[Main] Uncaught exception (non-fatal):', err.message);
+  // Do NOT re-throw — Electron would show the crash dialog and kill the app
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Main] Unhandled rejection (non-fatal):', reason);
+});
+
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // if (require('electron-squirrel-startup')) {
 //   app.quit();

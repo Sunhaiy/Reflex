@@ -4,13 +4,13 @@
 // Both Normal mode and Agent mode render a <TerminalSlotConsumer /> that is just a
 // div ref target. When the active mode changes, we call appendChild() to physically
 // move the terminal DOM node into the newly-active container div.
-// 
+//
 // This is completely safe for xterm because:
 // - The xterm instance is never destroyed/re-created
 // - The ResizeObserver on the container div fires after reparenting, triggering a fit
 // - All IPC listeners are unchanged
 
-import { useRef, useEffect, createContext, useContext, useCallback } from 'react';
+import { useRef, useEffect, createContext, useContext } from 'react';
 import { TerminalView } from './TerminalView';
 import { ErrorBoundary } from './ErrorBoundary';
 import { createPortal } from 'react-dom';
@@ -34,10 +34,25 @@ export function TerminalSlotProvider({ children, connectionId, isVisible }: Term
         stableContainerRef.current = div;
     }
 
+    // When session becomes visible, fire a custom event so TerminalView can refresh
+    const prevVisible = useRef(isVisible);
+    useEffect(() => {
+        if (!prevVisible.current && isVisible) {
+            // session just became active — tell the terminal to re-render
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('terminal-refresh', { detail: { connectionId } }));
+                window.dispatchEvent(new Event('resize'));
+            }, 50);
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
+        }
+        prevVisible.current = isVisible;
+    }, [isVisible, connectionId]);
+
     return (
         <TerminalSlotContext.Provider value={stableContainerRef.current}>
-            {/* Render the actual TerminalView into the stable container via a portal */}
-            {isVisible && createPortal(
+            {/* Always render TerminalView — never unmount it when invisible.
+                Hiding/showing is done by the session wrapper in App.tsx via CSS visibility. */}
+            {createPortal(
                 <ErrorBoundary name="Terminal">
                     <TerminalView connectionId={connectionId} />
                 </ErrorBoundary>,
@@ -58,19 +73,23 @@ export function TerminalSlotConsumer() {
         const parent = mountRef.current;
         parent.appendChild(stableContainer);
 
-        // Two-frame resize: first RAF lets the browser compute new layout,
-        // second RAF ensures xterm's renderer completes its redraw pass.
-        let raf1: number, raf2: number;
-        raf1 = requestAnimationFrame(() => {
+        // 3-frame resize sequence: first lets browser compute layout,
+        // second ensures xterm canvas repaint, third catches stragglers.
+        let r1: number, r2: number, r3: number;
+        r1 = requestAnimationFrame(() => {
             window.dispatchEvent(new Event('resize'));
-            raf2 = requestAnimationFrame(() => {
+            r2 = requestAnimationFrame(() => {
                 window.dispatchEvent(new Event('resize'));
+                r3 = requestAnimationFrame(() => {
+                    window.dispatchEvent(new Event('resize'));
+                });
             });
         });
 
         return () => {
-            cancelAnimationFrame(raf1);
-            cancelAnimationFrame(raf2!);
+            cancelAnimationFrame(r1);
+            cancelAnimationFrame(r2!);
+            cancelAnimationFrame(r3!);
             try {
                 if (stableContainer.parentElement === parent) {
                     parent.removeChild(stableContainer);

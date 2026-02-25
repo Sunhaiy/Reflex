@@ -4,6 +4,7 @@ console.log('Preload script loading...');
 
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
+  openFileDialog: (opts?: { title?: string; filters?: any[] }) => ipcRenderer.invoke('open-file-dialog', opts),
 
   connectSSH: ({ connection, sessionId, profileId }: { connection: any, sessionId: string, profileId?: string }) =>
     ipcRenderer.invoke('ssh-connect', { connection, sessionId, profileId }),
@@ -13,7 +14,7 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('terminal-data', subscription);
   },
   writeTerminal: (id: string, data: string) => ipcRenderer.send('term-write', { id, data }),
-  sshExec: (id: string, command: string) => ipcRenderer.invoke('ssh-exec', { id, command }),
+  sshExec: (id: string, command: string, timeoutMs?: number) => ipcRenderer.invoke('ssh-exec', { id, command, timeoutMs }),
   resizeTerminal: (id: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { id, cols, rows }),
 
   sftpList: (id: string, path: string) => ipcRenderer.invoke('sftp-list', { id, path }),

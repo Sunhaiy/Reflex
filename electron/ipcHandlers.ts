@@ -12,6 +12,19 @@ export function setupIpcHandlers() {
   ipcMain.handle('store-set', (event, key, value) => store.set(key, value));
   ipcMain.handle('store-delete', (event, key) => store.delete(key as any));
 
+  ipcMain.handle('open-file-dialog', async (event, opts?: { title?: string; filters?: any[] }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: opts?.title || '选择文件',
+      properties: ['openFile'],
+      filters: opts?.filters || [
+        { name: 'SSH 私钥', extensions: ['pem', 'key', 'ppk', 'rsa', 'ed25519', 'ecdsa', ''] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
   ipcMain.handle('ssh-connect', async (event, { connection, sessionId, profileId }: { connection: SSHConnection, sessionId: string, profileId?: string }) => {
     try {
       await sshManager.connect(connection, event.sender, sessionId, profileId);
@@ -29,9 +42,8 @@ export function setupIpcHandlers() {
     sshManager.resize(id, cols, rows);
   });
 
-  // Agent mode: exec command and return stdout/stderr/exitCode
-  ipcMain.handle('ssh-exec', async (event, { id, command }) => {
-    return sshManager.exec(id, command);
+  ipcMain.handle('ssh-exec', async (event, { id, command, timeoutMs }: { id: string; command: string; timeoutMs?: number }) => {
+    return sshManager.exec(id, command, timeoutMs);
   });
 
   ipcMain.handle('sftp-list', (event, { id, path }) => {

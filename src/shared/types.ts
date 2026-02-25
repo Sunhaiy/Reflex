@@ -7,6 +7,13 @@ export interface SSHConnection {
   authType: 'password' | 'privateKey';
   password?: string;
   privateKeyPath?: string;
+  passphrase?: string;
+  // Jump host / bastion proxy
+  jumpHost?: string;
+  jumpPort?: number;
+  jumpUsername?: string;
+  jumpPassword?: string;
+  jumpPrivateKeyPath?: string;
 }
 
 export interface FileEntry {

@@ -64,9 +64,10 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
         if (!eWindow.electron?.sshExec) {
             throw new Error('SSH exec not available');
         }
-        // Also write to terminal so user can see
-        eWindow.electron.writeTerminal(connectionId, command + '\n');
-        const result = await eWindow.electron.sshExec(connectionId, command);
+        // Suppress pager programs so output always returns cleanly
+        const wrapped = `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb ${command}`;
+        // 120s timeout: package installs (apt/yum/pip) can take several minutes
+        const result = await eWindow.electron.sshExec(connectionId, wrapped, 120000);
         return result;
     };
 

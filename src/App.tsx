@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FileBrowser } from './components/FileBrowser';
 import { SystemMonitor } from './components/SystemMonitor';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -33,6 +33,8 @@ function App() {
 
   // Global new-connection modal
   const [showNewConnModal, setShowNewConnModal] = useState(false);
+  // Inline connection error — replaces alert() which breaks focus in Electron
+  const [connError, setConnError] = useState<string | null>(null);
 
   // Workspace mode: normal or agent
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('normal');
@@ -63,18 +65,19 @@ function App() {
 
   const initTheme = useThemeStore(state => state.initTheme);
   const { initSettings, uiFontFamily } = useSettingsStore();
+  // guard: prevent double auto-connect on HMR hot reloads
+  const autoConnectedRef = useRef(false);
 
   useEffect(() => {
     initTheme();
     initSettings();
-  }, [initTheme, initSettings]);
+  }, []);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--font-ui', uiFontFamily);
   }, [uiFontFamily]);
 
   const handleConnect = async (connection: SSHConnection) => {
-    // Navigate immediately — connect in background
     const uniqueId = Date.now().toString();
     const newSession: AppSession = { uniqueId, connection, status: 'connecting' };
     setSessions(prev => [...prev, newSession]);
@@ -91,18 +94,33 @@ function App() {
     });
 
     if (result.success) {
+      setConnError(null);
       setSessions(prev => prev.map(s =>
         s.uniqueId === uniqueId ? { ...s, status: 'connected' } : s
       ));
+      // Remember this connection for next launch
+      (window as any).electron.storeSet('lastConnection', JSON.stringify(connection));
     } else {
-      alert('Connection failed: ' + result.error);
-      // Remove failed session
+      // Remove failed session and show inline error (avoid alert() which breaks focus in Electron)
       setSessions(prev => prev.filter(s => s.uniqueId !== uniqueId));
       setPage('connections');
       setActiveSessionId(null);
+      setConnError(result.error || 'Connection failed');
     }
   };
 
+  // Auto-reconnect to last session — safe to run here since handleConnect is defined above
+  useEffect(() => {
+    if (autoConnectedRef.current) return;
+    autoConnectedRef.current = true;
+    (async () => {
+      const last = await (window as any).electron.storeGet('lastConnection');
+      if (last) {
+        try { handleConnect(JSON.parse(last)); } catch { }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleCloseSession = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
@@ -128,12 +146,10 @@ function App() {
 
   const handleCloseAllSessions = () => {
     if (sessions.length === 0) return;
-    if (confirm('Are you sure you want to close all active sessions?')) {
-      setAgentMessagesState({});
-      setSessions([]);
-      setActiveSessionId(null);
-      setPage('connections');
-    }
+    setAgentMessagesState({});
+    setSessions([]);
+    setActiveSessionId(null);
+    setPage('connections');
   };
 
   const activeSession = sessions.find(s => s.uniqueId === activeSessionId);
@@ -160,6 +176,12 @@ function App() {
         <div className="flex-1 overflow-hidden relative flex flex-col">
           {page === 'connections' && (
             <div className="absolute inset-0 z-50" style={{ backgroundColor: 'hsl(var(--background) / var(--app-opacity, 0.9))' }}>
+              {connError && (
+                <div className="mx-4 mt-3 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-center justify-between">
+                  <span>⚠ 连接失败：{connError}</span>
+                  <button onClick={() => setConnError(null)} className="ml-4 text-destructive/60 hover:text-destructive text-lg leading-none">×</button>
+                </div>
+              )}
               <ErrorBoundary name="ConnectionManager">
                 <ConnectionManager
                   onConnect={handleConnect}

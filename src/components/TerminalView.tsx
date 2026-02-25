@@ -116,6 +116,19 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         }
       });
 
+      // Force repaint when this session is switched back to (canvas goes blank on visibility toggle)
+      const handleTermRefresh = (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        if (detail?.connectionId === connectionId) {
+          requestAnimationFrame(() => {
+            try { fitAddon.fit(); } catch (_) { }
+            try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
+            term.focus();
+          });
+        }
+      };
+      window.addEventListener('terminal-refresh', handleTermRefresh);
+
       const handleResize = () => {
         if (!containerRef.current) return;
         try {
@@ -150,6 +163,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         unsubTheme();
         unsubSettings();
         window.removeEventListener('contextmenu', handleNativeContextMenu, true);
+        window.removeEventListener('terminal-refresh', handleTermRefresh);
         try {
           cleanup();
         } catch (e) { }

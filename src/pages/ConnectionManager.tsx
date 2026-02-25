@@ -53,12 +53,19 @@ export function ConnectionManager({ onConnect, onNavigate, activeSessions = 0 }:
     setEditingConnection(null);
   };
 
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
   const deleteConnection = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(t('common.delete') + '?')) return;
+    setPendingDelete(id);  // show inline confirm instead of native dialog
+  };
+
+  const confirmDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     const next = connections.filter(c => c.id !== id);
     setConnections(next);
     await (window as any).electron.storeSet('connections', next);
+    setPendingDelete(null);
   };
 
   const editConnection = (conn: SSHConnection, e: React.MouseEvent) => {
@@ -154,13 +161,26 @@ export function ConnectionManager({ onConnect, onNavigate, activeSessions = 0 }:
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
-                        <button
-                          onClick={(e) => deleteConnection(c.id, e)}
-                          className="h-6 w-6 rounded-md flex items-center justify-center text-destructive/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {pendingDelete === c.id ? (
+                          <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setPendingDelete(null); }}
+                              className="h-6 px-1.5 rounded-md text-[10px] text-muted-foreground hover:bg-accent/80 transition-colors"
+                            >取消</button>
+                            <button
+                              onClick={(e) => confirmDelete(c.id, e)}
+                              className="h-6 px-1.5 rounded-md text-[10px] text-destructive bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                            >删除</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => deleteConnection(c.id, e)}
+                            className="h-6 w-6 rounded-md flex items-center justify-center text-destructive/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
 

@@ -103,6 +103,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
     }, [connectionId]);
 
     const [actionMsg, setActionMsg] = useState<string | null>(null);
+    const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
 
     const actionLabels: Record<string, string> = {
         start: '启动', stop: '停止', restart: '重启', pause: '暂停', unpause: '恢复', remove: '删除'
@@ -347,16 +348,21 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                     </button>
 
                                     {/* Delete */}
-                                    <button
-                                        onClick={() => {
-                                            if (confirm(`确认删除容器 ${container.name}?`)) handleAction(container.id, 'remove');
-                                        }}
-                                        disabled={!!actionLoading}
-                                        className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded disabled:opacity-20 transition-colors"
-                                        title="删除"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {pendingConfirm === container.id ? (
+                                        <>
+                                            <button onClick={() => setPendingConfirm(null)} className="p-1 text-[10px] hover:bg-secondary rounded transition-colors text-muted-foreground">取消</button>
+                                            <button onClick={() => { setPendingConfirm(null); handleAction(container.id, 'remove'); }} className="p-1 text-[10px] rounded bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">确认</button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            onClick={() => setPendingConfirm(container.id)}
+                                            disabled={!!actionLoading}
+                                            className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded disabled:opacity-20 transition-colors"
+                                            title="删除"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -469,7 +475,6 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
     useEffect(() => { fetchImages(); }, [connectionId]);
 
     const handleDelete = async (imageId: string) => {
-        if (!confirm(`确认删除镜像 ${imageId}?`)) return;
         setDeleting(imageId);
         try {
             await (window as any).electron.dockerRemoveImage(connectionId, imageId);
@@ -563,7 +568,6 @@ function PruneTab({ connectionId }: { connectionId: string }) {
     useEffect(() => { fetchDiskUsage(); }, [connectionId]);
 
     const handlePrune = async (type: string, label: string) => {
-        if (!confirm(`确认执行 ${label}？此操作不可逆！`)) return;
         setPruning(type);
         setPruneResult(null);
         try {

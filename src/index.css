@@ -112,8 +112,8 @@
 
 /* Custom Scrollbar - Minimalist Hover-only */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -121,11 +121,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-transparent rounded-full border-4 border-transparent bg-clip-content;
+  background: transparent;
+  border-radius: 9999px;
 }
 
 :hover::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/30 border-4 border-transparent;
+  background: hsl(var(--muted-foreground) / 0.25);
 }
 
 ::-webkit-scrollbar-corner {

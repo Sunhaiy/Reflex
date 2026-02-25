@@ -21,81 +21,99 @@ export class SSHManager {
 
     async connect(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
         console.log(`[SSH] New connection request: session=${sessionId}, profile=${profileId}`);
+
+        if (connection.jumpHost) {
+            return this._connectViaJump(connection, webContents, sessionId, profileId);
+        }
+        return this._connectDirect(connection, webContents, sessionId, profileId);
+    }
+
+    private _buildConfig(connection: SSHConnection): any {
+        const config: any = {
+            host: connection.host,
+            port: connection.port,
+            username: connection.username,
+            readyTimeout: 30000,
+            keepaliveInterval: 10000,
+            keepaliveCountMax: 3,
+            compress: true,
+            algorithms: { compress: ['zlib@openssh.com', 'zlib', 'none'] }
+        };
+        if (connection.authType === 'privateKey' && connection.privateKeyPath) {
+            config.privateKey = readFileSync(connection.privateKeyPath);
+            if (connection.passphrase) config.passphrase = connection.passphrase;
+        } else {
+            config.password = connection.password;
+        }
+        return config;
+    }
+
+    private _attachShell(conn: Client, webContents: WebContents, sessionId: string, profileId: string | undefined, resolve: Function, reject: Function) {
+        this.connections.set(sessionId, conn);
+        if (profileId) this.profileIds.set(sessionId, profileId);
+        conn.shell((err, stream) => {
+            if (err) { this.cleanup(sessionId); return reject(err); }
+            this.streams.set(sessionId, stream);
+            stream.on('close', () => {
+                this.cleanup(sessionId);
+                webContents.send('ssh-status', { id: sessionId, status: 'disconnected' });
+            });
+            stream.on('data', (data: Buffer) => {
+                webContents.send('terminal-data', { id: sessionId, data: data.toString() });
+            });
+            resolve();
+        });
+    }
+
+    private _connectDirect(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
         return new Promise((resolve, reject) => {
             const conn = new Client();
-            let isReady = false;
-
-            conn.on('ready', async () => {
+            conn.on('ready', () => {
                 console.log(`[SSH] Connection ready: session=${sessionId}`);
-                this.connections.set(sessionId, conn);
-                if (profileId) {
-                    this.profileIds.set(sessionId, profileId);
-                }
+                this._attachShell(conn, webContents, sessionId, profileId, resolve, reject);
+            });
+            conn.on('error', (err) => { this.cleanup(sessionId); reject(err); });
+            conn.on('close', () => this.cleanup(sessionId));
+            try { conn.connect(this._buildConfig(connection)); } catch (err) { reject(err); }
+        });
+    }
 
-                conn.shell((err, stream) => {
-                    if (err) {
-                        console.error(`[SSH] Shell error for session ${sessionId}:`, err);
-                        this.cleanup(sessionId);
-                        reject(err);
-                        return;
-                    }
-                    isReady = true;
-                    this.streams.set(sessionId, stream);
+    private _connectViaJump(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const jump = new Client();
+            const jumpConfig: any = {
+                host: connection.jumpHost,
+                port: connection.jumpPort || 22,
+                username: connection.jumpUsername || connection.username,
+                readyTimeout: 15000,
+            };
+            if (connection.jumpPrivateKeyPath) {
+                jumpConfig.privateKey = readFileSync(connection.jumpPrivateKeyPath);
+            } else {
+                jumpConfig.password = connection.jumpPassword || connection.password;
+            }
 
-                    stream.on('close', () => {
-                        console.log(`[SSH] Shell closed: session=${sessionId}`);
-                        this.cleanup(sessionId);
-                        webContents.send('ssh-status', { id: sessionId, status: 'disconnected' });
+            jump.on('ready', () => {
+                console.log(`[SSH] Jump host ready, forwarding to ${connection.host}`);
+                jump.forwardOut('127.0.0.1', 0, connection.host, connection.port, (err, channel) => {
+                    if (err) { jump.end(); return reject(err); }
+
+                    const conn = new Client();
+                    const directConfig = this._buildConfig(connection);
+                    directConfig.sock = channel; // tunnel through jump
+                    delete directConfig.host; delete directConfig.port;
+
+                    conn.on('ready', () => {
+                        console.log(`[SSH] Tunneled connection ready: session=${sessionId}`);
+                        this._attachShell(conn, webContents, sessionId, profileId, resolve, reject);
                     });
-
-                    stream.on('data', (data: Buffer) => {
-                        webContents.send('terminal-data', { id: sessionId, data: data.toString() });
-                    });
-
-                    resolve();
+                    conn.on('error', (e) => { jump.end(); reject(e); });
+                    conn.on('close', () => { jump.end(); this.cleanup(sessionId); });
+                    conn.connect(directConfig);
                 });
             });
-
-            conn.on('error', (err) => {
-                console.error(`[SSH] Connection error: session=${sessionId}, err=`, err);
-                if (!isReady) {
-                    this.cleanup(sessionId);
-                    reject(err);
-                }
-            });
-
-            conn.on('close', () => {
-                console.log(`[SSH] Connection closed: session=${sessionId}`);
-                this.cleanup(sessionId);
-            });
-
-
-
-            try {
-                const config: any = {
-                    host: connection.host,
-                    port: connection.port,
-                    username: connection.username,
-                    readyTimeout: 30000, // Increased timeout
-                    keepaliveInterval: 10000,
-                    keepaliveCountMax: 3,
-                    compress: true,
-                    algorithms: {
-                        compress: ['zlib@openssh.com', 'zlib', 'none']
-                    }
-                };
-
-                if (connection.authType === 'password') {
-                    config.password = connection.password;
-                } else if (connection.privateKeyPath) {
-                    config.privateKey = readFileSync(connection.privateKeyPath);
-                }
-
-                conn.connect(config);
-            } catch (err) {
-                console.error(`[SSH] Initial connect sync error:`, err);
-                reject(err);
-            }
+            jump.on('error', (err) => reject(err));
+            jump.connect(jumpConfig);
         });
     }
 
@@ -327,15 +345,34 @@ export class SSHManager {
     echo ">>>DISK"; df -B1 -x tmpfs -x devtmpfs;
     `;
 
+        let pending = false; // prevent overlapping execs when network is slow
+
         const interval = setInterval(() => {
             const conn = this.connections.get(id);
             if (!conn) return this.stopMonitoring(id);
+            if (pending) return; // skip this tick if the previous one is still running
+            pending = true;
 
-            conn.exec(cmd, (err, stream) => {
-                if (err) return;
+            let stream: any;
+            const timeout = setTimeout(() => {
+                try {
+                    if (stream) {
+                        stream.removeAllListeners('error');
+                        stream.on('error', () => { }); // swallow post-destroy errors
+                        stream.destroy();
+                    }
+                } catch (_) { }
+                pending = false;
+            }, 5000); // 5s max per collection cycle
+
+            conn.exec(cmd, (err, s) => {
+                if (err) { clearTimeout(timeout); pending = false; return; }
+                stream = s;
                 let output = '';
                 stream.on('data', (data: any) => output += data.toString());
                 stream.on('close', () => {
+                    clearTimeout(timeout);
+                    pending = false;
                     const stats = this.parseStats(output);
                     if (stats) webContents.send('stats-update', { id, stats });
                 });
