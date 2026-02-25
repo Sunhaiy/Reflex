@@ -92,6 +92,19 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       const newColors = generateThemeColors(id, state.accentColorId);
       applyTheme(id, state.accentColorId);
       (window as any).electron.storeSet('baseTheme', id);
+
+      // Auto-switch terminal theme to match light/dark mode
+      const isLight = baseThemes[id].type === 'light';
+      const currentTermCat = terminalThemes[state.currentTerminalThemeId]?.category;
+
+      if (isLight && currentTermCat !== 'light') {
+        // Switching to light mode: pick a light terminal theme
+        setTimeout(() => get().setTerminalTheme('githubLight'), 0);
+      } else if (!isLight && currentTermCat !== 'dark') {
+        // Switching to dark mode: pick a dark terminal theme
+        setTimeout(() => get().setTerminalTheme('default'), 0);
+      }
+
       return {
         baseThemeId: id,
         theme: {
