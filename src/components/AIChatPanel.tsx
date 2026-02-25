@@ -495,7 +495,7 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
                         onKeyDown={handleKeyDown}
                         placeholder="告诉 AI 你想做什么..."
                         rows={1}
-                        className="w-full resize-none overflow-hidden bg-secondary/40 rounded-xl px-4 py-2.5 pr-12 text-sm outline-none border border-border/50 focus:border-primary/50 transition-colors placeholder:text-muted-foreground/50"
+                        className="w-full resize-none overflow-hidden rounded-md border border-input bg-background/50 px-4 py-2.5 pr-12 text-sm transition-all placeholder:text-muted-foreground/50 hover:bg-accent/30 hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isLoading}
                     />
                     {isLoading ? (
@@ -534,25 +534,61 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
 function MessageBubble({ message }: { message: AgentMessage }) {
     const [expanded, setExpanded] = useState(true);
 
-    if (message.role === 'tool') {
-        const isPending = message.toolCall?.status === 'pending';
+    // Compact tool-call display (for both tool results and assistant tool-call requests)
+    const renderToolCall = (toolCall: NonNullable<AgentMessage['toolCall']>, content?: string) => {
+        const isPending = toolCall.status === 'pending';
         return (
-            <div className="px-2">
-                <button
-                    onClick={() => setExpanded(!expanded)}
-                    className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                >
-                    {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    <Terminal className={cn("w-3 h-3", isPending ? "text-yellow-500" : "text-primary")} />
-                    <span className="font-mono">{message.toolCall?.command}</span>
-                    {isPending ? (
-                        <span className="ml-auto text-[10px] text-yellow-500">⏳ 待批准</span>
-                    ) : (
-                        <span className="ml-auto text-[10px] text-green-500">✓ 已执行</span>
+            <div className="space-y-1.5">
+                {/* If the assistant included text explanation, show it above */}
+                {content && content.trim() && (
+                    <div className="flex gap-3">
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 bg-secondary">
+                            <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed bg-secondary/60 text-foreground rounded-tl-md">
+                            <MessageContent content={content} isUser={false} />
+                        </div>
+                    </div>
+                )}
+                {/* Compact tool call line */}
+                <div className="px-2">
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                    >
+                        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                        <Terminal className={cn("w-3 h-3", isPending ? "text-yellow-500" : "text-primary")} />
+                        <span className="font-mono">{toolCall.command}</span>
+                        {isPending ? (
+                            <span className="ml-auto text-[10px] text-yellow-500">⏳ 待批准</span>
+                        ) : (
+                            <span className="ml-auto text-[10px] text-green-500">✓ 已执行</span>
+                        )}
+                    </button>
+                    {/* Show output for tool result messages */}
+                    {expanded && message.role === 'tool' && message.content && (
+                        <pre className="mt-1 ml-5 text-[11px] text-muted-foreground/80 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
+                            {message.content}
+                        </pre>
                     )}
-                </button>
+                </div>
             </div>
         );
+    };
+
+    // Tool result messages
+    if (message.role === 'tool' && message.toolCall) {
+        return renderToolCall(message.toolCall);
+    }
+
+    // Assistant messages that are tool-call wrappers (no empty bubble!)
+    if (message.role === 'assistant' && message.toolCall) {
+        return renderToolCall(message.toolCall, message.content);
+    }
+
+    // Skip completely empty assistant messages (thinking placeholders that weren't cleaned up)
+    if (message.role === 'assistant' && !message.content && !message.isStreaming) {
+        return null;
     }
 
     const isUser = message.role === 'user';
