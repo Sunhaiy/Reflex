@@ -4,6 +4,7 @@ import {
     Trash2, Pause, Terminal, FileText, HardDrive, Package,
     Search, ChevronDown, ChevronUp, X, Layers, DownloadCloud
 } from 'lucide-react';
+import { useTranslation } from '../hooks/useTranslation';
 
 // ─── Types ───
 interface DockerContainer {
@@ -34,29 +35,30 @@ type ContainerFilter = 'all' | 'running' | 'stopped';
 // ─── Main Component ───
 export function DockerManager({ connectionId }: DockerManagerProps) {
     const [tab, setTab] = useState<TabId>('containers');
+    const { t } = useTranslation();
 
     const tabs: { id: TabId; label: string; icon: any }[] = [
-        { id: 'containers', label: '容器', icon: Container },
-        { id: 'images', label: '镜像', icon: Package },
-        { id: 'prune', label: '清理', icon: Trash2 },
+        { id: 'containers', label: t('docker.containers'), icon: Container },
+        { id: 'images', label: t('docker.images'), icon: Package },
+        { id: 'prune', label: t('docker.prune'), icon: Trash2 },
     ];
 
     return (
         <div className="h-full flex flex-col bg-transparent text-foreground">
             {/* Tab Header */}
             <div className="flex border-b border-border bg-muted/30">
-                {tabs.map(t => (
+                {tabs.map(tb => (
                     <button
-                        key={t.id}
-                        onClick={() => setTab(t.id)}
+                        key={tb.id}
+                        onClick={() => setTab(tb.id)}
                         className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors
-                            ${tab === t.id
+                            ${tab === tb.id
                                 ? 'text-primary border-b-2 border-primary bg-primary/5'
                                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                             }`}
                     >
-                        <t.icon className="w-3.5 h-3.5" />
-                        {t.label}
+                        <tb.icon className="w-3.5 h-3.5" />
+                        {tb.label}
                     </button>
                 ))}
             </div>
@@ -104,9 +106,11 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
 
     const [actionMsg, setActionMsg] = useState<string | null>(null);
     const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
+    const { t } = useTranslation();
 
     const actionLabels: Record<string, string> = {
-        start: '启动', stop: '停止', restart: '重启', pause: '暂停', unpause: '恢复', remove: '删除'
+        start: t('docker.start'), stop: t('docker.stop'), restart: t('docker.restart'),
+        pause: t('docker.pause'), unpause: t('docker.resume'), remove: t('docker.remove')
     };
 
     const handleAction = async (containerId: string, action: string) => {
@@ -430,7 +434,7 @@ function LogViewer({ connectionId, containerId, containerName }: { connectionId:
                     <input
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        placeholder="搜索日志..."
+                        placeholder={t('common.search')}
                         className="w-full pl-6 pr-2 py-0.5 text-[10px] bg-secondary/50 rounded border border-transparent focus:border-primary/50 outline-none"
                     />
                 </div>
@@ -458,6 +462,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
     const [loading, setLoading] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const { t } = useTranslation();
 
     const fetchImages = async () => {
         setLoading(true);
@@ -491,7 +496,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
             <div className="p-3 flex items-center justify-between border-b border-border/50">
                 <div className="flex items-center gap-2 text-xs">
                     <Package className="w-4 h-4 text-blue-400" />
-                    <span className="font-medium">镜像</span>
+                    <span className="font-medium">{t('docker.images')}</span>
                     <span className="text-muted-foreground bg-secondary px-1.5 rounded-full text-[10px]">{images.length}</span>
                 </div>
                 <button onClick={fetchImages} className="p-1.5 hover:bg-secondary rounded transition-colors">
@@ -536,7 +541,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
                 {images.length === 0 && !loading && (
                     <div className="text-center text-muted-foreground text-xs py-8 opacity-70">
                         <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        未找到镜像
+                        {t('docker.noDockerHint')}
                     </div>
                 )}
             </div>
@@ -552,6 +557,7 @@ function PruneTab({ connectionId }: { connectionId: string }) {
     const [loading, setLoading] = useState(false);
     const [pruneResult, setPruneResult] = useState<string | null>(null);
     const [pruning, setPruning] = useState<string | null>(null);
+    const { t } = useTranslation();
 
     const fetchDiskUsage = async () => {
         setLoading(true);
@@ -575,7 +581,7 @@ function PruneTab({ connectionId }: { connectionId: string }) {
             setPruneResult(result);
             await fetchDiskUsage();
         } catch (err: any) {
-            setPruneResult(`错误: ${err.message}`);
+            setPruneResult(`${t('common.error')}: ${err.message}`);
         } finally {
             setPruning(null);
         }
@@ -595,14 +601,14 @@ function PruneTab({ connectionId }: { connectionId: string }) {
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2 text-xs font-medium">
                         <HardDrive className="w-4 h-4 text-amber-400" />
-                        磁盘使用
+                        {t('docker.stats')}
                     </div>
                     <button onClick={fetchDiskUsage} className="p-1 hover:bg-secondary rounded">
                         <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
                 <pre className="text-[10px] font-mono text-muted-foreground bg-secondary/30 rounded-md p-2 overflow-x-auto whitespace-pre leading-[1.5]">
-                    {diskUsage || '加载中...'}
+                    {loading ? t('common.loading') : (diskUsage || t('common.loading'))}
                 </pre>
             </div>
 
@@ -628,7 +634,7 @@ function PruneTab({ connectionId }: { connectionId: string }) {
             {pruneResult && (
                 <div className="border-t border-border p-3">
                     <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-medium text-muted-foreground">清理结果</span>
+                        <span className="text-[10px] font-medium text-muted-foreground">{t('docker.prune')}</span>
                         <button onClick={() => setPruneResult(null)} className="p-0.5 hover:bg-secondary rounded">
                             <X className="w-3 h-3" />
                         </button>

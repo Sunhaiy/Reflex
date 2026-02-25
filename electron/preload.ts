@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('terminal-data', subscription);
   },
   writeTerminal: (id: string, data: string) => ipcRenderer.send('term-write', { id, data }),
+  terminalInject: (id: string, text: string) => ipcRenderer.send('terminal-inject', { id, text }),
   sshExec: (id: string, command: string, timeoutMs?: number) => ipcRenderer.invoke('ssh-exec', { id, command, timeoutMs }),
   resizeTerminal: (id: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { id, cols, rows }),
 
@@ -67,6 +68,13 @@ contextBridge.exposeInMainWorld('electron', {
   storeDelete: (key: string) => ipcRenderer.invoke('store-delete', key),
   clipboardWriteText: (text: string) => ipcRenderer.send('clipboard-write', text),
   clipboardReadText: () => ipcRenderer.invoke('clipboard-read'),
+
+  // Agent session persistence
+  agentSessionList: (profileId: string) => ipcRenderer.invoke('agent-session-list', profileId),
+  agentSessionSave: (session: any) => ipcRenderer.invoke('agent-session-save', session),
+  agentSessionLoad: (id: string) => ipcRenderer.invoke('agent-session-load', id),
+  agentSessionDelete: (id: string) => ipcRenderer.invoke('agent-session-delete', id),
+  agentSessionSetTitle: (id: string, title: string) => ipcRenderer.invoke('agent-session-set-title', id, title),
 });
 
 console.log('Preload script loaded');

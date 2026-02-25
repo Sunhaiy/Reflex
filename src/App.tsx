@@ -285,6 +285,7 @@ function App() {
                     >
                       <AgentLayout
                         connectionId={session.uniqueId}
+                        profileId={session.connection.id || ''}
                         messages={getAgentMessages(session.uniqueId)}
                         onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
                         isActive={workspaceMode === 'agent'}

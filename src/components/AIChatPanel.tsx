@@ -4,6 +4,7 @@ import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
+import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
 
 export interface AgentMessage {
@@ -21,13 +22,17 @@ export interface AgentMessage {
 
 interface AIChatPanelProps {
     connectionId: string;
+    profileId: string;           // SSHConnection.id — for session binding
+    host: string;                // displayed server hostname
     messages: AgentMessage[];
     onMessagesChange: (messages: AgentMessage[]) => void;
     onExecuteCommand: (command: string) => void;
+    sessionId: string;           // current session ID managed by parent
+    onSaveComplete?: () => void; // notifies sidebar to refresh
     className?: string;
 }
 
-export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecuteCommand, className }: AIChatPanelProps) {
+export function AIChatPanel({ connectionId, profileId, host, messages, onMessagesChange, onExecuteCommand, sessionId, onSaveComplete, className }: AIChatPanelProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [pendingCommands, setPendingCommands] = useState<{ cmd: string; msgId: string; aiMessages: any[] }[]>([]);
@@ -36,14 +41,50 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const latestMessagesRef = useRef(messages);
     const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist } = useSettingsStore();
+    const { t } = useTranslation();
     const agentControlModeRef = useRef(agentControlMode);
     const agentWhitelistRef = useRef(agentWhitelist);
     const isLoadingRef = useRef(false);
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const sessionIdRef = useRef(sessionId);
+    useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
 
     // Keep refs in sync
     useEffect(() => { latestMessagesRef.current = messages; }, [messages]);
     useEffect(() => { agentControlModeRef.current = agentControlMode; }, [agentControlMode]);
     useEffect(() => { agentWhitelistRef.current = agentWhitelist; }, [agentWhitelist]);
+
+    // ── Auto-save session to store (debounced 800ms) ──────────────────────────
+    useEffect(() => {
+        if (messages.length === 0) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(async () => {
+            const sid = sessionIdRef.current;
+            if (!sid || !profileId) return;
+            // Auto-generate title from first user message
+            const firstUser = messages.find(m => m.role === 'user');
+            const title = firstUser
+                ? firstUser.content.replace(/\s+/g, ' ').slice(0, 40) + (firstUser.content.length > 40 ? '…' : '')
+                : t('agent.newSession');
+            const session = {
+                id: sid,
+                title,
+                profileId,
+                host,
+                messages,
+                createdAt: messages[0]?.timestamp || Date.now(),
+                updatedAt: Date.now(),
+            };
+            try {
+                await (window as any).electron.agentSessionSave(session);
+                onSaveComplete?.();
+            } catch (e) {
+                console.warn('Failed to save agent session:', e);
+            }
+        }, 800);
+        return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -64,10 +105,22 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
         if (!eWindow.electron?.sshExec) {
             throw new Error('SSH exec not available');
         }
+        // Show command in terminal display (NOT PTY stdin — no pager, no double-exec)
+        eWindow.electron.terminalInject?.(connectionId, `\r\n\x1b[36;2m[Agent] $ ${command}\x1b[0m\r\n`);
         // Suppress pager programs so output always returns cleanly
         const wrapped = `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb ${command}`;
         // 120s timeout: package installs (apt/yum/pip) can take several minutes
         const result = await eWindow.electron.sshExec(connectionId, wrapped, 120000);
+        // Inject output into terminal display so user can observe
+        if (result.stdout) {
+            eWindow.electron.terminalInject?.(connectionId, result.stdout.replace(/\n/g, '\r\n'));
+        }
+        if (result.stderr) {
+            eWindow.electron.terminalInject?.(connectionId, `\x1b[33m${result.stderr.replace(/\n/g, '\r\n')}\x1b[0m`);
+        }
+        eWindow.electron.terminalInject?.(connectionId,
+            `\x1b[2m[exit ${result.exitCode}]\x1b[0m\r\n`
+        );
         return result;
     };
 
@@ -83,11 +136,16 @@ export function AIChatPanel({ connectionId, messages, onMessagesChange, onExecut
     };
 
     // Build ChatMessage array from our AgentMessages for the AI API
+    // Sliding window: only last 20 messages to prevent token overflow.
+    // Older messages stay visible in the UI but are NOT sent to the API.
+    const CONTEXT_WINDOW = 20;
     const buildChatMessages = (msgs: AgentMessage[]): any[] => {
         const chatMsgs: any[] = [
             { role: 'system', content: AI_SYSTEM_PROMPTS.agent },
         ];
-        for (const m of msgs) {
+        // Apply sliding window — take last CONTEXT_WINDOW messages
+        const windowed = msgs.length > CONTEXT_WINDOW ? msgs.slice(-CONTEXT_WINDOW) : msgs;
+        for (const m of windowed) {
             if (m.role === 'user') {
                 chatMsgs.push({ role: 'user', content: m.content });
             } else if (m.role === 'assistant') {

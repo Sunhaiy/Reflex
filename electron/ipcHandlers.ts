@@ -12,6 +12,29 @@ export function setupIpcHandlers() {
   ipcMain.handle('store-set', (event, key, value) => store.set(key, value));
   ipcMain.handle('store-delete', (event, key) => store.delete(key as any));
 
+  // Agent Session persistence
+  const getSessions = () => (store.get('agentSessions') as any[] | undefined) || [];
+
+  ipcMain.handle('agent-session-list', (_event, profileId: string) =>
+    getSessions().filter((s: any) => s.profileId === profileId)
+      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)
+  );
+  ipcMain.handle('agent-session-save', (_event, session: any) => {
+    const all = getSessions().filter((s: any) => s.id !== session.id);
+    store.set('agentSessions', [...all, session]);
+  });
+  ipcMain.handle('agent-session-load', (_event, id: string) =>
+    getSessions().find((s: any) => s.id === id) || null
+  );
+  ipcMain.handle('agent-session-delete', (_event, id: string) =>
+    store.set('agentSessions', getSessions().filter((s: any) => s.id !== id))
+  );
+  ipcMain.handle('agent-session-set-title', (_event, id: string, title: string) => {
+    store.set('agentSessions', getSessions().map((s: any) =>
+      s.id === id ? { ...s, title, updatedAt: Date.now() } : s
+    ));
+  });
+
   ipcMain.handle('open-file-dialog', async (event, opts?: { title?: string; filters?: any[] }) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
@@ -40,6 +63,12 @@ export function setupIpcHandlers() {
 
   ipcMain.on('term-resize', (event, { id, cols, rows }) => {
     sshManager.resize(id, cols, rows);
+  });
+
+  // Inject text directly to xterm display (NOT PTY stdin — avoids pager issues)
+  // Used by Agent mode to echo exec commands and their output in the terminal view.
+  ipcMain.on('terminal-inject', (event, { id, text }) => {
+    event.sender.send('terminal-data', { id, data: text });
   });
 
   ipcMain.handle('ssh-exec', async (event, { id, command, timeoutMs }: { id: string; command: string; timeoutMs?: number }) => {

@@ -16,6 +16,32 @@ export interface SSHConnection {
   jumpPrivateKeyPath?: string;
 }
 
+// Agent session persistence
+export interface AgentSessionMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  timestamp: number;
+  toolCall?: {
+    name: string;
+    command: string;
+    status: 'pending' | 'executed';
+    stdout?: string;
+    stderr?: string;
+  };
+}
+
+export interface AgentSession {
+  id: string;
+  title: string;         // auto-generated from first user message
+  profileId: string;     // SSHConnection.id — binds session to a server
+  host: string;          // for display (doesn't change if server renamed)
+  messages: AgentSessionMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+
 export interface FileEntry {
   name: string;
   type: 'd' | '-';
