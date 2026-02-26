@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu } from 'lucide-react';
 import { aiService } from '../services/aiService';
-import { AI_SYSTEM_PROMPTS, AGENT_TOOLS } from '../shared/aiTypes';
+import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
@@ -44,12 +44,13 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [pendingCommands, setPendingCommands] = useState<{ cmd: string; msgId: string; aiMessages: any[] }[]>([]);
     const [showModeMenu, setShowModeMenu] = useState(false);
     const [showModelMenu, setShowModelMenu] = useState(false);
-    const [agentModel, setAgentModel] = useState('');     // '' = use config default
-    const [modelInput, setModelInput] = useState('');      // text field in picker
+    const [agentModel, setAgentModel] = useState('');         // '' = use profile's default model
+    const [agentProfileId, setAgentProfileId] = useState(''); // '' = use active profile
+    const [modelInput, setModelInput] = useState('');          // text field in picker
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const latestMessagesRef = useRef(messages);
-    const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist } = useSettingsStore();
+    const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist, aiProfiles, activeProfileId } = useSettingsStore();
     const { t } = useTranslation();
     const agentControlModeRef = useRef(agentControlMode);
     const agentWhitelistRef = useRef(agentWhitelist);
@@ -208,11 +209,14 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
             try {
                 const chatMessages = buildChatMessages(loopMessages);
+                // Resolve the profile to use: agent-selected > active profile
+                const selectedProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
                 const response = await aiService.completeWithTools({
                     messages: chatMessages,
                     tools: AGENT_TOOLS,
                     temperature: 0.7,
                     overrideModel: agentModel || undefined,
+                    overrideProfile: selectedProfile || undefined,
                 });
 
                 // Remove thinking indicator
@@ -567,11 +571,19 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         title={agentModel || 'Default model from settings'}
                     >
                         <Cpu className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{agentModel || aiService.getConfig()?.model || 'default'}</span>
+                        <span className="truncate">
+                            {(() => {
+                                const p = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
+                                if (agentModel) return agentModel;
+                                if (p) return p.name;
+                                return 'default';
+                            })()}
+                        </span>
                         <ChevronDown className="w-2.5 h-2.5 flex-shrink-0 ml-0.5" />
                     </button>
                     {showModelMenu && (
-                        <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1.5 z-50 w-[240px]">
+                        <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1.5 z-50 w-[260px] max-h-[320px] overflow-y-auto">
+                            {/* Custom model input */}
                             <div className="px-3 pb-1.5 border-b border-border/40 mb-1">
                                 <input
                                     value={modelInput}
@@ -579,38 +591,56 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                     onKeyDown={e => {
                                         if (e.key === 'Enter' && modelInput.trim()) {
                                             setAgentModel(modelInput.trim());
+                                            setAgentProfileId(''); // use current active profile's API
                                             setShowModelMenu(false);
                                             e.preventDefault();
                                         }
                                     }}
-                                    placeholder="自定义模型名称…"
+                                    placeholder="自定义模型名称… (Enter 确认)"
                                     className="w-full px-2 py-1.5 text-[11px] bg-secondary/50 rounded border border-border/40 focus:border-primary/50 outline-none"
                                     autoFocus
                                 />
                             </div>
-                            {[
-                                { label: '默认 (配置中的模型)', value: '' },
-                                { label: 'DeepSeek V3', value: 'deepseek-chat' },
-                                { label: 'DeepSeek R1（推理）', value: 'deepseek-reasoner' },
-                                { label: 'GPT-4o', value: 'gpt-4o' },
-                                { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-                                { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20241022' },
-                                { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
-                                { label: 'Qwen-Plus', value: 'qwen-plus' },
-                                { label: 'Llama 3.3 70B', value: 'llama-3.3-70b-versatile' },
-                            ].map(opt => (
-                                <button
-                                    key={opt.label}
-                                    onClick={() => { setAgentModel(opt.value); setShowModelMenu(false); }}
-                                    className={cn(
-                                        'w-full text-left px-3 py-1.5 text-[11px] hover:bg-accent transition-colors',
-                                        agentModel === opt.value && 'text-primary font-medium bg-accent/40'
-                                    )}
-                                >
-                                    {opt.label}
-                                    {agentModel === opt.value && <Check className="w-3 h-3 text-primary inline ml-1" />}
-                                </button>
-                            ))}
+
+                            {/* Configured profiles */}
+                            {aiProfiles.length > 0 && (
+                                <div className="px-2 py-1 text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">已配置</div>
+                            )}
+                            {aiProfiles.map(profile => {
+                                const isSelected = (agentProfileId || activeProfileId) === profile.id && !agentModel;
+                                return (
+                                    <button
+                                        key={profile.id}
+                                        onClick={() => {
+                                            setAgentProfileId(profile.id);
+                                            setAgentModel(''); // use profile's own model
+                                            setShowModelMenu(false);
+                                        }}
+                                        className={cn(
+                                            'w-full text-left px-3 py-2 text-[11px] hover:bg-accent transition-colors',
+                                            isSelected && 'text-primary bg-accent/40'
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-medium">{profile.name}</span>
+                                            {isSelected && <Check className="w-3 h-3 text-primary" />}
+                                            {activeProfileId === profile.id && !isSelected && (
+                                                <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">默认</span>
+                                            )}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                                            {AI_PROVIDER_CONFIGS[profile.provider]?.displayName} · {profile.model || AI_PROVIDER_CONFIGS[profile.provider]?.defaultModel}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+
+                            {/* Empty state */}
+                            {aiProfiles.length === 0 && (
+                                <div className="px-3 py-3 text-[11px] text-muted-foreground/50 text-center">
+                                    请先在设置中添加 AI 配置
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

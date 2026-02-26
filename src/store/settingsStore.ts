@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Language } from '../shared/locales';
-import { AIProvider, AIConfig, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
+import { AIProvider, AIConfig, AI_PROVIDER_CONFIGS, AIProviderProfile } from '../shared/aiTypes';
 import { aiService } from '../services/aiService';
 
 interface SettingsState {
@@ -30,6 +30,10 @@ interface SettingsState {
     agentControlMode: 'auto' | 'approval' | 'whitelist';
     agentWhitelist: string[];
 
+    // Multi-provider profiles
+    aiProfiles: AIProviderProfile[];
+    activeProfileId: string;
+
     setLanguage: (lang: Language) => void;
     setUiFontFamily: (font: string) => void;
     setTerminalFontFamily: (font: string) => void;
@@ -55,6 +59,12 @@ interface SettingsState {
     setAiSendShortcut: (shortcut: 'enter' | 'ctrlEnter') => void;
     setAgentControlMode: (mode: 'auto' | 'approval' | 'whitelist') => void;
     setAgentWhitelist: (list: string[]) => void;
+
+    // Profile CRUD
+    addAiProfile: (profile: AIProviderProfile) => void;
+    updateAiProfile: (profile: AIProviderProfile) => void;
+    removeAiProfile: (id: string) => void;
+    setActiveProfile: (id: string) => void;
 
     // Bookmarks
     bookmarks: string[];
@@ -89,6 +99,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     aiSendShortcut: 'ctrlEnter',
     agentControlMode: 'auto',
     agentWhitelist: ['ls', 'pwd', 'whoami', 'cat', 'head', 'tail', 'df', 'free', 'uptime', 'uname', 'date', 'top', 'htop', 'ps', 'netstat', 'ss', 'ip', 'ifconfig', 'ping', 'traceroute', 'dig', 'nslookup', 'curl', 'wget', 'du', 'find', 'grep', 'wc', 'echo', 'which'],
+
+    // Multi-provider profiles
+    aiProfiles: [],
+    activeProfileId: '',
 
     setLanguage: (lang: Language) => {
         set({ language: lang });
@@ -221,6 +235,62 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         (window as any).electron.storeSet('agentWhitelist', list);
     },
 
+    // ── Profile CRUD ──
+    addAiProfile: (profile: AIProviderProfile) => {
+        const state = get();
+        const updated = [...state.aiProfiles, profile];
+        set({ aiProfiles: updated });
+        (window as any).electron.storeSet('aiProfiles', updated);
+        // If first profile, auto-activate it
+        if (updated.length === 1) {
+            get().setActiveProfile(profile.id);
+        }
+    },
+
+    updateAiProfile: (profile: AIProviderProfile) => {
+        const state = get();
+        const updated = state.aiProfiles.map(p => p.id === profile.id ? profile : p);
+        set({ aiProfiles: updated });
+        (window as any).electron.storeSet('aiProfiles', updated);
+        // If editing the active profile, re-apply config
+        if (state.activeProfileId === profile.id) {
+            aiService.setConfigFromProfile(profile);
+        }
+    },
+
+    removeAiProfile: (id: string) => {
+        const state = get();
+        const updated = state.aiProfiles.filter(p => p.id !== id);
+        set({ aiProfiles: updated });
+        (window as any).electron.storeSet('aiProfiles', updated);
+        // If removed the active one, switch to first remaining or clear
+        if (state.activeProfileId === id) {
+            if (updated.length > 0) {
+                get().setActiveProfile(updated[0].id);
+            } else {
+                set({ activeProfileId: '' });
+                (window as any).electron.storeSet('activeProfileId', '');
+            }
+        }
+    },
+
+    setActiveProfile: (id: string) => {
+        const state = get();
+        const profile = state.aiProfiles.find(p => p.id === id);
+        set({ activeProfileId: id });
+        (window as any).electron.storeSet('activeProfileId', id);
+        if (profile) {
+            // Sync flat fields for backward compat
+            set({
+                aiProvider: profile.provider,
+                aiApiKey: profile.apiKey,
+                aiBaseUrl: profile.baseUrl,
+                aiModel: profile.model,
+            });
+            aiService.setConfigFromProfile(profile);
+        }
+    },
+
     // Bookmarks
     bookmarks: [],
     toggleBookmark: (path: string) => {
@@ -294,8 +364,38 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
         set({ aiEnabled, aiProvider, aiApiKey, aiBaseUrl, aiModel, aiPrivacyMode, aiSendShortcut, agentControlMode, agentWhitelist });
 
-        // Initialize AI service
-        if (aiApiKey || aiProvider === 'ollama') {
+        // ── Load profiles ──
+        const savedProfiles = await (window as any).electron.storeGet('aiProfiles');
+        const savedActiveProfileId = await (window as any).electron.storeGet('activeProfileId');
+        let profiles: AIProviderProfile[] = Array.isArray(savedProfiles) ? savedProfiles : [];
+        let activeProfileId = (savedActiveProfileId as string) || '';
+
+        // Migration: if no profiles exist but old single-config has an API key, create first profile
+        if (profiles.length === 0 && (aiApiKey || aiProvider === 'ollama')) {
+            const providerConfig = AI_PROVIDER_CONFIGS[aiProvider];
+            const migrated: AIProviderProfile = {
+                id: `profile-${Date.now()}`,
+                name: providerConfig?.displayName || aiProvider,
+                provider: aiProvider,
+                apiKey: aiApiKey,
+                baseUrl: aiBaseUrl || providerConfig?.baseUrl || '',
+                model: aiModel || providerConfig?.defaultModel || '',
+                isDefault: true,
+            };
+            profiles = [migrated];
+            activeProfileId = migrated.id;
+            (window as any).electron.storeSet('aiProfiles', profiles);
+            (window as any).electron.storeSet('activeProfileId', activeProfileId);
+        }
+
+        set({ aiProfiles: profiles, activeProfileId });
+
+        // Activate the profile → sets aiService config
+        const activeProfile = profiles.find(p => p.id === activeProfileId);
+        if (activeProfile) {
+            aiService.setConfigFromProfile(activeProfile);
+        } else if (aiApiKey || aiProvider === 'ollama') {
+            // Fallback: use old flat config
             aiService.setConfig({
                 provider: aiProvider,
                 apiKey: aiApiKey,

@@ -10,6 +10,17 @@ export interface AIConfig {
     privacyMode: boolean;
 }
 
+// Multi-provider profile — each saves a complete API endpoint config
+export interface AIProviderProfile {
+    id: string;             // uuid
+    name: string;           // User-facing label, e.g. "DeepSeek V3", "My GPT-4o"
+    provider: AIProvider;   // provider type for endpoint routing
+    apiKey: string;
+    baseUrl: string;        // auto-filled from AI_PROVIDER_CONFIGS or manual
+    model: string;          // e.g. 'deepseek-chat', 'gpt-4o'
+    isDefault?: boolean;    // the one used when nothing is explicitly selected
+}
+
 export interface ChatMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
     content: string | null;

@@ -4,14 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Select } from '../components/ui/select';
 import { Input } from '../components/ui/input';
 import {
-  ArrowLeft, Check, Smartphone, Palette, Terminal, Sparkles, Eye, EyeOff
+  ArrowLeft, Check, Smartphone, Palette, Terminal, Sparkles, Eye, EyeOff, Plus, Trash2, Star, Pencil, Cpu
 } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { translations, Language } from '../shared/locales';
 import { baseThemes, accentColors, terminalThemes, BaseThemeId, AccentColorId } from '../shared/themes';
-import { AI_PROVIDER_CONFIGS, AIProvider } from '../shared/aiTypes';
+import { AI_PROVIDER_CONFIGS, AIProvider, AIProviderProfile } from '../shared/aiTypes';
 import { cn } from '../lib/utils';
 
 interface SettingsProps {
@@ -54,8 +54,17 @@ export function Settings({ onBack }: SettingsProps) {
     aiBaseUrl, setAiBaseUrl,
     aiModel, setAiModel,
     aiPrivacyMode, setAiPrivacyMode,
-    aiSendShortcut, setAiSendShortcut
+    aiSendShortcut, setAiSendShortcut,
+    // Profiles
+    aiProfiles, addAiProfile, updateAiProfile, removeAiProfile,
+    activeProfileId, setActiveProfile,
   } = useSettingsStore();
+
+  // Profile form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<string | null>(null);
+  const emptyForm = { name: '', provider: 'deepseek' as AIProvider, apiKey: '', baseUrl: '', model: '' };
+  const [formData, setFormData] = useState(emptyForm);
 
   const { t } = useTranslation();
 
@@ -472,76 +481,210 @@ export function Settings({ onBack }: SettingsProps) {
                   </button>
                 </div>
 
-                {/* Provider Selection - show only when enabled */}
+                {/* Provider Profiles - show only when enabled */}
                 {aiEnabled && (
                   <>
+                    {/* ── Profile List ── */}
                     <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">{t('settings.ai.provider')}</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{t('settings.ai.provider')}</span>
+                        <button
+                          onClick={() => {
+                            setFormData({ ...emptyForm });
+                            setEditingProfile(null);
+                            setShowAddForm(true);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" /> 添加配置
+                        </button>
+                      </div>
                       <span className="text-xs text-muted-foreground mb-2">
                         {t('settings.ai.providerDesc')}
                       </span>
-                      <Select
-                        className="w-full sm:w-64"
-                        value={aiProvider}
-                        onChange={(v) => setAiProvider(v as AIProvider)}
-                        options={Object.entries(AI_PROVIDER_CONFIGS).map(([key, config]) => ({
-                          label: config.displayName, value: key
-                        }))}
-                      />
-                    </div>
 
-                    {/* API Key */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">{t('settings.ai.apiKey')}</span>
-                      <span className="text-xs text-muted-foreground mb-2">
-                        {t('settings.ai.apiKeyDesc')}
-                      </span>
-                      <div className="relative">
-                        <Input
-                          type="password"
-                          className="w-full sm:w-96 font-mono"
-                          placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-                          value={aiApiKey}
-                          onChange={(e) => setAiApiKey(e.target.value)}
-                        />
-                      </div>
-                      {aiApiKey && (
-                        <span className="text-xs text-green-500 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> API Key Configured
-                        </span>
+                      {/* Profile Cards */}
+                      {aiProfiles.length === 0 && !showAddForm && (
+                        <div className="text-center py-6 text-muted-foreground/60 text-sm border border-dashed border-border rounded-lg">
+                          <Cpu className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          还没有配置任何 AI 提供商
+                        </div>
                       )}
-                    </div>
 
-                    {/* Custom Base URL (for custom providers) */}
-                    {aiProvider === 'custom' && (
-                      <div className="flex flex-col gap-1.5">
-                        <span className="font-medium text-sm">{t('settings.ai.baseUrl')}</span>
-                        <span className="text-xs text-muted-foreground mb-2">
-                          {t('settings.ai.baseUrlDesc')}
-                        </span>
-                        <Input
-                          type="text"
-                          className="w-full sm:w-96 font-mono"
-                          placeholder="https://api.example.com"
-                          value={aiBaseUrl}
-                          onChange={(e) => setAiBaseUrl(e.target.value)}
-                        />
+                      <div className="space-y-2">
+                        {aiProfiles.map(profile => (
+                          <div
+                            key={profile.id}
+                            className={cn(
+                              "flex items-center gap-3 p-3 rounded-lg border transition-colors",
+                              activeProfileId === profile.id
+                                ? "border-primary/50 bg-primary/5"
+                                : "border-border bg-muted/20 hover:bg-muted/40"
+                            )}
+                          >
+                            {/* Info */}
+                            <button
+                              onClick={() => setActiveProfile(profile.id)}
+                              className="flex-1 text-left min-w-0"
+                              title="设为当前使用"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm truncate">{profile.name}</span>
+                                {activeProfileId === profile.id && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-medium">当前</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                                <span>{AI_PROVIDER_CONFIGS[profile.provider]?.displayName || profile.provider}</span>
+                                <span className="opacity-40">·</span>
+                                <span className="font-mono">{profile.model || AI_PROVIDER_CONFIGS[profile.provider]?.defaultModel}</span>
+                                <span className="opacity-40">·</span>
+                                <span className="font-mono">{profile.apiKey ? `${profile.apiKey.slice(0, 6)}***` : '(no key)'}</span>
+                              </div>
+                            </button>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => setActiveProfile(profile.id)}
+                                className={cn("p-1.5 rounded-md transition-colors", activeProfileId === profile.id ? "text-yellow-500" : "text-muted-foreground/40 hover:text-yellow-500 hover:bg-yellow-500/10")}
+                                title="设为默认"
+                              >
+                                <Star className={cn("w-3.5 h-3.5", activeProfileId === profile.id && "fill-current")} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setFormData({
+                                    name: profile.name,
+                                    provider: profile.provider,
+                                    apiKey: profile.apiKey,
+                                    baseUrl: profile.baseUrl,
+                                    model: profile.model,
+                                  });
+                                  setEditingProfile(profile.id);
+                                  setShowAddForm(true);
+                                }}
+                                className="p-1.5 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-secondary transition-colors"
+                                title="编辑"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => removeAiProfile(profile.id)}
+                                className="p-1.5 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="删除"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
 
-                    {/* Model Override */}
-                    <div className="flex flex-col gap-1.5">
-                      <span className="font-medium text-sm">{t('settings.ai.model')}</span>
-                      <span className="text-xs text-muted-foreground mb-2">
-                        {t('settings.ai.modelDesc')} {AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
-                      </span>
-                      <Input
-                        type="text"
-                        className="w-full sm:w-64"
-                        placeholder={AI_PROVIDER_CONFIGS[aiProvider]?.defaultModel}
-                        value={aiModel}
-                        onChange={(e) => setAiModel(e.target.value)}
-                      />
+                      {/* ── Add / Edit Form ── */}
+                      {showAddForm && (
+                        <div className="mt-2 p-4 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+                          <div className="text-sm font-medium">{editingProfile ? '编辑配置' : '添加新配置'}</div>
+
+                          {/* Provider */}
+                          <Select
+                            className="w-full sm:w-64"
+                            value={formData.provider}
+                            onChange={(v) => {
+                              const prov = v as AIProvider;
+                              const cfg = AI_PROVIDER_CONFIGS[prov];
+                              setFormData({
+                                ...formData,
+                                provider: prov,
+                                baseUrl: cfg?.baseUrl || '',
+                                model: cfg?.defaultModel || '',
+                                name: formData.name || cfg?.displayName || prov,
+                              });
+                            }}
+                            options={Object.entries(AI_PROVIDER_CONFIGS).map(([key, config]) => ({
+                              label: config.displayName, value: key
+                            }))}
+                          />
+
+                          {/* Name */}
+                          <Input
+                            type="text"
+                            className="w-full sm:w-64"
+                            placeholder="配置名称（如 DeepSeek V3）"
+                            value={formData.name}
+                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                          />
+
+                          {/* API Key */}
+                          <Input
+                            type="password"
+                            className="w-full sm:w-96 font-mono"
+                            placeholder="API Key (sk-xxx...)"
+                            value={formData.apiKey}
+                            onChange={e => setFormData({ ...formData, apiKey: e.target.value })}
+                          />
+
+                          {/* Base URL */}
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-muted-foreground">Base URL</span>
+                            <Input
+                              type="text"
+                              className="w-full sm:w-96 font-mono text-xs"
+                              placeholder={AI_PROVIDER_CONFIGS[formData.provider]?.baseUrl || 'https://api.example.com'}
+                              value={formData.baseUrl}
+                              onChange={e => setFormData({ ...formData, baseUrl: e.target.value })}
+                            />
+                          </div>
+
+                          {/* Model */}
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] text-muted-foreground">模型名称</span>
+                            <Input
+                              type="text"
+                              className="w-full sm:w-64 font-mono text-xs"
+                              placeholder={AI_PROVIDER_CONFIGS[formData.provider]?.defaultModel || 'model-name'}
+                              value={formData.model}
+                              onChange={e => setFormData({ ...formData, model: e.target.value })}
+                            />
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex gap-2 pt-1">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                const cfg = AI_PROVIDER_CONFIGS[formData.provider];
+                                const profile: AIProviderProfile = {
+                                  id: editingProfile || `profile-${Date.now()}`,
+                                  name: formData.name || cfg?.displayName || formData.provider,
+                                  provider: formData.provider,
+                                  apiKey: formData.apiKey,
+                                  baseUrl: formData.baseUrl || cfg?.baseUrl || '',
+                                  model: formData.model || cfg?.defaultModel || '',
+                                };
+                                if (editingProfile) {
+                                  updateAiProfile(profile);
+                                } else {
+                                  addAiProfile(profile);
+                                }
+                                setShowAddForm(false);
+                                setEditingProfile(null);
+                                setFormData({ ...emptyForm });
+                              }}
+                            >
+                              <Check className="w-3.5 h-3.5 mr-1" />
+                              {editingProfile ? '保存' : '添加'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setShowAddForm(false); setEditingProfile(null); setFormData({ ...emptyForm }); }}
+                            >
+                              取消
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Privacy Mode Toggle */}

@@ -1,6 +1,6 @@
 // AI Service - Handles communication with AI providers (DeepSeek, OpenAI, etc.)
 
-import { AIConfig, AICompletionRequest, AICompletionResponse, AI_PROVIDER_CONFIGS, ChatMessage, ToolDefinition, ToolCall, ToolCompletionResponse } from '../shared/aiTypes';
+import { AIConfig, AICompletionRequest, AICompletionResponse, AI_PROVIDER_CONFIGS, ChatMessage, ToolDefinition, ToolCall, ToolCompletionResponse, AIProviderProfile } from '../shared/aiTypes';
 
 class AIService {
     private config: AIConfig | null = null;
@@ -18,6 +18,30 @@ class AIService {
         // Ollama doesn't require API key
         if (this.config.provider === 'ollama') return true;
         return !!(this.config.apiKey && this.config.apiKey.length > 0);
+    }
+
+    // Build AIConfig from a saved profile
+    setConfigFromProfile(profile: AIProviderProfile): void {
+        const providerConfig = AI_PROVIDER_CONFIGS[profile.provider];
+        this.config = {
+            provider: profile.provider,
+            apiKey: profile.apiKey,
+            baseUrl: profile.baseUrl || providerConfig?.baseUrl || undefined,
+            model: profile.model || providerConfig?.defaultModel || undefined,
+            privacyMode: false, // global setting handled separately
+        };
+    }
+
+    // Build a temporary AIConfig from a profile (does NOT change this.config)
+    private configFromProfile(profile: AIProviderProfile): AIConfig {
+        const providerConfig = AI_PROVIDER_CONFIGS[profile.provider];
+        return {
+            provider: profile.provider,
+            apiKey: profile.apiKey,
+            baseUrl: profile.baseUrl || providerConfig?.baseUrl || undefined,
+            model: profile.model || providerConfig?.defaultModel || undefined,
+            privacyMode: this.config?.privacyMode ?? false,
+        };
     }
 
     // Privacy mode: sanitize sensitive information
@@ -238,25 +262,31 @@ class AIService {
         messages: ChatMessage[];
         tools: ToolDefinition[];
         temperature?: number;
-        overrideModel?: string;  // switch model per-request without changing config
+        overrideModel?: string;   // switch model per-request without changing config
+        overrideProfile?: AIProviderProfile;  // use a completely different provider's API key/base
     }): Promise<ToolCompletionResponse> {
-        if (!this.config) {
+        // If an override profile is provided, use it instead of global config
+        const effectiveConfig = request.overrideProfile
+            ? this.configFromProfile(request.overrideProfile)
+            : this.config;
+
+        if (!effectiveConfig) {
             throw new Error('AI service not configured.');
         }
-        if (this.config.provider !== 'ollama' && !this.config.apiKey) {
+        if (effectiveConfig.provider !== 'ollama' && !effectiveConfig.apiKey) {
             throw new Error('API key required.');
         }
 
-        const providerConfig = AI_PROVIDER_CONFIGS[this.config.provider];
-        const baseUrl = this.config.baseUrl || providerConfig.baseUrl;
+        const providerConfig = AI_PROVIDER_CONFIGS[effectiveConfig.provider];
+        const baseUrl = effectiveConfig.baseUrl || providerConfig.baseUrl;
         // overrideModel > config model > provider default
-        const model = request.overrideModel || this.config.model || providerConfig.defaultModel;
-        const isOllama = this.config.provider === 'ollama';
+        const model = request.overrideModel || effectiveConfig.model || providerConfig.defaultModel;
+        const isOllama = effectiveConfig.provider === 'ollama';
         const endpoint = this.getEndpoint(baseUrl, isOllama);
 
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-        if (this.config.provider === 'openrouter') {
+        if (effectiveConfig.apiKey) headers['Authorization'] = `Bearer ${effectiveConfig.apiKey}`;
+        if (effectiveConfig.provider === 'openrouter') {
             headers['HTTP-Referer'] = 'https://sshtool.app';
             headers['X-Title'] = 'SSH Tool';
         }
