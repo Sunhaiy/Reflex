@@ -1,16 +1,14 @@
 import { useState } from 'react';
-import { SystemMonitor } from './SystemMonitor';
-import { DockerManager } from './DockerManager';
 import { Monitor, Container } from 'lucide-react';
-import { ErrorBoundary } from './ErrorBoundary';
-import { ConnectingLog } from './ConnectingOverlay';
+import { PanelSlotConsumer } from './PanelSlot';
 
 interface RightPanelProps {
     connectionId: string;
     isConnected?: boolean;
+    isActive?: boolean;
 }
 
-export function RightPanel({ connectionId, isConnected = true }: RightPanelProps) {
+export function RightPanel({ connectionId, isConnected = true, isActive = true }: RightPanelProps) {
     const [activeTab, setActiveTab] = useState<'monitor' | 'docker'>('monitor');
 
     return (
@@ -39,17 +37,13 @@ export function RightPanel({ connectionId, isConnected = true }: RightPanelProps
                 </button>
             </div>
 
-            {/* Content */}
+            {/* Content — shared panel instances via PanelSlotConsumer */}
             <div className="flex-1 overflow-hidden relative">
                 <div className={`absolute inset-0 transition-opacity duration-200 ${activeTab === 'monitor' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-                    <ErrorBoundary name="SystemMonitor">
-                        <SystemMonitor connectionId={connectionId} />
-                    </ErrorBoundary>
+                    <PanelSlotConsumer panel="monitor" active={isActive} />
                 </div>
                 <div className={`absolute inset-0 transition-opacity duration-200 ${activeTab === 'docker' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}`}>
-                    <ErrorBoundary name="DockerManager">
-                        {activeTab === 'docker' && <DockerManager connectionId={connectionId} />}
-                    </ErrorBoundary>
+                    <PanelSlotConsumer panel="docker" active={isActive} />
                 </div>
             </div>
         </div>

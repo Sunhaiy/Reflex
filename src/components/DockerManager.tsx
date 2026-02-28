@@ -274,13 +274,13 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                 </span>
                             </div>
 
-                            <div className="flex items-center justify-between mt-2">
+                            <div className="mt-2 space-y-1.5">
                                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 font-mono">
                                     <span>{container.id.substring(0, 12)}</span>
-                                    {container.ports && <span className="truncate max-w-[120px]" title={container.ports}>⇢ {container.ports}</span>}
+                                    {container.ports && <span className="truncate" title={container.ports}>⇢ {container.ports}</span>}
                                 </div>
 
-                                <div className="flex items-center gap-0.5">
+                                <div className="flex items-center flex-wrap gap-0.5">
                                     {/* Logs */}
                                     <button
                                         onClick={() => setExpandedId(expandedId === container.id ? null : container.id)}

@@ -1,13 +1,16 @@
 // AgentLayout - Two-panel layout for Agent mode
 // Uses TerminalSlotConsumer to display the shared terminal instance
 import { useRef, useState, useCallback } from 'react';
+import { MessageSquare, Activity, FolderOpen, Container } from 'lucide-react';
 import { AIChatPanel, AgentMessage } from './AIChatPanel';
 import { AgentSessionSidebar } from './AgentSessionSidebar';
 import { AgentSession } from '../shared/types';
 import { ErrorBoundary } from './ErrorBoundary';
 import { TerminalSlotConsumer } from './TerminalSlot';
 import { TerminalConnecting } from './ConnectingOverlay';
+import { PanelSlotConsumer, PanelName } from './PanelSlot';
 import { useTranslation } from '../hooks/useTranslation';
+import { cn } from '../lib/utils';
 
 interface AgentLayoutProps {
     connectionId: string;
@@ -20,6 +23,8 @@ interface AgentLayoutProps {
     username?: string;
 }
 
+type SidebarPanel = 'chat' | 'monitor' | 'files' | 'docker';
+
 function generateSessionId() {
     return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -29,6 +34,7 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
     const layoutRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef(false);
     const [sidebarWidth, setSidebarWidth] = useState(180); // px, 140-320
+    const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>('chat');
     const { t } = useTranslation();
 
     // Session management
@@ -82,7 +88,8 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
         const handleMouseMove = (e: MouseEvent) => {
             if (!layoutRef.current) return;
             const bounds = layoutRef.current.getBoundingClientRect();
-            setSidebarWidth(Math.max(140, Math.min(320, e.clientX - bounds.left)));
+            // offset by icon rail width (~44px)
+            setSidebarWidth(Math.max(140, Math.min(320, e.clientX - bounds.left - 44)));
         };
         const handleMouseUp = () => {
             document.body.style.cursor = 'default';
@@ -96,25 +103,70 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
         document.addEventListener('mouseup', handleMouseUp);
     };
 
+
+    const navItems: { id: SidebarPanel; icon: any; label: string }[] = [
+        { id: 'chat', icon: MessageSquare, label: t('agent.sessionHistory') },
+        { id: 'monitor', icon: Activity, label: t('processList.title') },
+        { id: 'files', icon: FolderOpen, label: t('fileBrowser.title') },
+        { id: 'docker', icon: Container, label: 'Docker' },
+    ];
+
     return (
         <div ref={layoutRef} className="flex h-full w-full overflow-hidden" style={{ padding: 'var(--panel-gap)' }}>
-            {/* Left: Session Sidebar + Chat Panel */}
+            {/* Left: Icon Rail + Panel + Chat */}
             <div
                 className="h-full flex min-w-0 overflow-hidden"
                 style={{ width: `${chatWidth * 100}%` }}
             >
-                {/* Session History Sidebar */}
-                {profileId && (
+                {/* Icon Navigation Rail */}
+                <div className="flex flex-col items-center py-2 gap-1 w-[44px] shrink-0 bg-card/30 border-r border-border/30">
+                    {navItems.map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => setSidebarPanel(item.id)}
+                            className={cn(
+                                'w-9 h-9 flex items-center justify-center rounded-lg transition-colors relative group',
+                                sidebarPanel === item.id
+                                    ? 'bg-primary/15 text-primary'
+                                    : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/50'
+                            )}
+                            title={item.label}
+                        >
+                            <item.icon className="w-[18px] h-[18px]" />
+                            {/* Active indicator */}
+                            {sidebarPanel === item.id && (
+                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />
+                            )}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Sidebar Panel Content — stays mounted once opened, hidden via CSS */}
+                {/* Chat history sidebar */}
+                <div style={{ display: sidebarPanel === 'chat' ? 'contents' : 'none' }}>
+                    {profileId && (
+                        <>
+                            <AgentSessionSidebar
+                                profileId={profileId}
+                                currentSessionId={currentSessionId}
+                                onSelectSession={handleSelectSession}
+                                onNewSession={handleNewSession}
+                                refreshTrigger={sidebarRefresh}
+                                style={{ width: sidebarWidth, minWidth: 140, maxWidth: 320 }}
+                            />
+                            <div
+                                className="w-1 cursor-col-resize hover:bg-primary/40 bg-border/40 transition-colors flex-shrink-0"
+                                onMouseDown={startSidebarResize}
+                            />
+                        </>
+                    )}
+                </div>
+                {/* Sidebar panels — shared instances via PanelSlotConsumer */}
+                {sidebarPanel !== 'chat' && (
                     <>
-                        <AgentSessionSidebar
-                            profileId={profileId}
-                            currentSessionId={currentSessionId}
-                            onSelectSession={handleSelectSession}
-                            onNewSession={handleNewSession}
-                            refreshTrigger={sidebarRefresh}
-                            style={{ width: sidebarWidth, minWidth: 140, maxWidth: 320 }}
-                        />
-                        {/* Sidebar resize handle */}
+                        <div className="h-full overflow-hidden flex flex-col border-r border-border/40" style={{ width: sidebarWidth, minWidth: 140, maxWidth: 320 }}>
+                            <PanelSlotConsumer panel={sidebarPanel as PanelName} active={isActive} />
+                        </div>
                         <div
                             className="w-1 cursor-col-resize hover:bg-primary/40 bg-border/40 transition-colors flex-shrink-0"
                             onMouseDown={startSidebarResize}
@@ -122,7 +174,7 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
                     </>
                 )}
 
-                {/* AI Chat */}
+                {/* AI Chat — always visible */}
                 <div className="flex-1 min-w-0 h-full bg-card/50 rounded-r-lg border border-border overflow-hidden flex flex-col">
                     <ErrorBoundary name="AIChatPanel">
                         <AIChatPanel

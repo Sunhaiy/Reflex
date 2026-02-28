@@ -195,9 +195,9 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
                     <div className="space-y-4">
                         {stats.disks.map((disk, idx) => (
                             <div key={idx} className="space-y-1.5">
-                                <div className="flex justify-between text-[11px] font-mono text-muted-foreground">
-                                    <span className="text-foreground/80">{disk.mount}</span>
-                                    <span>{disk.used}G / {disk.size}G</span>
+                                <div className="flex justify-between text-[11px] font-mono text-muted-foreground gap-2">
+                                    <span className="text-foreground/80 truncate min-w-0">{disk.mount}</span>
+                                    <span className="shrink-0">{disk.used}G / {disk.size}G</span>
                                 </div>
                                 <div className="h-2 w-full bg-secondary/30 rounded-full overflow-hidden">
                                     <div
