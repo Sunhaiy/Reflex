@@ -200,17 +200,31 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 });
             }
         }
-        return chatMsgs;
+
+        // Sanitize: remove orphaned tool messages that have no preceding assistant with matching tool_calls
+        const validToolCallIds = new Set<string>();
+        for (const msg of chatMsgs) {
+            if (msg.role === 'assistant' && msg.tool_calls) {
+                for (const tc of msg.tool_calls) {
+                    validToolCallIds.add(tc.id);
+                }
+            }
+        }
+        return chatMsgs.filter(msg =>
+            msg.role !== 'tool' || validToolCallIds.has(msg.tool_call_id)
+        );
     };
 
     // The Agent Loop
     const runAgentLoop = async (currentMessages: AgentMessage[]) => {
-        const MAX_ITERATIONS = 15;
+        const MAX_ITERATIONS = 30;
 
         let loopMessages = [...currentMessages];
+        let iterationsUsed = 0;
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
             if (!isLoadingRef.current) break; // stopped by user
+            iterationsUsed = i + 1;
 
             // Show thinking indicator
             const thinkingId = `thinking-${Date.now()}`;
@@ -326,6 +340,18 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 onMessagesChange(loopMessages);
                 break;
             }
+        }
+
+        // If the loop hit the iteration limit, notify the user
+        if (iterationsUsed >= MAX_ITERATIONS && isLoadingRef.current) {
+            const limitMsg: AgentMessage = {
+                id: `limit-${Date.now()}`,
+                role: 'assistant',
+                content: `⚠️ 已达到单次最大执行轮数 (${MAX_ITERATIONS} 轮)。如需继续，请发送消息让我接着操作。`,
+                timestamp: Date.now(),
+            };
+            loopMessages = [...loopMessages, limitMsg];
+            onMessagesChange(loopMessages);
         }
     };
 
@@ -620,11 +646,20 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                 </div>
 
                                 {/* Configured profiles */}
-                                {aiProfiles.length > 0 && (
-                                    <div className="px-2 py-1 text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">已配置</div>
-                                )}
+                                {aiProfiles.length > 0 && (() => {
+                                    const activeProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+                                    const currentModel = agentModel || activeProfile?.model || (activeProfile ? AI_PROVIDER_CONFIGS[activeProfile.provider]?.defaultModel : '');
+                                    return (
+                                        <div className="px-3 py-1.5 flex items-center justify-between">
+                                            <span className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">已配置</span>
+                                            {currentModel && <span className="text-[10px] font-mono text-primary/70 truncate max-w-[140px]" title={currentModel}>{currentModel}</span>}
+                                        </div>
+                                    );
+                                })()}
                                 {aiProfiles.map(profile => {
                                     const isSelected = (agentProfileId || activeProfileId) === profile.id && !agentModel;
+                                    const providerInfo = AI_PROVIDER_CONFIGS[profile.provider];
+                                    const modelName = profile.model || providerInfo?.defaultModel || '';
                                     return (
                                         <button
                                             key={profile.id}
@@ -639,14 +674,14 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                             )}
                                         >
                                             <div className="flex items-center gap-1.5">
-                                                <span className="font-medium">{profile.name}</span>
+                                                <span className="font-semibold text-xs">{modelName}</span>
                                                 {isSelected && <Check className="w-3 h-3 text-primary" />}
                                                 {activeProfileId === profile.id && !isSelected && (
                                                     <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">默认</span>
                                                 )}
                                             </div>
                                             <div className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                                {AI_PROVIDER_CONFIGS[profile.provider]?.displayName} · {profile.model || AI_PROVIDER_CONFIGS[profile.provider]?.defaultModel}
+                                                {profile.name} · {providerInfo?.displayName}
                                             </div>
                                         </button>
                                     );
@@ -726,26 +761,44 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                         </div>
                     </div>
                 )}
-                {/* Compact tool call line */}
-                <div className="px-2">
+                {/* ── Terminal-style command block ── */}
+                <div className={cn(
+                    "mx-1 rounded-lg overflow-hidden border transition-all duration-300",
+                    isPending
+                        ? "border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.08)]"
+                        : "border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.06)]"
+                )}>
+                    {/* Command header */}
                     <button
                         onClick={() => setExpanded(!expanded)}
-                        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                        className={cn(
+                            "flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors",
+                            "bg-gradient-to-r from-[hsl(var(--card)/0.8)] to-[hsl(var(--card)/0.4)]",
+                            "hover:from-[hsl(var(--card))] hover:to-[hsl(var(--card)/0.6)]"
+                        )}
                     >
-                        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                        <Terminal className={cn("w-3 h-3", isPending ? "text-yellow-500" : "text-primary")} />
-                        <span className="font-mono">{toolCall.command}</span>
+                        {expanded ? <ChevronDown className="w-3 h-3 text-muted-foreground/60" /> : <ChevronRight className="w-3 h-3 text-muted-foreground/60" />}
+                        <Terminal className={cn("w-3.5 h-3.5", isPending ? "text-yellow-500" : "text-emerald-400")} />
+                        <code className="font-mono text-[11px] text-foreground/90 truncate flex-1 text-left">{toolCall.command}</code>
                         {isPending ? (
-                            <span className="ml-auto text-[10px] text-yellow-500">⏳ 待批准</span>
+                            <span className="flex items-center gap-1.5 ml-2 shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                                <span className="text-[10px] font-medium text-yellow-500/80">待批准</span>
+                            </span>
                         ) : (
-                            <span className="ml-auto text-[10px] text-green-500">✓ 已执行</span>
+                            <span className="flex items-center gap-1 ml-2 shrink-0">
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                <span className="text-[10px] font-medium text-emerald-400/80">已执行</span>
+                            </span>
                         )}
                     </button>
-                    {/* Show output for tool result messages */}
+                    {/* Output area */}
                     {expanded && message.role === 'tool' && message.content && (
-                        <pre className="mt-1 ml-5 text-[11px] text-muted-foreground/80 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
-                            {message.content}
-                        </pre>
+                        <div className="border-t border-border/30 bg-black/20">
+                            <pre className="px-3 py-2 text-[11px] text-muted-foreground/70 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed scrollbar-hide">
+                                {message.content}
+                            </pre>
+                        </div>
                     )}
                 </div>
             </div>
@@ -776,7 +829,9 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 {/* Avatar */}
                 <div className={cn(
                     "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
-                    isUser ? "bg-primary/20" : "bg-secondary"
+                    isUser
+                        ? "bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20"
+                        : "bg-gradient-to-br from-secondary to-secondary/60 border border-border/30"
                 )}>
                     {isUser ? (
                         <User className="w-3.5 h-3.5 text-primary" />
@@ -789,14 +844,17 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 <div className={cn(
                     "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                     isUser
-                        ? "bg-primary text-primary-foreground rounded-tr-md"
-                        : "bg-secondary/60 text-foreground rounded-tl-md"
+                        ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-md shadow-[0_2px_12px_rgba(var(--primary-rgb,234,88,12),0.15)]"
+                        : "bg-secondary/60 text-foreground rounded-tl-md backdrop-blur-sm border border-border/20"
                 )}>
                     {message.isStreaming && !message.content && (
-                        <div className="flex gap-1 py-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <div className="flex items-center gap-2 py-1">
+                            <div className="flex gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.8s' }} />
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '150ms', animationDuration: '0.8s' }} />
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '0.8s' }} />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground/50 font-mono">thinking...</span>
                         </div>
                     )}
                     <MessageContent content={message.content} isUser={isUser} />
