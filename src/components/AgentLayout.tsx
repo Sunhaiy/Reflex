@@ -1,6 +1,6 @@
 // AgentLayout - Two-panel layout for Agent mode
 // Uses TerminalSlotConsumer to display the shared terminal instance
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { MessageSquare, Activity, FolderOpen, Container } from 'lucide-react';
 import { AIChatPanel, AgentMessage } from './AIChatPanel';
 import { AgentSessionSidebar } from './AgentSessionSidebar';
@@ -40,6 +40,24 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
     // Session management
     const [currentSessionId, setCurrentSessionId] = useState<string>(() => generateSessionId());
     const [sidebarRefresh, setSidebarRefresh] = useState(0);
+    const hasRestoredRef = useRef(false);
+
+    // Auto-restore the most recent session on first mount
+    useEffect(() => {
+        if (!profileId || hasRestoredRef.current) return;
+        hasRestoredRef.current = true;
+        (async () => {
+            try {
+                const list = await (window as any).electron.agentSessionList(profileId);
+                if (list && list.length > 0) {
+                    // Sessions are sorted newest first
+                    const latest = list[0];
+                    setCurrentSessionId(latest.id);
+                    onMessagesChange(latest.messages as AgentMessage[]);
+                }
+            } catch { }
+        })();
+    }, [profileId]);
 
     const handleNewSession = useCallback(() => {
         setCurrentSessionId(generateSessionId());
