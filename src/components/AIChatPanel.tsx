@@ -1,6 +1,6 @@
 // AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
@@ -17,6 +17,7 @@ export interface AgentMessage {
         command: string;
         status: 'pending' | 'executed';
     };
+    reasoning?: string;  // AI thinking/reasoning content (DeepSeek)
     isStreaming?: boolean;
     usage?: {
         promptTokens: number;
@@ -279,6 +280,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         id: `asst-${Date.now()}`,
                         role: 'assistant',
                         content: response.content || '（无回复）',
+                        reasoning: response.reasoningContent || undefined,
                         timestamp: Date.now(),
                         usage: response.usage,
                         modelUsed: response.modelUsed,
@@ -290,8 +292,30 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
                 // Case 2: AI wants to call a tool
                 const toolCall = response.toolCalls[0];
+                const toolName = toolCall.function.name;
                 const args = JSON.parse(toolCall.function.arguments);
-                const command = args.command as string;
+
+                // Determine display command and actual exec command based on tool type
+                let displayCmd = '';
+                let execCmd = '';
+                if (toolName === 'execute_ssh_command') {
+                    displayCmd = args.command;
+                    execCmd = args.command;
+                } else if (toolName === 'read_file') {
+                    displayCmd = `📖 read ${args.path}`;
+                    execCmd = `cat ${JSON.stringify(args.path)}`;
+                } else if (toolName === 'write_file') {
+                    displayCmd = `✏️ write ${args.path}`;
+                    // Use heredoc for safe multi-line write
+                    const escaped = args.content.replace(/\\/g, '\\\\').replace(/'/g, "'\\''");
+                    execCmd = `cat > ${JSON.stringify(args.path)} << 'AGENT_EOF'\n${args.content}\nAGENT_EOF`;
+                } else if (toolName === 'list_directory') {
+                    displayCmd = `📂 list ${args.path}`;
+                    execCmd = `ls -la ${JSON.stringify(args.path)}`;
+                } else {
+                    displayCmd = `${toolName}(${JSON.stringify(args)})`;
+                    execCmd = `echo "Unknown tool: ${toolName}"`;
+                }
 
                 // Add AI's thinking text + tool call intent as assistant message
                 const toolCallMsgId = `call-${Date.now()}`;
@@ -299,21 +323,22 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     id: toolCallMsgId,
                     role: 'assistant',
                     content: response.content || '',
+                    reasoning: response.reasoningContent || undefined,
                     timestamp: Date.now(),
                     toolCall: {
-                        name: 'execute_ssh_command',
-                        command: command,
+                        name: toolName,
+                        command: displayCmd,
                         status: 'pending',
                     },
                 };
                 loopMessages = [...loopMessages, assistantToolMsg];
                 onMessagesChange(loopMessages);
 
-                // Check safety mode
-                if (needsApproval(command)) {
+                // Check safety mode (only for execute_ssh_command; file tools are always auto)
+                if (toolName === 'execute_ssh_command' && needsApproval(execCmd)) {
                     // Queue for approval — pause the loop
                     setPendingCommands(prev => [...prev, {
-                        cmd: command,
+                        cmd: execCmd,
                         msgId: toolCallMsgId,
                         aiMessages: loopMessages, // snapshot for resuming
                     }]);
@@ -321,7 +346,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 }
 
                 // Execute immediately
-                const result = await execCommand(command);
+                const result = await execCommand(execCmd);
 
                 // Update assistant message status to executed
                 loopMessages = loopMessages.map(m =>
@@ -341,8 +366,8 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     content: resultContent,
                     timestamp: Date.now(),
                     toolCall: {
-                        name: 'execute_ssh_command',
-                        command: command,
+                        name: toolName,
+                        command: displayCmd,
                         status: 'executed',
                     },
                 };
@@ -779,8 +804,31 @@ function MessageBubble({ message }: { message: AgentMessage }) {
     // Compact tool-call display (for both tool results and assistant tool-call requests)
     const renderToolCall = (toolCall: NonNullable<AgentMessage['toolCall']>, content?: string) => {
         const isPending = toolCall.status === 'pending';
+        // Determine icon and color based on tool name
+        const isRead = toolCall.name === 'read_file';
+        const isWrite = toolCall.name === 'write_file';
+        const isList = toolCall.name === 'list_directory';
+        const isFileOp = isRead || isWrite || isList;
+        const ToolIcon = isRead ? FileText : isWrite ? Pencil : isList ? FolderOpen : Terminal;
+        const accentColor = isRead ? 'blue' : isWrite ? 'amber' : isList ? 'cyan' : (isPending ? 'yellow' : 'emerald');
+        const statusLabel = isFileOp ? (isPending ? '读取中' : '完成') : (isPending ? '待批准' : '已执行');
         return (
             <div className="space-y-1.5">
+                {/* Reasoning/thinking block */}
+                {message.reasoning && (
+                    <div className="mx-1 rounded-lg border border-purple-500/20 bg-purple-500/5 overflow-hidden">
+                        <details className="group">
+                            <summary className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none hover:bg-purple-500/10 transition-colors">
+                                <Brain className="w-3.5 h-3.5 text-purple-400" />
+                                <span className="text-purple-400/80 font-medium">思考过程</span>
+                                <ChevronRight className="w-3 h-3 text-purple-400/50 ml-auto group-open:rotate-90 transition-transform" />
+                            </summary>
+                            <div className="px-3 py-2 border-t border-purple-500/10 text-[11px] text-muted-foreground/70 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                {message.reasoning}
+                            </div>
+                        </details>
+                    </div>
+                )}
                 {/* If the assistant included text explanation, show it above */}
                 {content && content.trim() && (
                     <div className="flex gap-3">
@@ -792,12 +840,14 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                         </div>
                     </div>
                 )}
-                {/* ── Terminal-style command block ── */}
+                {/* ── Tool block ── */}
                 <div className={cn(
                     "mx-1 rounded-lg overflow-hidden border transition-all duration-300",
                     isPending
-                        ? "border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.08)]"
-                        : "border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.06)]"
+                        ? `border-${accentColor}-500/30 shadow-[0_0_15px_rgba(234,179,8,0.08)]`
+                        : isFileOp
+                            ? `border-${accentColor}-500/20 shadow-[0_0_12px_rgba(59,130,246,0.06)]`
+                            : "border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.06)]"
                 )}>
                     {/* Command header */}
                     <button
@@ -809,17 +859,23 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                         )}
                     >
                         {expanded ? <ChevronDown className="w-3 h-3 text-muted-foreground/60" /> : <ChevronRight className="w-3 h-3 text-muted-foreground/60" />}
-                        <Terminal className={cn("w-3.5 h-3.5", isPending ? "text-yellow-500" : "text-emerald-400")} />
+                        <ToolIcon className={cn("w-3.5 h-3.5",
+                            isRead ? 'text-blue-400' : isWrite ? 'text-amber-400' : isList ? 'text-cyan-400' : isPending ? "text-yellow-500" : "text-emerald-400"
+                        )} />
                         <code className="font-mono text-[11px] text-foreground/90 truncate flex-1 text-left">{toolCall.command}</code>
                         {isPending ? (
                             <span className="flex items-center gap-1.5 ml-2 shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                                <span className="text-[10px] font-medium text-yellow-500/80">待批准</span>
+                                <span className={`w-1.5 h-1.5 rounded-full bg-${accentColor}-500 animate-pulse`} />
+                                <span className={`text-[10px] font-medium text-${accentColor}-500/80`}>{statusLabel}</span>
                             </span>
                         ) : (
                             <span className="flex items-center gap-1 ml-2 shrink-0">
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                <span className="text-[10px] font-medium text-emerald-400/80">已执行</span>
+                                <Check className={cn("w-3 h-3",
+                                    isFileOp ? `text-${accentColor}-400` : 'text-emerald-400'
+                                )} />
+                                <span className={cn("text-[10px] font-medium",
+                                    isFileOp ? `text-${accentColor}-400/80` : 'text-emerald-400/80'
+                                )}>{statusLabel}</span>
                             </span>
                         )}
                     </button>
@@ -856,6 +912,21 @@ function MessageBubble({ message }: { message: AgentMessage }) {
 
     return (
         <div className={cn("flex flex-col gap-0.5", isUser && "items-end")}>
+            {/* Reasoning block for non-tool assistant messages */}
+            {!isUser && message.reasoning && (
+                <div className="mx-1 mb-1 rounded-lg border border-purple-500/20 bg-purple-500/5 overflow-hidden max-w-[85%]">
+                    <details className="group">
+                        <summary className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none hover:bg-purple-500/10 transition-colors">
+                            <Brain className="w-3.5 h-3.5 text-purple-400" />
+                            <span className="text-purple-400/80 font-medium">思考过程</span>
+                            <ChevronRight className="w-3 h-3 text-purple-400/50 ml-auto group-open:rotate-90 transition-transform" />
+                        </summary>
+                        <div className="px-3 py-2 border-t border-purple-500/10 text-[11px] text-muted-foreground/70 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                            {message.reasoning}
+                        </div>
+                    </details>
+                </div>
+            )}
             <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
                 {/* Avatar */}
                 <div className={cn(

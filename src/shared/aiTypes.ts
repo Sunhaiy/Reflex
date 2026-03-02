@@ -61,6 +61,7 @@ export interface ToolCall {
 
 export interface ToolCompletionResponse {
     content: string | null;
+    reasoningContent?: string | null;  // DeepSeek reasoning_content
     toolCalls: ToolCall[] | null;
     finishReason: string;
     usage?: {
@@ -87,6 +88,61 @@ export const AGENT_TOOLS: ToolDefinition[] = [
                     }
                 },
                 required: ['command']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'read_file',
+            description: '通过 SFTP 读取远程服务器上的文件内容。用于查看配置文件、源代码等。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: '文件的绝对路径，例如 "/etc/nginx/nginx.conf"'
+                    }
+                },
+                required: ['path']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'write_file',
+            description: '通过 SFTP 将内容写入远程服务器上的文件。用于创建或修改配置文件、源代码等。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: '文件的绝对路径，例如 "/etc/nginx/conf.d/app.conf"'
+                    },
+                    content: {
+                        type: 'string',
+                        description: '要写入的文件内容'
+                    }
+                },
+                required: ['path', 'content']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'list_directory',
+            description: '通过 SFTP 列出远程服务器上某个目录的文件和子目录列表。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: '目录的绝对路径，例如 "/var/www/html"'
+                    }
+                },
+                required: ['path']
             }
         }
     }
@@ -189,19 +245,24 @@ export const AI_SYSTEM_PROMPTS = {
 
     agent: `你是一个专业的 Linux 服务器管理助手（Agent）。你通过 SSH 连接直接管理用户的服务器。
 
-你拥有一个工具：execute_ssh_command，可以在服务器上执行任意 Shell 命令。系统会自动将命令输出返回给你。
+你拥有以下工具：
+- execute_ssh_command：在服务器上执行任意 Shell 命令
+- read_file：通过 SFTP 读取服务器上的文件内容
+- write_file：通过 SFTP 写入或创建文件
+- list_directory：列出目录下的文件和子目录
 
 ## 工作方式
 
 1. **思考**：分析用户的需求，决定下一步需要什么信息或操作
-2. **执行**：调用 execute_ssh_command 执行一条命令
-3. **观察**：阅读命令输出，分析结果
+2. **执行**：调用合适的工具（执行命令、读写文件等）
+3. **观察**：阅读结果，分析输出
 4. **循环**：根据结果决定是继续执行下一步，还是向用户汇报
 
 ## 规则
 
-- 每次只调用一个命令，观察结果后再决定下一步
-- 先用只读命令（ls、cat、df、ps 等）了解情况，再做修改操作
+- 每次只调用一个工具，观察结果后再决定下一步
+- 先用只读操作（ls、cat、read_file、list_directory 等）了解情况，再做修改
+- 读取和修改配置文件时，优先使用 read_file 和 write_file
 - 对于危险操作（rm -rf、shutdown、数据库删除等），先用文字告知用户风险，不要直接执行
 - 用简洁的中文解释你在做什么、结果如何
 - 如果命令出错，分析原因并尝试其他方案`

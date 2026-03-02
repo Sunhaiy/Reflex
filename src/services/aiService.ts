@@ -356,6 +356,7 @@ class AIService {
         if (message?.tool_calls?.length) {
             return {
                 content: message.content || null,
+                reasoningContent: message.reasoning_content || null,
                 toolCalls: message.tool_calls,
                 finishReason: choice?.finish_reason || 'tool_calls',
                 usage,
@@ -385,6 +386,7 @@ class AIService {
 
         return {
             content: content || null,
+            reasoningContent: message?.reasoning_content || null,
             toolCalls: null,
             finishReason: choice?.finish_reason || 'stop',
             usage,
