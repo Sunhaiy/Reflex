@@ -164,7 +164,7 @@ function App() {
           mode={workspaceMode}
           onModeChange={setWorkspaceMode}
           showModeSwitch={page === 'workspace' && sessions.length > 0}
-          showHome={sessions.length > 0 && page === 'workspace'}
+          showHome={page === 'settings' || (sessions.length > 0 && page === 'workspace')}
           sessions={sessions}
           activeSessionId={activeSessionId}
           onSwitchSession={(id) => { setActiveSessionId(id); setPage('workspace'); }}
