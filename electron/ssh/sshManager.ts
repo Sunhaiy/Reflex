@@ -44,6 +44,7 @@ export class SSHManager {
             if (connection.passphrase) config.passphrase = connection.passphrase;
         } else {
             config.password = connection.password;
+            config.tryKeyboard = true;
         }
         return config;
     }
@@ -72,9 +73,19 @@ export class SSHManager {
                 console.log(`[SSH] Connection ready: session=${sessionId}`);
                 this._attachShell(conn, webContents, sessionId, profileId, resolve, reject);
             });
-            conn.on('error', (err) => { this.cleanup(sessionId); reject(err); });
+            conn.on('error', (err) => {
+                console.error(`[SSH] Connection error for ${connection.host}:${connection.port} (auth=${connection.authType}): ${err.message}`);
+                this.cleanup(sessionId);
+                reject(err);
+            });
+            conn.on('keyboard-interactive', (_name, _instructions, _instructionsLang, _prompts, finish) => {
+                finish([connection.password || '']);
+            });
             conn.on('close', () => this.cleanup(sessionId));
-            try { conn.connect(this._buildConfig(connection)); } catch (err) { reject(err); }
+            try { conn.connect(this._buildConfig(connection)); } catch (err: any) {
+                console.error(`[SSH] Connect threw:`, err);
+                reject(err);
+            }
         });
     }
 
