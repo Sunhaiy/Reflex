@@ -1,5 +1,5 @@
 // AIChatPanel - Agent mode chat interface
-import { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
 import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
@@ -533,7 +533,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 )}
 
                 {messages.map((msg) => (
-                    <MessageBubble key={msg.id} message={msg} />
+                    <MessageBubbleMemo key={msg.id} message={msg} />
                 ))}
 
                 {isLoading && messages[messages.length - 1]?.content === '' && (
@@ -797,7 +797,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     );
 }
 
-// Message Bubble Component
+// Message Bubble Component — memo wrapper added below
 function MessageBubble({ message }: { message: AgentMessage }) {
     const [expanded, setExpanded] = useState(true);
 
@@ -979,7 +979,8 @@ function MessageBubble({ message }: { message: AgentMessage }) {
         </div>
     );
 }
-
+// Memoized wrapper — skips re-render when chatWidth changes during drag resize
+const MessageBubbleMemo = memo(MessageBubble);
 // Simple markdown-ish content renderer
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
     if (!content) return null;
@@ -1045,3 +1046,5 @@ function renderInlineMarkdown(text: string) {
         });
     });
 }
+
+

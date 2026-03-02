@@ -73,23 +73,30 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
         setSidebarRefresh(n => n + 1);
     }, []);
 
-    const handleExecuteCommand = (command: string) => {
+    const handleExecuteCommand = useCallback((command: string) => {
         const eWindow = window as any;
         eWindow.electron?.writeTerminal(connectionId, command);
-    };
+    }, [connectionId]);
 
-    // Drag-to-resize handlers
+    // Drag-to-resize handlers — rAF-throttled to max 60fps
     const startResize = () => {
         isResizing.current = true;
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
+        let rafId: number | null = null;
         const handleMouseMove = (e: MouseEvent) => {
             if (!isResizing.current || !layoutRef.current) return;
-            const bounds = layoutRef.current.getBoundingClientRect();
-            const ratio = (e.clientX - bounds.left) / bounds.width;
-            if (ratio > 0.3 && ratio < 0.8) setChatWidth(ratio);
+            if (rafId !== null) return; // already a frame queued
+            rafId = requestAnimationFrame(() => {
+                rafId = null;
+                if (!layoutRef.current) return;
+                const bounds = layoutRef.current.getBoundingClientRect();
+                const ratio = (e.clientX - bounds.left) / bounds.width;
+                if (ratio > 0.3 && ratio < 0.8) setChatWidth(ratio);
+            });
         };
         const handleMouseUp = () => {
+            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
             if (isResizing.current) window.dispatchEvent(new Event('resize'));
             isResizing.current = false;
             document.body.style.cursor = 'default';
