@@ -168,12 +168,12 @@ input[type="number"] {
 
   0%,
   100% {
-    box-shadow: 0 0 4px 1px currentColor;
-    opacity: 0.6;
+    box-shadow: 0 0 2px 0px currentColor;
+    opacity: 0.7;
   }
 
   50% {
-    box-shadow: 0 0 8px 3px currentColor;
+    box-shadow: 0 0 3px 1px currentColor;
     opacity: 1;
   }
 }
@@ -195,7 +195,7 @@ input[type="number"] {
 }
 
 .card-breathe {
-  animation: breathe 2.5s ease-in-out infinite;
+  animation: breathe 3s ease-in-out infinite;
 }
 
 .card-border-glow {

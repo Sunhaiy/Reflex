@@ -176,9 +176,22 @@ function App() {
           {page === 'connections' && (
             <div className="absolute inset-0 z-50" style={{ backgroundColor: 'hsl(var(--background) / var(--app-opacity, 0.9))' }}>
               {connError && (
-                <div className="mx-4 mt-3 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-center justify-between">
-                  <span>⚠ 连接失败：{connError}</span>
-                  <button onClick={() => setConnError(null)} className="ml-4 text-destructive/60 hover:text-destructive text-lg leading-none">×</button>
+                <div className="mx-4 mt-3 rounded-lg overflow-hidden ring-1 ring-red-500/20 bg-red-500/[0.06] backdrop-blur-sm animate-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-red-400 mb-0.5">连接失败</div>
+                      <div className="text-[11px] text-red-400/60 leading-relaxed break-all">{connError}</div>
+                    </div>
+                    <button
+                      onClick={() => setConnError(null)}
+                      className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-red-400/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  </div>
                 </div>
               )}
               <ErrorBoundary name="ConnectionManager">
