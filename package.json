@@ -29,6 +29,11 @@
       ],
       "icon": "public/icon.ico"
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true
+    },
     "mac": {
       "target": [
         "dmg",

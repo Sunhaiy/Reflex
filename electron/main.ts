@@ -53,7 +53,7 @@ const createWindow = () => {
   if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:3002');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
   mainWindow.maximize();
 };
