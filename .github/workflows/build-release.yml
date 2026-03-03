@@ -40,6 +40,7 @@ jobs:
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Build and Package (Linux)
         if: matrix.os == 'ubuntu-latest'

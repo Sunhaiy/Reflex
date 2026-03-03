@@ -38,10 +38,13 @@
       "perMachine": true
     },
     "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
+      "target": {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
       "icon": "public/icon.icns",
       "identity": null
     },
