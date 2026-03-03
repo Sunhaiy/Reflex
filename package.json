@@ -18,6 +18,7 @@
     "asar": false,
     "appId": "com.zangqing.app",
     "productName": "藏青",
+    "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release-new"
     },
