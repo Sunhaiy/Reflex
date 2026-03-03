@@ -42,7 +42,8 @@
         "dmg",
         "zip"
       ],
-      "icon": "public/icon.icns"
+      "icon": "public/icon.icns",
+      "identity": null
     },
     "linux": {
       "target": [
