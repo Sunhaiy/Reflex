@@ -58,7 +58,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "SUNHIY",
+        "owner": "Sunhaiy",
         "repo": "sshtool"
       }
     ]
