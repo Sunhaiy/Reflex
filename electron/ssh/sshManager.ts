@@ -13,6 +13,9 @@ export class SSHManager {
     private prevNet: any = null;
 
     private profileIds: Map<string, string> = new Map();
+    // Stored so we can reconnect automatically
+    private connectionConfigs: Map<string, SSHConnection> = new Map();
+    private webContentsBySession: Map<string, WebContents> = new Map();
     private store: any;
 
     constructor(store?: any) {
@@ -21,11 +24,27 @@ export class SSHManager {
 
     async connect(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
         console.log(`[SSH] New connection request: session=${sessionId}, profile=${profileId}`);
+        // Store for auto-reconnect
+        this.connectionConfigs.set(sessionId, connection);
+        this.webContentsBySession.set(sessionId, webContents);
 
         if (connection.jumpHost) {
             return this._connectViaJump(connection, webContents, sessionId, profileId);
         }
         return this._connectDirect(connection, webContents, sessionId, profileId);
+    }
+
+    /** Re-establish the SSH connection using the stored config. */
+    async reconnect(sessionId: string): Promise<void> {
+        const connection = this.connectionConfigs.get(sessionId);
+        const webContents = this.webContentsBySession.get(sessionId);
+        if (!connection || !webContents) {
+            throw new Error(`No stored config for session ${sessionId}`);
+        }
+        console.log(`[SSH] Auto-reconnect attempt for session=${sessionId}`);
+        this.cleanup(sessionId);
+        const profileId = this.profileIds.get(sessionId);
+        await this.connect(connection, webContents, sessionId, profileId);
     }
 
     private _buildConfig(connection: SSHConnection): any {
@@ -147,8 +166,9 @@ export class SSHManager {
             this.connections.delete(id);
         }
 
-
         this.profileIds.delete(id);
+        // Note: do NOT clear connectionConfigs / webContentsBySession here —
+        // they are needed for reconnect() after a drop.
     }
 
     write(id: string, data: string) {

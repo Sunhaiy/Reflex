@@ -19,6 +19,7 @@ export interface AgentMessage {
     };
     reasoning?: string;  // AI thinking/reasoning content (DeepSeek)
     isStreaming?: boolean;
+    isError?: boolean;  // marks messages that should show error shake animation
     usage?: {
         promptTokens: number;
         completionTokens: number;
@@ -61,6 +62,44 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const sessionIdRef = useRef(sessionId);
     useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+
+    // Inject CSS keyframes for AI chat animations (runs once)
+    useEffect(() => {
+        const STYLE_ID = 'agent-chat-keyframes';
+        if (document.getElementById(STYLE_ID)) return;
+        const style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.textContent = `
+@keyframes agentCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes agentShimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+@keyframes agentWaveDot {
+  0%, 100% { transform: translateY(0); opacity: 0.35; }
+  50%       { transform: translateY(-5px); opacity: 1; }
+}
+@keyframes agentAccordionIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes agentSlideInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes agentShakeX {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-4px); }
+  40%       { transform: translateX(4px); }
+  60%       { transform: translateX(-3px); }
+  80%       { transform: translateX(3px); }
+}
+`;
+        document.head.appendChild(style);
+    }, []);
 
     // Click-outside to dismiss popover menus
     useEffect(() => {
@@ -127,29 +166,73 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     }, [input]);
 
     // Execute a command via SSH exec IPC and return result
+    // Auto-retries up to 5 times on connection errors, attempting to reconnect between tries.
     const execCommand = async (command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
         const eWindow = window as any;
         if (!eWindow.electron?.sshExec) {
             throw new Error('SSH exec not available');
         }
-        // Show command in terminal display (NOT PTY stdin — no pager, no double-exec)
-        eWindow.electron.terminalInject?.(connectionId, `\r\n\x1b[36;2m[Agent] $ ${command}\x1b[0m\r\n`);
-        // Suppress pager programs so output always returns cleanly
-        const wrapped = `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb ${command}`;
-        // 120s timeout: package installs (apt/yum/pip) can take several minutes
-        const result = await eWindow.electron.sshExec(connectionId, wrapped, 120000);
-        // Inject output into terminal display so user can observe
-        if (result.stdout) {
-            eWindow.electron.terminalInject?.(connectionId, result.stdout.replace(/\n/g, '\r\n'));
+
+        const MAX_RETRIES = 5;
+        const RETRY_DELAY_MS = 3000;
+        const isConnError = (msg: string) =>
+            /not connected|no response|handshake|connection lost|ECONNRESET|ETIMEDOUT/i.test(msg);
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                if (attempt === 1) {
+                    // Show command in terminal display (NOT PTY stdin — no pager, no double-exec)
+                    eWindow.electron.terminalInject?.(connectionId, `\r\n\x1b[36;2m[Agent] $ ${command}\x1b[0m\r\n`);
+                }
+                // Suppress pager programs so output always returns cleanly
+                const wrapped = `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb ${command}`;
+                // 120s timeout: package installs (apt/yum/pip) can take several minutes
+                const result = await eWindow.electron.sshExec(connectionId, wrapped, 120000);
+                // Inject output into terminal display so user can observe
+                if (result.stdout) {
+                    eWindow.electron.terminalInject?.(connectionId, result.stdout.replace(/\n/g, '\r\n'));
+                }
+                if (result.stderr) {
+                    eWindow.electron.terminalInject?.(connectionId, `\x1b[33m${result.stderr.replace(/\n/g, '\r\n')}\x1b[0m`);
+                }
+                eWindow.electron.terminalInject?.(connectionId, `\x1b[2m[exit ${result.exitCode}]\x1b[0m\r\n`);
+                return result;
+            } catch (err: any) {
+                const errMsg: string = err?.message || String(err);
+                if (isConnError(errMsg) && attempt < MAX_RETRIES) {
+                    // Notify in terminal that we're reconnecting
+                    eWindow.electron.terminalInject?.(connectionId,
+                        `\r\n\x1b[33m[Agent] 连接中断，${RETRY_DELAY_MS / 1000}s 后重试 (${attempt}/${MAX_RETRIES})...\x1b[0m\r\n`
+                    );
+                    await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+                    // Attempt to reconnect
+                    try {
+                        const reconnResult = await eWindow.electron.sshReconnect?.(connectionId);
+                        if (reconnResult?.success) {
+                            eWindow.electron.terminalInject?.(connectionId,
+                                `\x1b[32m[Agent] 重连成功，继续执行...\x1b[0m\r\n`
+                            );
+                        } else {
+                            eWindow.electron.terminalInject?.(connectionId,
+                                `\x1b[31m[Agent] 重连失败: ${reconnResult?.error || '未知错误'}\x1b[0m\r\n`
+                            );
+                        }
+                    } catch (_reconnErr) {
+                        // reconnect threw — continue anyway, sshExec will fail again if truly down
+                    }
+                    // Re-show the command indicator for next attempt
+                    eWindow.electron.terminalInject?.(connectionId,
+                        `\x1b[36;2m[Agent] $ ${command}  (重试 ${attempt + 1}/${MAX_RETRIES})\x1b[0m\r\n`
+                    );
+                    continue;
+                }
+                // Not a connection error, or out of retries
+                throw err;
+            }
         }
-        if (result.stderr) {
-            eWindow.electron.terminalInject?.(connectionId, `\x1b[33m${result.stderr.replace(/\n/g, '\r\n')}\x1b[0m`);
-        }
-        eWindow.electron.terminalInject?.(connectionId,
-            `\x1b[2m[exit ${result.exitCode}]\x1b[0m\r\n`
-        );
-        return result;
+        throw new Error('SSH exec failed after maximum retries');
     };
+
 
     // Check if a command needs approval based on current mode
     const needsApproval = (command: string): boolean => {
@@ -241,14 +324,10 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
     // The Agent Loop
     const runAgentLoop = async (currentMessages: AgentMessage[]) => {
-        const MAX_ITERATIONS = 30;
-
         let loopMessages = [...currentMessages];
-        let iterationsUsed = 0;
 
-        for (let i = 0; i < MAX_ITERATIONS; i++) {
+        while (true) {
             if (!isLoadingRef.current) break; // stopped by user
-            iterationsUsed = i + 1;
 
             // Show thinking indicator
             const thinkingId = `thinking-${Date.now()}`;
@@ -383,24 +462,13 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     role: 'assistant',
                     content: `❌ 错误: ${err.message}`,
                     timestamp: Date.now(),
+                    isError: true,
                 };
                 loopMessages = [...loopMessages, errorMsg];
                 onMessagesChange(loopMessages);
                 break;
             }
-        }
-
-        // If the loop hit the iteration limit, notify the user
-        if (iterationsUsed >= MAX_ITERATIONS && isLoadingRef.current) {
-            const limitMsg: AgentMessage = {
-                id: `limit-${Date.now()}`,
-                role: 'assistant',
-                content: `⚠️ 已达到单次最大执行轮数 (${MAX_ITERATIONS} 轮)。如需继续，请发送消息让我接着操作。`,
-                timestamp: Date.now(),
-            };
-            loopMessages = [...loopMessages, limitMsg];
-            onMessagesChange(loopMessages);
-        }
+        } // end while
     };
 
     // Resume agent loop after user approves a pending command
@@ -449,6 +517,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 role: 'assistant',
                 content: `❌ 执行失败: ${err.message}`,
                 timestamp: Date.now(),
+                isError: true,
             };
             onMessagesChange([...latestMessagesRef.current, errorMsg]);
         } finally {
@@ -537,13 +606,23 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 ))}
 
                 {isLoading && messages[messages.length - 1]?.content === '' && (
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm px-4">
-                        <div className="flex gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="flex items-center gap-3 px-4">
+                        {/* Terminal blink cursor */}
+                        <span
+                            className="text-primary font-mono text-base leading-none"
+                            style={{ animation: 'agentCursorBlink 0.8s step-end infinite' }}
+                        >█</span>
+                        {/* Shimmer skeleton bar */}
+                        <div className="relative flex-1 h-2.5 rounded-full bg-muted/40 overflow-hidden max-w-[140px]">
+                            <div
+                                className="absolute inset-0 rounded-full"
+                                style={{
+                                    background: 'linear-gradient(90deg, transparent 0%, hsl(var(--primary)/0.3) 45%, transparent 100%)',
+                                    animation: 'agentShimmer 1.4s ease-in-out infinite'
+                                }}
+                            />
                         </div>
-                        <span>思考中...</span>
+                        <span className="text-xs text-muted-foreground/60 font-mono">thinking...</span>
                     </div>
                 )}
 
@@ -768,8 +847,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     {isLoading ? (
                         <button
                             onClick={handleStop}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-destructive/20 text-destructive transition-all duration-150 hover:bg-destructive/40 hover:scale-110 active:scale-95"
                             title="停止生成"
+                            style={{ transformOrigin: 'center' }}
                         >
                             <Square className="w-4 h-4" />
                         </button>
@@ -827,7 +907,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     <div className="mx-1 rounded-lg border border-purple-500/20 bg-purple-500/5 overflow-hidden">
                         <details className="group">
                             <summary className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none hover:bg-purple-500/10 transition-colors">
-                                <Brain className="w-3.5 h-3.5 text-purple-400" />
+                                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                                 <span className="text-purple-400/80 font-medium">思考过程</span>
                                 <ChevronRight className="w-3 h-3 text-purple-400/50 ml-auto group-open:rotate-90 transition-transform" />
                             </summary>
@@ -919,12 +999,17 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 <div className="mx-1 mb-1 rounded-lg border border-purple-500/20 bg-purple-500/5 overflow-hidden max-w-[85%]">
                     <details className="group">
                         <summary className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer select-none hover:bg-purple-500/10 transition-colors">
-                            <Brain className="w-3.5 h-3.5 text-purple-400" />
+                            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                             <span className="text-purple-400/80 font-medium">思考过程</span>
-                            <ChevronRight className="w-3 h-3 text-purple-400/50 ml-auto group-open:rotate-90 transition-transform" />
+                            <ChevronRight className="w-3 h-3 text-purple-400/50 ml-auto group-open:rotate-90 transition-transform duration-200" />
                         </summary>
-                        <div className="px-3 py-2 border-t border-purple-500/10 text-[11px] text-muted-foreground/70 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
-                            {message.reasoning}
+                        <div className="overflow-hidden" style={{ animation: 'none' }}>
+                            <div
+                                className="px-3 py-2 border-t border-purple-500/10 text-[11px] text-muted-foreground/70 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto"
+                                style={{ animation: 'agentAccordionIn 0.22s ease-out' }}
+                            >
+                                {message.reasoning}
+                            </div>
                         </div>
                     </details>
                 </div>
@@ -945,23 +1030,34 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 </div>
 
                 {/* Content */}
-                <div className={cn(
-                    "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                    isUser
-                        ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-md shadow-[0_2px_12px_rgba(var(--primary-rgb,234,88,12),0.15)]"
-                        : "bg-secondary/60 text-foreground rounded-tl-md backdrop-blur-sm border border-border/20"
-                )}>
+                <div
+                    className={cn(
+                        "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                        isUser
+                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-md shadow-[0_2px_12px_rgba(var(--primary-rgb,234,88,12),0.15)]"
+                            : "bg-secondary/60 text-foreground rounded-tl-md backdrop-blur-sm border border-border/20",
+                        message.isError && "border-red-500/30 bg-red-500/10"
+                    )}
+                    style={message.isError ? {
+                        animation: 'agentSlideInUp 0.2s ease-out, agentShakeX 0.35s ease-in-out 0.2s'
+                    } : undefined}
+                >
                     {message.isStreaming && !message.content && (
-                        <div className="flex items-center gap-2 py-1">
-                            <div className="flex gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.8s' }} />
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '150ms', animationDuration: '0.8s' }} />
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '0.8s' }} />
+                        <div className="py-3 min-w-[160px]">
+                            {/* Shimmer skeleton rows */}
+                            <div className="space-y-3">
+                                {[90, 70, 50].map((w, i) => (
+                                    <div key={i} className="relative h-3 rounded-full overflow-hidden" style={{ width: `${w}%`, background: 'rgba(255,255,255,0.1)' }}>
+                                        <div className="absolute inset-0 rounded-full" style={{
+                                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.30) 45%, transparent 100%)',
+                                            animation: `agentShimmer 1.4s ease-in-out ${i * 0.18}s infinite`
+                                        }} />
+                                    </div>
+                                ))}
                             </div>
-                            <span className="text-[10px] text-muted-foreground/50 font-mono">thinking...</span>
                         </div>
                     )}
-                    <MessageContent content={message.content} isUser={isUser} />
+                    <MessageContent content={message.content} isUser={isUser} isStreaming={message.isStreaming} />
                 </div>
             </div>
             {/* Token usage badge */}
@@ -982,8 +1078,8 @@ function MessageBubble({ message }: { message: AgentMessage }) {
 // Memoized wrapper — skips re-render when chatWidth changes during drag resize
 const MessageBubbleMemo = memo(MessageBubble);
 // Simple markdown-ish content renderer
-function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
-    if (!content) return null;
+function MessageContent({ content, isUser, isStreaming }: { content: string; isUser: boolean; isStreaming?: boolean }) {
+    if (!content && !isStreaming) return null;
 
     // Split by code blocks
     const parts = content.split(/(```[\s\S]*?```)/g);
@@ -1010,9 +1106,10 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
                 }
 
                 // Render inline text with basic formatting
+                const isLast = i === parts.length - 1;
                 return (
                     <span key={i} className="whitespace-pre-wrap break-words">
-                        {part.split('\n').map((line, j) => (
+                        {part.split('\n').map((line, j, arr) => (
                             <span key={j}>
                                 {j > 0 && <br />}
                                 {renderInlineMarkdown(line)}

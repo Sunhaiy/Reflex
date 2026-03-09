@@ -98,6 +98,15 @@ export function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('ssh-reconnect', async (_event, sessionId: string) => {
+    try {
+      await sshManager.reconnect(sessionId);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.on('term-write', (event, { id, data }) => {
     sshManager.write(id, data);
   });

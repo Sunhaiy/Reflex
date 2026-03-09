@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electron', {
   writeTerminal: (id: string, data: string) => ipcRenderer.send('term-write', { id, data }),
   terminalInject: (id: string, text: string) => ipcRenderer.send('terminal-inject', { id, text }),
   sshExec: (id: string, command: string, timeoutMs?: number) => ipcRenderer.invoke('ssh-exec', { id, command, timeoutMs }),
+  sshReconnect: (id: string) => ipcRenderer.invoke('ssh-reconnect', id),
   resizeTerminal: (id: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { id, cols, rows }),
 
   sftpList: (id: string, path: string) => ipcRenderer.invoke('sftp-list', { id, path }),
