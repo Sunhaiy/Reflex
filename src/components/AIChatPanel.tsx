@@ -1,6 +1,6 @@
 // AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
@@ -49,6 +49,18 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [agentModel, setAgentModel] = useState('');         // '' = use profile's default model
     const [agentProfileId, setAgentProfileId] = useState(''); // '' = use active profile
     const [modelInput, setModelInput] = useState('');          // text field in picker
+    // ── Plan Mode state ───────────────────────────────────────────────────────
+    const [planMode, setPlanMode] = useState(false);
+    const [currentPlan, setCurrentPlan] = useState<{ goal: string; steps: string[] } | null>(null);
+    const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'waiting' | 'executing' | 'done'>('idle');
+    const [currentStep, setCurrentStep] = useState(-1);
+    const [toolCallCount, setToolCallCount] = useState(0);
+    const [budgetPaused, setBudgetPaused] = useState(false);
+    const [pendingResumeMessages, setPendingResumeMessages] = useState<AgentMessage[] | null>(null);
+    const BUDGET_PER_STEP = 5;
+    const toolCallCountRef = useRef(0);
+    const currentPlanRef = useRef<{ goal: string; steps: string[] } | null>(null);
+    const currentStepRef = useRef(-1);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -329,6 +341,15 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         while (true) {
             if (!isLoadingRef.current) break; // stopped by user
 
+            // ── Budget check (plan mode) ──
+            if (planMode && toolCallCountRef.current >= BUDGET_PER_STEP) {
+                setBudgetPaused(true);
+                setPendingResumeMessages(loopMessages);
+                setIsLoading(false);
+                isLoadingRef.current = false;
+                return;
+            }
+
             // Show thinking indicator
             const thinkingId = `thinking-${Date.now()}`;
             const thinkingMsg: AgentMessage = {
@@ -425,6 +446,25 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 }
 
                 // Execute immediately
+                // Increment budget counter in plan mode and advance step tracker
+                if (planMode) {
+                    toolCallCountRef.current += 1;
+                    setToolCallCount(toolCallCountRef.current);
+                    // Distribute steps evenly across tool calls:
+                    // Each step gets (total_budget / step_count) calls
+                    const plan = currentPlanRef.current;
+                    if (plan && plan.steps.length > 0) {
+                        const callsPerStep = Math.max(1, Math.ceil(BUDGET_PER_STEP / plan.steps.length));
+                        const stepIdx = Math.min(
+                            Math.floor((toolCallCountRef.current - 1) / callsPerStep),
+                            plan.steps.length - 1
+                        );
+                        if (stepIdx !== currentStepRef.current) {
+                            currentStepRef.current = stepIdx;
+                            setCurrentStep(stepIdx);
+                        }
+                    }
+                }
                 const result = await execCommand(execCmd);
 
                 // Update assistant message status to executed
@@ -526,6 +566,33 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         }
     };
 
+    // ── Generate a plan from user input (plan mode) ───────────────────────────
+    // Returns the parsed plan, or null on failure.
+    const generatePlan = async (userInput: string): Promise<{ goal: string; steps: string[] } | null> => {
+        setPlanStatus('generating');
+        const selectedProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+        try {
+            const response = await aiService.completeWithTools({
+                messages: [
+                    { role: 'system', content: AI_SYSTEM_PROMPTS.agentPlan },
+                    { role: 'user', content: userInput },
+                ],
+                tools: [],
+                temperature: 0.3,
+                overrideModel: agentModel || undefined,
+                overrideProfile: selectedProfile || undefined,
+            });
+            // Strip markdown code fences if present
+            const raw = (response.content || '').trim().replace(/^```[a-z]*\n?|```$/g, '').trim();
+            const plan = JSON.parse(raw) as { goal: string; steps: string[] };
+            if (!plan.goal || !Array.isArray(plan.steps) || plan.steps.length === 0) throw new Error('invalid plan');
+            return plan;
+        } catch {
+            return null;
+        }
+    };
+
+
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 
@@ -550,14 +617,53 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         const updatedMessages = [...messages, userMsg];
         onMessagesChange(updatedMessages);
         setInput('');
-        setIsLoading(true);
-        isLoadingRef.current = true;
 
-        try {
-            await runAgentLoop(updatedMessages);
-        } finally {
-            setIsLoading(false);
-            isLoadingRef.current = false;
+        // Reset plan state for new message
+        setCurrentPlan(null);
+        currentPlanRef.current = null;
+        setPlanStatus('idle');
+        setCurrentStep(-1);
+        currentStepRef.current = -1;
+        toolCallCountRef.current = 0;
+        setToolCallCount(0);
+        setBudgetPaused(false);
+        setPendingResumeMessages(null);
+
+        if (planMode) {
+            // Plan mode: generate plan, then auto-execute immediately
+            setIsLoading(true);
+            isLoadingRef.current = true;
+            try {
+                const plan = await generatePlan(userMsg.content);
+                if (plan) {
+                    // Plan generated — start executing right away
+                    setCurrentPlan(plan);
+                    currentPlanRef.current = plan;
+                    setPlanStatus('executing');
+                    setCurrentStep(0);
+                    currentStepRef.current = 0;
+                    toolCallCountRef.current = 0;
+                    setToolCallCount(0);
+                    await runAgentLoop(updatedMessages);
+                    setPlanStatus('done');
+                } else {
+                    // Plan generation failed — fall back to direct execution
+                    setPlanStatus('idle');
+                    await runAgentLoop(updatedMessages);
+                }
+            } finally {
+                setIsLoading(false);
+                isLoadingRef.current = false;
+            }
+        } else {
+            setIsLoading(true);
+            isLoadingRef.current = true;
+            try {
+                await runAgentLoop(updatedMessages);
+            } finally {
+                setIsLoading(false);
+                isLoadingRef.current = false;
+            }
         }
     };
 
@@ -628,6 +734,84 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
                 <div ref={messagesEndRef} />
             </div>
+
+            {/* ── Plan Card (plan mode) ────────────────────────────────────── */}
+            {planMode && (planStatus === 'generating' || planStatus === 'executing') && (
+                <div className="border-t border-border mx-3 mt-0 mb-0">
+                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 mt-2 mb-1 space-y-2">
+                        {/* Header */}
+                        <div className="flex items-center gap-2">
+                            <ListChecks className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                            <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">执行计划</span>
+                            {planStatus === 'generating' && (
+                                <Loader2 className="w-3 h-3 text-blue-400 animate-spin ml-auto" />
+                            )}
+                            {planStatus === 'executing' && currentPlan && (
+                                <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                                    {Math.min(currentStep + 1, currentPlan.steps.length)}/{currentPlan.steps.length} 步
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Goal */}
+                        {currentPlan && (
+                            <p className="text-[11px] text-foreground/80 leading-snug">
+                                🎯 {currentPlan.goal}
+                            </p>
+                        )}
+
+                        {/* Steps list */}
+                        {planStatus === 'generating' && !currentPlan && (
+                            <p className="text-[10px] text-muted-foreground animate-pulse">正在生成执行计划…</p>
+                        )}
+                        {currentPlan && (
+                            <div className="space-y-1">
+                                {currentPlan.steps.map((step, idx) => {
+                                    const isDone = planStatus === 'executing' && idx < currentStep;
+                                    const isCurrent = planStatus === 'executing' && idx === currentStep;
+                                    const isPending = idx > currentStep || planStatus === 'waiting';
+                                    return (
+                                        <div key={idx} className={cn(
+                                            "flex items-start gap-2 text-[11px] rounded px-1.5 py-0.5 transition-colors",
+                                            isCurrent && "bg-blue-500/10",
+                                        )}>
+                                            <span className={cn(
+                                                "mt-0.5 w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold",
+                                                isDone && "bg-green-500/20 text-green-400",
+                                                isCurrent && "bg-blue-500/30 text-blue-300",
+                                                isPending && "bg-secondary/60 text-muted-foreground",
+                                            )}>
+                                                {isDone ? '✓' : isCurrent ? '▶' : idx + 1}
+                                            </span>
+                                            <span className={cn(
+                                                "leading-snug",
+                                                isDone && "text-muted-foreground line-through",
+                                                isCurrent && "text-foreground font-medium",
+                                                isPending && "text-muted-foreground",
+                                            )}>{step}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Overall progress bar (executing) */}
+                        {planStatus === 'executing' && currentPlan && (
+                            <div className="h-1 rounded-full bg-secondary/40 overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                                    style={{
+                                        width: `${Math.min(
+                                            ((currentStep + 1) / currentPlan.steps.length) * 100,
+                                            100
+                                        )}%`
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Pending approval bar */}
             {pendingCommands.length > 0 && (
@@ -703,6 +887,20 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             <div className="border-t border-border p-3 bg-background shrink-0">
                 {/* Mode & Model selector bar — horizontal */}
                 <div className="flex items-center gap-2 mb-2">
+                    {/* Plan Mode toggle */}
+                    <button
+                        onClick={() => setPlanMode(v => !v)}
+                        title={planMode ? '关闭计划模式' : '开启计划模式：AI 先生成执行计划，你确认后再执行'}
+                        className={cn(
+                            "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border",
+                            planMode
+                                ? "bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30"
+                                : "bg-secondary/50 hover:bg-secondary/80 text-muted-foreground border-border/40"
+                        )}
+                    >
+                        <ListChecks className="w-3 h-3" />
+                        计划模式
+                    </button>
                     {/* Control Mode Selector */}
                     <div className="relative" ref={modeMenuRef}>
                         <button
