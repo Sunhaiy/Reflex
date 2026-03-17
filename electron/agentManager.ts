@@ -259,6 +259,40 @@ export class AgentManager {
         }
     }
 
+    private async summarizeCall(profile: LLMProfile, state: PlanState, signal: AbortSignal): Promise<string> {
+        const lines = state.plan.map(p => {
+            const icon = p.status === 'completed' ? '✅' : p.status === 'failed' ? '❌' : '⏭️';
+            const detail = p.result ? `：${p.result}` : p.error ? `（失败：${p.error}）` : '';
+            return `${icon} ${p.description}${detail}`;
+        });
+        const userContent = `全局目标：${state.global_goal}\n\n执行结果：\n${lines.join('\n')}`;
+        try {
+            const content = await callLLM(profile, [
+                { role: 'system', content: AI_SYSTEM_PROMPTS.summarizer },
+                { role: 'user', content: userContent },
+            ], { temperature: 0.4, maxTokens: 300, signal });
+            return content.trim();
+        } catch {
+            return `任务「${state.global_goal}」已全部完成。`;
+        }
+    }
+
+    private async pushSummary(sessionId: string, sess: SessionState, state: PlanState, profile: LLMProfile): Promise<void> {
+        if (sess.aborted) return;
+        try {
+            const summary = await this.summarizeCall(profile, state, sess.abortController.signal);
+            if (sess.aborted) return;
+            this.pushMsg(sessionId, sess, {
+                id: `plan-summary-${Date.now()}`,
+                role: 'assistant',
+                content: summary,
+                timestamp: Date.now(),
+            });
+        } catch {
+            // 总结失败不影响主流程，静默忽略
+        }
+    }
+
     // ── Main plan loop ──────────────────────────────────────────────────────────
 
     private async runPlanLoop(
@@ -445,7 +479,10 @@ export class AgentManager {
 
                 sess.planState = state;
                 this.pushUpdate(sessionId, sess, state, 'executing');
-                await this.runPlanLoop(sessionId, sess, state, profile);
+                const startPhase = await this.runPlanLoop(sessionId, sess, state, profile);
+                if (startPhase === 'done') {
+                    await this.pushSummary(sessionId, sess, state, profile);
+                }
             } catch (err: any) {
                 if ((err as any)?.name === 'AbortError') return; // user stopped, no error message needed
                 console.error(`[AgentManager] startPlan error (${sessionId}):`, err);
@@ -493,7 +530,10 @@ export class AgentManager {
                 this.pushUpdate(sessionId, sess, state, 'executing');
                 (async () => {
                     try {
-                        await this.runPlanLoop(sessionId, sess, state, profile);
+                        const skipPhase = await this.runPlanLoop(sessionId, sess, state, profile);
+                        if (skipPhase === 'done') {
+                            await this.pushSummary(sessionId, sess, state, profile);
+                        }
                     } catch (err: any) {
                         if ((err as any)?.name === 'AbortError') return;
                         console.error(`[AgentManager] resume(skip) error (${sessionId}):`, err);
@@ -557,7 +597,10 @@ export class AgentManager {
                     }
                     sess.planState = state;
                     // 继续后续步骤
-                    await this.runPlanLoop(sessionId, sess, state, profile);
+                    const approvePhase = await this.runPlanLoop(sessionId, sess, state, profile);
+                    if (approvePhase === 'done') {
+                        await this.pushSummary(sessionId, sess, state, profile);
+                    }
                 } catch (err: any) {
                     if ((err as any)?.name === 'AbortError') return;
                     console.error(`[AgentManager] resume(approve) error (${sessionId}):`, err);
@@ -581,7 +624,10 @@ export class AgentManager {
 
         (async () => {
             try {
-                await this.runPlanLoop(sessionId, sess, state, profile);
+                const resumePhase = await this.runPlanLoop(sessionId, sess, state, profile);
+                if (resumePhase === 'done') {
+                    await this.pushSummary(sessionId, sess, state, profile);
+                }
             } catch (err: any) {
                 if ((err as any)?.name === 'AbortError') return;
                 console.error(`[AgentManager] resume error (${sessionId}):`, err);
