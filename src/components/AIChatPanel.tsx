@@ -1,6 +1,6 @@
 // AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
-import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Circle, Target } from 'lucide-react';
+import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Circle, Target, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS, PlanState } from '../shared/aiTypes';
 import { useSettingsStore } from '../store/settingsStore';
@@ -50,9 +50,10 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [agentProfileId, setAgentProfileId] = useState(''); // '' = use active profile
     const [modelInput, setModelInput] = useState('');          // text field in picker
     // ── Plan Mode state ───────────────────────────────────────────────────────
-    const [planMode, setPlanMode] = useState(false);
+    const planMode = true; // 计划模式始终开启
     const [planState, setPlanState] = useState<PlanState | null>(null);
-    const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'executing' | 'done' | 'stopped' | 'paused'>('idle');
+    const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'executing' | 'done' | 'stopped' | 'paused' | 'waiting_approval'>('idle');
+    const [planCollapsed, setPlanCollapsed] = useState(false);
     const planStateRef = useRef<PlanState | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,6 +65,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const agentControlModeRef = useRef(agentControlMode);
     const agentWhitelistRef = useRef(agentWhitelist);
     const isLoadingRef = useRef(false);
+    const envContextRef = useRef<string>(''); // cached server environment for agent system prompt
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const sessionIdRef = useRef(sessionId);
     useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
@@ -179,7 +181,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 setPlanState(ps);
                 planStateRef.current = ps;
                 setPlanStatus(planPhase);
-                if (['done', 'stopped', 'paused'].includes(planPhase)) {
+                if (['done', 'stopped', 'paused', 'waiting_approval'].includes(planPhase)) {
                     setIsLoading(false);
                     isLoadingRef.current = false;
                 }
@@ -283,9 +285,23 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     // Sliding window: only last 20 messages to prevent token overflow.
     // Older messages stay visible in the UI but are NOT sent to the API.
     const CONTEXT_WINDOW = 20;
-    const buildChatMessages = (msgs: AgentMessage[]): any[] => {
+
+    // Strip ANSI escape codes and truncate long outputs before feeding to LLM
+    const denoiseOutput = (raw: string, maxLines = 100): string => {
+        const stripped = raw.replace(/\x1b\[[0-9;]*[mGKHF]/g, '').replace(/\r/g, '');
+        const lines = stripped.split('\n').filter(l => l.trim());
+        if (lines.length <= maxLines) return lines.join('\n');
+        const head = lines.slice(0, 30).join('\n');
+        const tail = lines.slice(-20).join('\n');
+        return `${head}\n\n[...省略 ${lines.length - 50} 行...]\n\n${tail}`;
+    };
+    const buildChatMessages = (msgs: AgentMessage[], envCtx?: string): any[] => {
+        const sysPrompt = AI_SYSTEM_PROMPTS.agent.replace(
+            '{{ENV_CONTEXT}}',
+            envCtx || `已连接到 ${host}`
+        );
         const chatMsgs: any[] = [
-            { role: 'system', content: AI_SYSTEM_PROMPTS.agent },
+            { role: 'system', content: sysPrompt },
         ];
         // Apply sliding window — take last CONTEXT_WINDOW messages
         const windowed = msgs.length > CONTEXT_WINDOW ? msgs.slice(-CONTEXT_WINDOW) : msgs;
@@ -360,6 +376,20 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const runAgentLoop = async (currentMessages: AgentMessage[]) => {
         let loopMessages = [...currentMessages];
 
+        // 首次运行时探针服务器环境（缓存，不重复请求）
+        if (!envContextRef.current) {
+            try {
+                const r = await execCommand(
+                    'printf "USER:%s PWD:%s OS:%s DOCKER:%s" "$(whoami)" "$(pwd)" ' +
+                    '"$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d \'\\\"\')" ' +
+                    '"$(systemctl is-active docker 2>/dev/null || echo N/A)"'
+                );
+                envContextRef.current = r.stdout.trim() || `已连接到 ${host}`;
+            } catch {
+                envContextRef.current = `已连接到 ${host}`;
+            }
+        }
+
         while (true) {
             if (!isLoadingRef.current) break; // stopped by user
 
@@ -375,7 +405,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             onMessagesChange([...loopMessages, thinkingMsg]);
 
             try {
-                const chatMessages = buildChatMessages(loopMessages);
+                const chatMessages = buildChatMessages(loopMessages, envContextRef.current);
                 // Resolve the profile to use: agent-selected > active profile
                 const selectedProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
                 const response = await aiService.completeWithTools({
@@ -469,9 +499,8 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 );
 
                 // Add tool result message
-                const resultContent = result.stderr
-                    ? `[exit ${result.exitCode}]\n${result.stdout}\n[stderr]\n${result.stderr}`
-                    : `[exit ${result.exitCode}]\n${result.stdout}`;
+                const rawOutput = [result.stdout, result.stderr ? `[stderr]\n${result.stderr}` : ''].filter(Boolean).join('\n');
+                const resultContent = denoiseOutput(rawOutput) || '(无输出)';
 
                 const toolResultMsg: AgentMessage = {
                     id: `${toolCallMsgId}-result`,
@@ -529,9 +558,8 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             );
 
             // Add tool result
-            const resultContent = result.stderr
-                ? `[exit ${result.exitCode}]\n${result.stdout}\n[stderr]\n${result.stderr}`
-                : `[exit ${result.exitCode}]\n${result.stdout}`;
+            const rawOutput2 = [result.stdout, result.stderr ? `[stderr]\n${result.stderr}` : ''].filter(Boolean).join('\n');
+            const resultContent = denoiseOutput(rawOutput2) || '(无输出)';
 
             const toolResultMsg: AgentMessage = {
                 id: `${msgId}-result`,
@@ -589,7 +617,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         setInput('');
 
         // Reset plan state for new message (but NOT when resuming a paused plan)
-        const isResuming = planMode && planStatus === 'paused' && planStateRef.current !== null;
+        const isResuming = planMode && (planStatus === 'paused' || planStatus === 'waiting_approval') && planStateRef.current !== null;
         if (!isResuming) {
             setPlanState(null);
             planStateRef.current = null;
@@ -608,6 +636,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     sessionId: connectionId,
                     userInput: userMsg.content,
                     profile,
+                    sshHost: host,
                 });
             } else {
                 setPlanState(null);
@@ -711,9 +740,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     >
                         {/* ── Header bar ── */}
                         <div className={cn(
-                            "flex items-center gap-2 px-3 py-2 border-b border-border/15",
-                            planStatus === 'paused' ? "bg-yellow-500/8" : "bg-secondary/10",
-                        )}>
+                            "flex items-center gap-2 px-3 py-2 border-b border-border/15 cursor-pointer select-none",
+                            planStatus === 'paused' ? "bg-yellow-500/8" : planStatus === 'waiting_approval' ? "bg-yellow-500/12" : "bg-secondary/10",
+                        )} onClick={() => setPlanCollapsed(v => !v)}>
                             <ListChecks className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
                             <span className="text-[11px] font-semibold text-foreground/60 tracking-wide">执行计划</span>
                             {planStatus === 'generating' && (
@@ -741,8 +770,22 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                     等待您的回复
                                 </span>
                             )}
+                            {planStatus === 'waiting_approval' && (
+                                <span className="ml-auto flex items-center gap-1.5 text-[10px] text-yellow-500 font-medium">
+                                    <AlertTriangle className="w-3.5 h-3.5 animate-pulse" />
+                                    需要您审批危险操作
+                                </span>
+                            )}
+                            <span className="shrink-0 ml-1 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors">
+                                {planCollapsed
+                                    ? <ChevronUp className="w-3 h-3" />
+                                    : <ChevronDown className="w-3 h-3" />
+                                }
+                            </span>
                         </div>
 
+                        {/* ── Body (collapsible) ── */}
+                        {!planCollapsed && (<>
                         {/* ── Generating skeleton ── */}
                         {planStatus === 'generating' && !planState && (
                             <div className="px-3 py-2.5 space-y-1.5">
@@ -775,14 +818,16 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                     // in_progress but stopped → treat visually as interrupted
                                     const isStopped = step.status === 'in_progress' && planStatus === 'stopped';
                                     const isPaused = step.status === 'in_progress' && planStatus === 'paused';
+                                    const isWaitingApproval = step.status === 'in_progress' && planStatus === 'waiting_approval';
                                     const isActive = step.status === 'in_progress' && planStatus === 'executing';
-                                    const StepIcon = isCompleted ? CheckCircle2 : isFailed ? XCircle : (isActive || isPaused) ? Loader2 : isStopped ? Square : Circle;
-                                    const accentColor = isCompleted ? '#10b981' : isFailed ? '#ef4444' : isActive ? 'hsl(var(--primary))' : isPaused ? '#eab308' : 'transparent';
+                                    const StepIcon = isCompleted ? CheckCircle2 : isFailed ? XCircle : isWaitingApproval ? AlertTriangle : (isActive || isPaused) ? Loader2 : isStopped ? Square : Circle;
+                                    const accentColor = isCompleted ? '#10b981' : isFailed ? '#ef4444' : isWaitingApproval ? '#eab308' : isActive ? 'hsl(var(--primary))' : isPaused ? '#eab308' : 'transparent';
                                     return (
                                         <div key={step.id} className={cn(
                                             "relative flex items-start gap-2 pl-4 pr-3 py-2 text-[11px] transition-colors",
                                             isActive && "bg-primary/5",
                                             isPaused && "bg-yellow-500/5",
+                                            isWaitingApproval && "bg-yellow-500/8",
                                         )}>
                                             {/* Left accent strip */}
                                             <div
@@ -796,6 +841,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                                 isFailed && "text-red-400",
                                                 isActive && "text-primary animate-spin",
                                                 isPaused && "text-yellow-500/70 animate-pulse",
+                                                isWaitingApproval && "text-yellow-500 animate-pulse",
                                                 isStopped && "text-muted-foreground/30",
                                                 isSkipped && "text-muted-foreground/25",
                                                 step.status === 'pending' && "text-muted-foreground/25",
@@ -848,6 +894,14 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </div>
                         )}
 
+                        {/* ── Waiting approval: confirm hint ── */}
+                        {planStatus === 'waiting_approval' && (
+                            <div className="flex items-center gap-1.5 px-3 py-2 border-t border-yellow-500/20 bg-yellow-500/8">
+                                <ShieldAlert className="w-3 h-3 text-yellow-500/70 flex-shrink-0" />
+                                <span className="text-[10px] text-yellow-500/80">回复 "确认执行" 继续，或任意其他内容跳过此步骤</span>
+                            </div>
+                        )}
+
                         {/* ── Progress bar (executing only) ── */}
                         {planState && (planStatus === 'executing' || planStatus === 'stopped') && (
                             <div className="h-0.5 bg-muted/20 overflow-hidden">
@@ -862,6 +916,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                 />
                             </div>
                         )}
+                        </>)}
                     </div>
                 </div>
             )}
@@ -940,20 +995,6 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             <div className="border-t border-border p-3 bg-background shrink-0">
                 {/* Mode & Model selector bar — horizontal */}
                 <div className="flex items-center gap-2 mb-2">
-                    {/* Plan Mode toggle */}
-                    <button
-                        onClick={() => setPlanMode(v => !v)}
-                        title={planMode ? '关闭计划模式' : '开启计划模式：AI 先生成执行计划，你确认后再执行'}
-                        className={cn(
-                            "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border",
-                            planMode
-                                ? "bg-primary/15 text-primary border-primary/30 hover:bg-primary/25"
-                                : "bg-secondary/50 hover:bg-secondary/80 text-muted-foreground border-border/40"
-                        )}
-                    >
-                        <ListChecks className="w-3 h-3" />
-                        计划模式
-                    </button>
                     {/* Control Mode Selector */}
                     <div className="relative" ref={modeMenuRef}>
                         <button

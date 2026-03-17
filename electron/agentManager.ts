@@ -10,10 +10,11 @@ import { AI_SYSTEM_PROMPTS } from '../src/shared/aiTypes.js';
 interface PlanStep {
     id: number;
     description: string;
-    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped' | 'waiting_approval';
     command?: string;
     result?: string;
     error?: string;
+    requires_approval?: boolean;
 }
 
 interface PlanState {
@@ -37,11 +38,38 @@ interface Assessment {
     scratchpad_update?: string;
 }
 
+interface EnvironmentInfo {
+    user: string;
+    pwd: string;
+    os: string;
+    docker: string;
+}
+
 interface SessionState {
     aborted: boolean;
     planState: PlanState | null;
     webContents: WebContents;
     abortController: AbortController;
+    env?: EnvironmentInfo;
+    pendingApprovalCommand?: string;
+}
+
+// ── Utility functions ────────────────────────────────────────────────────────
+
+function denoiseOutput(raw: string, maxLines = 100): string {
+    // 移除 ANSI 转义序列和回车
+    const stripped = raw.replace(/\x1b\[[0-9;]*[mGKHF]/g, '').replace(/\r/g, '');
+    const lines = stripped.split('\n').filter(l => l.trim());
+    if (lines.length <= maxLines) return lines.join('\n');
+    // 保留头 30 行 + 尾 20 行，中间省略
+    const head = lines.slice(0, 30).join('\n');
+    const tail = lines.slice(-20).join('\n');
+    return `${head}\n\n[...省略 ${lines.length - 50} 行...]\n\n${tail}`;
+}
+
+function trimScratchpad(scratchpad: string, maxChars = 3000): string {
+    if (scratchpad.length <= maxChars) return scratchpad;
+    return `[...早期信息已截断...]\n` + scratchpad.slice(-maxChars);
 }
 
 export class AgentManager {
@@ -72,6 +100,26 @@ export class AgentManager {
     private injectTerminal(id: string, sess: SessionState, text: string) {
         if (!sess.webContents.isDestroyed()) {
             sess.webContents.send('terminal-data', { id, data: text });
+        }
+    }
+
+    // ── Environment probe ────────────────────────────────────────────────────
+
+    private async probeEnvironment(sessionId: string): Promise<EnvironmentInfo> {
+        const cmd = 'printf "USER:%s\\nPWD:%s\\nOS:%s\\nDOCKER:%s\\n" "$(whoami)" "$(pwd)" "$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d \'"\')" "$(systemctl is-active docker 2>/dev/null || echo N/A)"';
+        try {
+            const result = await this.sshMgr.exec(sessionId, cmd, 5000);
+            const lines = result.stdout.split('\n');
+            const get = (prefix: string) =>
+                lines.find(l => l.startsWith(prefix))?.slice(prefix.length).trim() || '';
+            return {
+                user:   get('USER:')   || 'unknown',
+                pwd:    get('PWD:')    || '~',
+                os:     get('OS:')     || 'Linux',
+                docker: get('DOCKER:') || 'N/A',
+            };
+        } catch {
+            return { user: 'unknown', pwd: '~', os: 'Linux', docker: 'N/A' };
         }
     }
 
@@ -168,8 +216,8 @@ export class AgentManager {
             `子任务：${step.description}\n` +
             `执行命令：${step.command || ''}\n` +
             `退出码：${result.exitCode}\n` +
-            `stdout（前2000字）：${result.stdout.slice(0, 2000)}\n` +
-            `stderr（前1000字）：${result.stderr.slice(0, 1000)}`;
+            `stdout：${denoiseOutput(result.stdout).slice(0, 2000)}\n` +
+            `stderr：${denoiseOutput(result.stderr, 50).slice(0, 800)}`;
         try {
             const content = await callLLM(profile, [
                 { role: 'system', content: AI_SYSTEM_PROMPTS.assessor },
@@ -218,7 +266,7 @@ export class AgentManager {
         sess: SessionState,
         state: PlanState,
         profile: LLMProfile,
-    ): Promise<'done' | 'stopped' | 'paused'> {
+    ): Promise<'done' | 'stopped' | 'paused' | 'waiting_approval'> {
         const MAX_REPLAN = 3;
         let replanCount = 0;
         const { signal } = sess.abortController;
@@ -256,6 +304,20 @@ export class AgentManager {
 
             step.command = command;
             syncState();
+
+            // 3.5 危险操作审批门 — 暂停等待用户确认
+            if (step.requires_approval) {
+                const approvalMsg: AgentMsg = {
+                    id: `plan-approval-${Date.now()}`,
+                    role: 'assistant',
+                    content: `⚠️ 以下步骤被标记为**危险操作**，需要您确认后才能执行：\n\n操作：${step.description}\n命令：${command}\n\n请回复 **"确认执行"** 继续，或任何其他内容跳过此步骤。`,
+                    timestamp: Date.now(),
+                };
+                this.pushMsg(sessionId, sess, approvalMsg);
+                sess.pendingApprovalCommand = command;
+                syncState('waiting_approval');
+                return 'waiting_approval';
+            }
 
             // 4. Inject tool-call message into chat
             const callMsgId = `plan-call-${Date.now()}`;
@@ -314,7 +376,9 @@ export class AgentManager {
                 step.status = 'completed';
                 step.result = assessment.note;
                 if (assessment.scratchpad_update) {
-                    state.scratchpad = [state.scratchpad, assessment.scratchpad_update].filter(Boolean).join('\n');
+                    state.scratchpad = trimScratchpad(
+                        [state.scratchpad, assessment.scratchpad_update].filter(Boolean).join('\n')
+                    );
                 }
                 replanCount = 0;
                 syncState();
@@ -355,11 +419,6 @@ export class AgentManager {
     startPlan(sessionId: string, goal: string, profile: LLMProfile, webContents: WebContents, sshHost = ''): void {
         this.stop(sessionId); // abort any currently running session
 
-        // Inject SSH session context into the goal so the planner knows it's already connected
-        const contextualGoal = sshHost
-            ? `[系统背景：当前已通过 SSH 成功连接到服务器 "${sshHost}"，可以直接执行命令，无需询问 SSH 连接信息（IP、用户名、密码等）]\n\n用户任务：${goal}`
-            : goal;
-
         const abortController = new AbortController();
         const sess: SessionState = { aborted: false, planState: null, webContents, abortController };
         this.sessions.set(sessionId, sess);
@@ -368,8 +427,21 @@ export class AgentManager {
         (async () => {
             try {
                 this.pushUpdate(sessionId, sess, null, 'generating');
+
+                // Phase 1: 环境探针（静默，<5s）
+                const env = await this.probeEnvironment(sessionId);
+                sess.env = env;
+
+                // 构建携带环境上下文的 goal
+                const envBlock = `[服务器环境] 用户:${env.user} | 目录:${env.pwd} | OS:${env.os} | Docker:${env.docker}`;
+                const hostNote = sshHost ? `已连接到 ${sshHost}` : 'SSH已连接';
+                const contextualGoal = `[${hostNote}，${envBlock}，无需询问 SSH 连接信息]\n\n用户任务：${goal}`;
+
                 const state = await this.plannerCall(profile, contextualGoal, abortController.signal);
                 if (sess.aborted) return;
+
+                // 将环境信息写入 scratchpad 初始值，供 executor 使用
+                state.scratchpad = envBlock;
 
                 sess.planState = state;
                 this.pushUpdate(sessionId, sess, state, 'executing');
@@ -408,13 +480,102 @@ export class AgentManager {
         sess.aborted = false;
         sess.abortController = new AbortController();
 
-        // Mark the 'ask' step completed and inject user's answer into scratchpad
+        // 场景 A：从审批暂停恢复
+        if (sess.pendingApprovalCommand !== undefined) {
+            const approvedCommand = sess.pendingApprovalCommand;
+            sess.pendingApprovalCommand = undefined;
+
+            const approved = /确认执行|confirm|yes|^y$/i.test(userInput.trim());
+            if (!approved) {
+                // 用户拒绝：将当前 in_progress 步骤标记 skipped，继续循环
+                const pendingStep = state.plan.find(p => p.status === 'in_progress');
+                if (pendingStep) { pendingStep.status = 'skipped'; pendingStep.result = '用户取消'; }
+                this.pushUpdate(sessionId, sess, state, 'executing');
+                (async () => {
+                    try {
+                        await this.runPlanLoop(sessionId, sess, state, profile);
+                    } catch (err: any) {
+                        if ((err as any)?.name === 'AbortError') return;
+                        console.error(`[AgentManager] resume(skip) error (${sessionId}):`, err);
+                        this.pushUpdate(sessionId, sess, sess.planState, 'stopped');
+                    }
+                })();
+                return;
+            }
+
+            // 用户确认：执行已暂存的命令，跳过 executor 重新生成
+            const pendingStep = state.plan.find(p => p.status === 'in_progress');
+            if (!pendingStep) {
+                // 找不到待执行步骤，直接继续循环
+                this.pushUpdate(sessionId, sess, state, 'executing');
+                (async () => { await this.runPlanLoop(sessionId, sess, state, profile); })();
+                return;
+            }
+            pendingStep.command = approvedCommand;
+            this.pushUpdate(sessionId, sess, state, 'executing');
+
+            (async () => {
+                try {
+                    // 注入工具调用消息
+                    const callMsgId = `plan-call-${Date.now()}`;
+                    this.pushMsg(sessionId, sess, {
+                        id: callMsgId,
+                        role: 'assistant',
+                        content: pendingStep.description,
+                        timestamp: Date.now(),
+                        toolCall: { name: 'execute_ssh_command', command: approvedCommand, status: 'pending' },
+                    });
+
+                    // 执行命令
+                    const result = await this.execCommand(sessionId, sess, approvedCommand);
+
+                    this.updateMsg(sessionId, sess, callMsgId, {
+                        toolCall: { name: 'execute_ssh_command', command: approvedCommand, status: 'executed' },
+                    });
+                    const resultContent = [result.stdout, result.stderr].filter(Boolean).join('\n').trim() || '(无输出)';
+                    this.pushMsg(sessionId, sess, {
+                        id: `plan-result-${Date.now()}`,
+                        role: 'tool',
+                        content: resultContent,
+                        timestamp: Date.now(),
+                        toolCall: { name: 'execute_ssh_command', command: approvedCommand, status: 'executed' },
+                    });
+
+                    // 评估结果
+                    const assessment = await this.assessorCall(profile, pendingStep, result, sess.abortController.signal);
+                    if (assessment.success) {
+                        pendingStep.status = 'completed';
+                        pendingStep.result = assessment.note;
+                        if (assessment.scratchpad_update) {
+                            state.scratchpad = trimScratchpad(
+                                [state.scratchpad, assessment.scratchpad_update].filter(Boolean).join('\n')
+                            );
+                        }
+                    } else {
+                        pendingStep.status = 'failed';
+                        pendingStep.error = assessment.note;
+                    }
+                    sess.planState = state;
+                    // 继续后续步骤
+                    await this.runPlanLoop(sessionId, sess, state, profile);
+                } catch (err: any) {
+                    if ((err as any)?.name === 'AbortError') return;
+                    console.error(`[AgentManager] resume(approve) error (${sessionId}):`, err);
+                    this.pushUpdate(sessionId, sess, sess.planState, 'stopped');
+                }
+            })();
+            return;
+        }
+
+        // 场景 B：从 __ASK_USER__ 暂停恢复（原有逻辑）
         const askStep = state.plan.find(p => p.status === 'in_progress');
         if (askStep) {
             askStep.status = 'completed';
             askStep.result = `用户提供: ${userInput}`;
         }
-        state.scratchpad = [state.scratchpad, `用户提供: ${userInput}`].filter(Boolean).join('\n');
+        state.scratchpad = trimScratchpad(
+            [state.scratchpad, `用户提供: ${userInput}`].filter(Boolean).join('\n')
+        );
 
         this.pushUpdate(sessionId, sess, state, 'executing');
 
