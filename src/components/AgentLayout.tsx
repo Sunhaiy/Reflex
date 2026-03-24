@@ -1,7 +1,7 @@
 // AgentLayout - Two-panel layout for Agent mode
 // Uses TerminalSlotConsumer to display the shared terminal instance
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { MessageSquare, Activity, FolderOpen, Container } from 'lucide-react';
+import { MessageSquare, Activity, FolderOpen, Container, Rocket } from 'lucide-react';
 import { AIChatPanel, AgentMessage } from './AIChatPanel';
 import { AgentSessionSidebar } from './AgentSessionSidebar';
 import { AgentSession } from '../shared/types';
@@ -23,7 +23,7 @@ interface AgentLayoutProps {
     username?: string;
 }
 
-type SidebarPanel = 'chat' | 'monitor' | 'files' | 'docker';
+type SidebarPanel = 'chat' | 'monitor' | 'files' | 'docker' | 'deploy';
 
 function generateSessionId() {
     return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -134,6 +134,7 @@ export function AgentLayout({ connectionId, profileId, messages, onMessagesChang
         { id: 'monitor', icon: Activity, label: t('processList.title') },
         { id: 'files', icon: FolderOpen, label: t('fileBrowser.title') },
         { id: 'docker', icon: Container, label: 'Docker' },
+        { id: 'deploy', icon: Rocket, label: 'Deploy' },
     ];
 
     return (

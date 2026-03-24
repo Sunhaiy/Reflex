@@ -4,21 +4,24 @@
 // components into them via portal, and reparent via appendChild when the active
 // consumer changes (e.g. switching from Normal to Agent mode).
 //
-// Three panels are shared: SystemMonitor, FileBrowser, DockerManager.
+// Shared panels: SystemMonitor, FileBrowser, DockerManager, DeployPanel.
 
 import { useRef, useEffect, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { SystemMonitor } from './SystemMonitor';
 import { FileBrowser } from './FileBrowser';
 import { DockerManager } from './DockerManager';
+import { DeployPanel } from './deploy/DeployPanel';
 import { ErrorBoundary } from './ErrorBoundary';
+import { SSHConnection } from '../shared/types';
 
-export type PanelName = 'monitor' | 'files' | 'docker';
+export type PanelName = 'monitor' | 'files' | 'docker' | 'deploy';
 
 interface PanelSlots {
     monitor: HTMLDivElement;
     files: HTMLDivElement;
     docker: HTMLDivElement;
+    deploy: HTMLDivElement;
 }
 
 const PanelSlotContext = createContext<PanelSlots | null>(null);
@@ -27,6 +30,7 @@ interface PanelSlotProviderProps {
     children: React.ReactNode;
     connectionId: string;
     isConnected: boolean;
+    connection: SSHConnection;
 }
 
 function createStableDiv() {
@@ -36,13 +40,14 @@ function createStableDiv() {
 }
 
 // Provider: creates the three panel components once, portals them into stable divs
-export function PanelSlotProvider({ children, connectionId, isConnected }: PanelSlotProviderProps) {
+export function PanelSlotProvider({ children, connectionId, isConnected, connection }: PanelSlotProviderProps) {
     const slotsRef = useRef<PanelSlots | null>(null);
     if (!slotsRef.current) {
         slotsRef.current = {
             monitor: createStableDiv(),
             files: createStableDiv(),
             docker: createStableDiv(),
+            deploy: createStableDiv(),
         };
     }
     const slots = slotsRef.current;
@@ -67,6 +72,18 @@ export function PanelSlotProvider({ children, connectionId, isConnected }: Panel
                     <DockerManager connectionId={connectionId} />
                 </ErrorBoundary>,
                 slots.docker
+            )}
+            {createPortal(
+                <ErrorBoundary name="DeployPanel">
+                    <DeployPanel
+                        connectionId={connectionId}
+                        profileId={connection.id}
+                        host={connection.host}
+                        connectionName={connection.name}
+                        isConnected={isConnected}
+                    />
+                </ErrorBoundary>,
+                slots.deploy
             )}
             {children}
         </PanelSlotContext.Provider>

@@ -5,6 +5,7 @@ console.log('Preload script loading...');
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   openFileDialog: (opts?: { title?: string; filters?: any[] }) => ipcRenderer.invoke('open-file-dialog', opts),
+  openDirectoryDialog: (opts?: { title?: string }) => ipcRenderer.invoke('open-directory-dialog', opts),
 
   connectSSH: ({ connection, sessionId, profileId }: { connection: any, sessionId: string, profileId?: string }) =>
     ipcRenderer.invoke('ssh-connect', { connection, sessionId, profileId }),
@@ -30,6 +31,7 @@ contextBridge.exposeInMainWorld('electron', {
   getPwd: (id: string) => ipcRenderer.invoke('get-pwd', id),
 
   openDialog: () => ipcRenderer.invoke('dialog-open'),
+  openDirectory: () => ipcRenderer.invoke('dialog-open-directory'),
   saveDialog: (defaultName: string) => ipcRenderer.invoke('dialog-save', defaultName),
 
   // AI request proxy — routes through main process to avoid renderer CORS
@@ -109,6 +111,29 @@ contextBridge.exposeInMainWorld('electron', {
     const sub = (_e: any, p: any) => cb(p);
     ipcRenderer.on('agent-update-msg', sub);
     return () => ipcRenderer.removeListener('agent-update-msg', sub);
+  },
+
+  deployAnalyzeProject: (projectRoot: string) => ipcRenderer.invoke('deploy-analyze-project', { projectRoot }),
+  deployProbeServer: (sessionId: string, host: string) => ipcRenderer.invoke('deploy-probe-server', { sessionId, host }),
+  deployCreateDraft: (payload: any) => ipcRenderer.invoke('deploy-create-draft', payload),
+  deployStart: (payload: any) => ipcRenderer.invoke('deploy-start', payload),
+  deployCancel: (sessionId: string) => ipcRenderer.send('deploy-cancel', { sessionId }),
+  deployListRuns: (serverProfileId?: string) => ipcRenderer.invoke('deploy-list-runs', { serverProfileId }),
+  deployGetRun: (runId: string) => ipcRenderer.invoke('deploy-get-run', { runId }),
+  onDeployRunUpdate: (cb: (payload: any) => void) => {
+    const sub = (_e: any, p: any) => cb(p);
+    ipcRenderer.on('deploy-run-update', sub);
+    return () => ipcRenderer.removeListener('deploy-run-update', sub);
+  },
+  onDeployRunLog: (cb: (payload: any) => void) => {
+    const sub = (_e: any, p: any) => cb(p);
+    ipcRenderer.on('deploy-run-log', sub);
+    return () => ipcRenderer.removeListener('deploy-run-log', sub);
+  },
+  onDeployRunFinished: (cb: (payload: any) => void) => {
+    const sub = (_e: any, p: any) => cb(p);
+    ipcRenderer.on('deploy-run-finished', sub);
+    return () => ipcRenderer.removeListener('deploy-run-finished', sub);
   },
 });
 

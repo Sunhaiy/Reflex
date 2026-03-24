@@ -1,12 +1,14 @@
 import { ipcMain, BrowserWindow, dialog, clipboard } from 'electron';
 import { SSHManager } from './ssh/sshManager.js';
 import { AgentManager } from './agentManager.js';
+import { DeploymentManager } from './deploy/deploymentManager.js';
 import { SSHConnection } from '../src/shared/types.js';
 import Store from 'electron-store';
 
 const store = new Store();
 const sshManager = new SSHManager(store);
 const agentManager = new AgentManager(sshManager);
+const deploymentManager = new DeploymentManager(sshManager, store);
 
 export function setupIpcHandlers() {
   // ── Universal AI fetch proxy (bypasses renderer CORS) ────────────────────────
@@ -87,6 +89,15 @@ export function setupIpcHandlers() {
         { name: 'SSH 私钥', extensions: ['pem', 'key', 'ppk', 'rsa', 'ed25519', 'ecdsa', ''] },
         { name: '所有文件', extensions: ['*'] },
       ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('open-directory-dialog', async (event, opts?: { title?: string }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: opts?.title || 'Select project directory',
+      properties: ['openDirectory'],
     });
     return result.canceled ? null : result.filePaths[0];
   });
@@ -177,6 +188,11 @@ export function setupIpcHandlers() {
     return result.filePaths[0];
   });
 
+  ipcMain.handle('dialog-open-directory', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    return result.filePaths[0];
+  });
+
   ipcMain.handle('dialog-save', async (event, defaultName) => {
     const result = await dialog.showSaveDialog({ defaultPath: defaultName });
     return result.filePath;
@@ -224,6 +240,36 @@ export function setupIpcHandlers() {
 
   ipcMain.handle('docker-disk-usage', async (event, id) => {
     return sshManager.dockerDiskUsage(id);
+  });
+
+  // Deployment workflow
+  ipcMain.handle('deploy-analyze-project', async (_event, { projectRoot }) => {
+    return deploymentManager.analyzeProject(projectRoot);
+  });
+
+  ipcMain.handle('deploy-probe-server', async (_event, { sessionId, host }) => {
+    return deploymentManager.probeServer(sessionId, host);
+  });
+
+  ipcMain.handle('deploy-create-draft', async (_event, payload) => {
+    return deploymentManager.createDraft(payload.sessionId, payload);
+  });
+
+  ipcMain.handle('deploy-start', async (event, payload) => {
+    deploymentManager.start(payload.sessionId, event.sender, payload);
+    return { success: true };
+  });
+
+  ipcMain.on('deploy-cancel', (_event, { sessionId }) => {
+    deploymentManager.cancel(sessionId);
+  });
+
+  ipcMain.handle('deploy-list-runs', async (_event, { serverProfileId }) => {
+    return deploymentManager.listRuns(serverProfileId);
+  });
+
+  ipcMain.handle('deploy-get-run', async (_event, { runId }) => {
+    return deploymentManager.getRun(runId);
   });
 
 

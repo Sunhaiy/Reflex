@@ -47,6 +47,10 @@ export class SSHManager {
         await this.connect(connection, webContents, sessionId, profileId);
     }
 
+    getConnectionConfig(sessionId: string): SSHConnection | undefined {
+        return this.connectionConfigs.get(sessionId);
+    }
+
     private _buildConfig(connection: SSHConnection): any {
         const config: any = {
             host: connection.host,

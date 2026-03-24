@@ -247,6 +247,7 @@ function App() {
                     <PanelSlotProvider
                       connectionId={session.uniqueId}
                       isConnected={session.status === 'connected'}
+                      connection={session.connection}
                     >
                       {/* Normal Mode Layout */}
                       <div
