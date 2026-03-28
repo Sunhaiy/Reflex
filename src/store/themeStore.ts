@@ -32,6 +32,55 @@ interface ThemeState {
   initTheme: () => Promise<void>;
 }
 
+const curatedBaseThemes = ['coolBlack', 'coolWhite', 'blossom'] as const;
+const curatedTerminalThemes = ['default', 'githubLight', 'taxuexunmei'] as const;
+
+const getDefaultTerminalTheme = (baseThemeId: BaseThemeId): TerminalThemeId => {
+  if (baseThemeId === 'coolWhite') {
+    return 'githubLight';
+  }
+
+  if (baseThemeId === 'blossom') {
+    return 'taxuexunmei';
+  }
+
+  return 'default';
+};
+
+const normalizeBaseThemeId = (themeId?: string | null): BaseThemeId => {
+  if (!themeId || !baseThemes[themeId as BaseThemeId]) {
+    return 'coolBlack';
+  }
+
+  if (curatedBaseThemes.includes(themeId as typeof curatedBaseThemes[number])) {
+    return themeId as BaseThemeId;
+  }
+
+  if (themeId === 'taxue' || themeId === 'lihua') {
+    return 'blossom';
+  }
+
+  return baseThemes[themeId as BaseThemeId].type === 'light' ? 'coolWhite' : 'coolBlack';
+};
+
+const normalizeTerminalThemeId = (themeId: unknown, baseThemeId: BaseThemeId): TerminalThemeId => {
+  if (typeof themeId === 'string' && curatedTerminalThemes.includes(themeId as typeof curatedTerminalThemes[number])) {
+    return themeId as TerminalThemeId;
+  }
+
+  if (typeof themeId === 'string' && terminalThemes[themeId as TerminalThemeId]) {
+    const theme = terminalThemes[themeId as TerminalThemeId];
+
+    if (themeId === 'taxuexunmei') {
+      return 'taxuexunmei';
+    }
+
+    return theme.category === 'light' ? 'githubLight' : 'default';
+  }
+
+  return getDefaultTerminalTheme(baseThemeId);
+};
+
 // Helper to generate full theme colors
 const generateThemeColors = (baseId: BaseThemeId, accentId: AccentColorId): ThemeColors => {
   const base = baseThemes[baseId];
@@ -75,13 +124,13 @@ const applyTheme = (baseId: BaseThemeId, accentId: AccentColorId) => {
 };
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  baseThemeId: 'black',
+  baseThemeId: 'coolBlack',
   accentColorId: 'indigo',
   currentTerminalThemeId: 'default',
 
   theme: {
     type: 'dark',
-    colors: generateThemeColors('black', 'indigo')
+    colors: generateThemeColors('coolBlack', 'indigo')
   },
 
   terminalTheme: terminalThemes['default'],
@@ -94,15 +143,15 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       (window as any).electron.storeSet('baseTheme', id);
 
       // Auto-switch terminal theme to match light/dark mode
-      const isLight = baseThemes[id].type === 'light';
-      const currentTermCat = terminalThemes[state.currentTerminalThemeId]?.category;
+      const currentTerminalThemeId = normalizeTerminalThemeId(state.currentTerminalThemeId, id);
+      const currentTermCat = terminalThemes[currentTerminalThemeId]?.category;
+      const preferredTerminalThemeId = getDefaultTerminalTheme(id);
+      const shouldSyncTerminalTheme =
+        !curatedTerminalThemes.includes(currentTerminalThemeId as typeof curatedTerminalThemes[number]) ||
+        currentTermCat !== baseThemes[id].type;
 
-      if (isLight && currentTermCat !== 'light') {
-        // Switching to light mode: pick a light terminal theme
-        setTimeout(() => get().setTerminalTheme('githubLight'), 0);
-      } else if (!isLight && currentTermCat !== 'dark') {
-        // Switching to dark mode: pick a dark terminal theme
-        setTimeout(() => get().setTerminalTheme('default'), 0);
+      if (shouldSyncTerminalTheme) {
+        setTimeout(() => get().setTerminalTheme(preferredTerminalThemeId), 0);
       }
 
       return {
@@ -152,16 +201,11 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     const savedOpacity = await (window as any).electron.storeGet('opacity');
 
     // Default values
-    let baseTheme: BaseThemeId = 'black';
+    let baseTheme: BaseThemeId = 'coolBlack';
     let accentColor: AccentColorId = 'indigo';
 
     // Legacy migration or load
-    if (savedBaseTheme && baseThemes[savedBaseTheme]) {
-      baseTheme = savedBaseTheme;
-    } else {
-      // Try to migrate boolean dark mode or old theme names if necessary
-      // For now, just default to dark/indigo which is close to Hoppscotch
-    }
+    baseTheme = normalizeBaseThemeId(savedBaseTheme);
 
     if (savedAccentColor && accentColors[savedAccentColor]) {
       accentColor = savedAccentColor;
@@ -172,11 +216,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     get().setAccentColor(accentColor);
 
     // Terminal Theme
-    if (savedTerminalThemeId && terminalThemes[savedTerminalThemeId as TerminalThemeId]) {
-      get().setTerminalTheme(savedTerminalThemeId as TerminalThemeId);
-    } else {
-      get().setTerminalTheme('default');
-    }
+    get().setTerminalTheme(normalizeTerminalThemeId(savedTerminalThemeId, baseTheme));
 
     // Opacity — default is now 1.0 (fully opaque). Reset old 0.9 default to 1.0.
     if (savedOpacity && parseFloat(savedOpacity) > 0.9) {

@@ -1,40 +1,47 @@
 import { useSettingsStore } from '../store/settingsStore';
-import { translations, Language } from '../shared/locales';
+import { translations } from '../shared/locales';
+import type { Language } from '../shared/locales';
+import { featureTranslations } from '../shared/featureLocales';
+
+function resolveTranslation(bundle: any, key: string): string | null {
+    if (!bundle) return null;
+    const keys = key.split('.');
+    let current: any = bundle;
+
+    for (const k of keys) {
+        if (current && current[k] !== undefined) {
+            current = current[k];
+        } else {
+            return null;
+        }
+    }
+
+    return typeof current === 'string' ? current : null;
+}
 
 export function useTranslation() {
     const { language } = useSettingsStore();
 
     const t = (key: string): string => {
-        const keys = key.split('.');
-        let current: any = translations[language];
-
-        for (const k of keys) {
-            if (current && current[k]) {
-                current = current[k];
-            } else {
-                // Fallback to English if not found
-                current = null;
-                break;
-            }
+        const localized = [
+            translations[language],
+            featureTranslations[language as Language],
+        ];
+        for (const bundle of localized) {
+            const found = resolveTranslation(bundle, key);
+            if (found) return found;
         }
 
-        if (current === null || typeof current !== 'string') {
-            // Try English fallback
-            let enCurrent: any = translations['en'];
-            let found = true;
-            for (const k of keys) {
-                if (enCurrent && enCurrent[k]) {
-                    enCurrent = enCurrent[k];
-                } else {
-                    found = false;
-                    break;
-                }
-            }
-            if (found && typeof enCurrent === 'string') return enCurrent;
-            return key;
+        const english = [
+            translations['en'],
+            featureTranslations['en'],
+        ];
+        for (const bundle of english) {
+            const found = resolveTranslation(bundle, key);
+            if (found) return found;
         }
 
-        return current as string;
+        return key;
     };
 
     return { t, language };

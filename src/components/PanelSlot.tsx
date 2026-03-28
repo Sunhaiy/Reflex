@@ -4,24 +4,22 @@
 // components into them via portal, and reparent via appendChild when the active
 // consumer changes (e.g. switching from Normal to Agent mode).
 //
-// Shared panels: SystemMonitor, FileBrowser, DockerManager, DeployPanel.
+// Shared panels: SystemMonitor, FileBrowser, DockerManager.
 
 import { useRef, useEffect, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { SystemMonitor } from './SystemMonitor';
 import { FileBrowser } from './FileBrowser';
 import { DockerManager } from './DockerManager';
-import { DeployPanel } from './deploy/DeployPanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SSHConnection } from '../shared/types';
 
-export type PanelName = 'monitor' | 'files' | 'docker' | 'deploy';
+export type PanelName = 'monitor' | 'files' | 'docker';
 
 interface PanelSlots {
     monitor: HTMLDivElement;
     files: HTMLDivElement;
     docker: HTMLDivElement;
-    deploy: HTMLDivElement;
 }
 
 const PanelSlotContext = createContext<PanelSlots | null>(null);
@@ -39,22 +37,19 @@ function createStableDiv() {
     return div;
 }
 
-// Provider: creates the three panel components once, portals them into stable divs
-export function PanelSlotProvider({ children, connectionId, isConnected, connection }: PanelSlotProviderProps) {
+export function PanelSlotProvider({ children, connectionId, isConnected, connection: _connection }: PanelSlotProviderProps) {
     const slotsRef = useRef<PanelSlots | null>(null);
     if (!slotsRef.current) {
         slotsRef.current = {
             monitor: createStableDiv(),
             files: createStableDiv(),
             docker: createStableDiv(),
-            deploy: createStableDiv(),
         };
     }
     const slots = slotsRef.current;
 
     return (
         <PanelSlotContext.Provider value={slots}>
-            {/* Render shared panel instances into their stable containers */}
             {createPortal(
                 <ErrorBoundary name="SystemMonitor">
                     <SystemMonitor connectionId={connectionId} />
@@ -73,26 +68,11 @@ export function PanelSlotProvider({ children, connectionId, isConnected, connect
                 </ErrorBoundary>,
                 slots.docker
             )}
-            {createPortal(
-                <ErrorBoundary name="DeployPanel">
-                    <DeployPanel
-                        connectionId={connectionId}
-                        profileId={connection.id}
-                        host={connection.host}
-                        connectionName={connection.name}
-                        isConnected={isConnected}
-                    />
-                </ErrorBoundary>,
-                slots.deploy
-            )}
             {children}
         </PanelSlotContext.Provider>
     );
 }
 
-// Consumer: a placeholder div that adopts one of the shared panel containers
-// `active` controls whether this consumer should hold the panel. When active=false,
-// the panel is released so another consumer can adopt it (e.g. mode switching).
 export function PanelSlotConsumer({ panel, active = true }: { panel: PanelName; active?: boolean }) {
     const slots = useContext(PanelSlotContext);
     const mountRef = useRef<HTMLDivElement>(null);

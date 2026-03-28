@@ -40,6 +40,13 @@ export interface ProjectSpec {
     devDependencies?: Record<string, string>;
   };
   files: string[];
+  requiredEnvVars: string[];
+  suggestedEnvVars: Record<string, string>;
+  serviceDependencies: string[];
+  migrationScripts: string[];
+  migrationCommands: string[];
+  healthCheckCandidates: string[];
+  persistentPaths: string[];
 }
 
 export interface ServerSpec {
@@ -48,6 +55,7 @@ export interface ServerSpec {
   homeDir: string;
   os: string;
   arch: string;
+  packageManager: 'apt' | 'dnf' | 'yum' | 'apk' | 'unknown';
   hasDocker: boolean;
   hasDockerCompose: boolean;
   hasNginx: boolean;
@@ -89,6 +97,13 @@ export interface LocalPackStep extends DeployStepBase {
   sourceDir: string;
   outFile: string;
   ignorePatterns?: string[];
+}
+
+export interface LocalExecStep extends DeployStepBase {
+  kind: 'local_exec';
+  command: string;
+  cwd?: string;
+  env?: Record<string, string>;
 }
 
 export interface SSHExecStep extends DeployStepBase {
@@ -143,6 +158,7 @@ export interface SetOutputStep extends DeployStepBase {
 export type DeployStep =
   | LocalScanStep
   | LocalPackStep
+  | LocalExecStep
   | SSHExecStep
   | SFTPUploadStep
   | RemoteWriteFileStep
@@ -209,6 +225,7 @@ export interface DeployDraft {
 
 export interface DeployRunOutput {
   url?: string;
+  healthCheckUrl?: string;
   releaseId?: string;
   strategyId?: DeploymentStrategyId;
   serviceName?: string;

@@ -24,6 +24,7 @@ export class ServerInspector {
       'echo HOME_DIR=$HOME',
       'echo OS=$(grep "^PRETTY_NAME=" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d \'"\' || uname -s)',
       'echo ARCH=$(uname -m)',
+      'if command -v apt-get >/dev/null 2>&1; then echo PKG_MANAGER=apt; elif command -v dnf >/dev/null 2>&1; then echo PKG_MANAGER=dnf; elif command -v yum >/dev/null 2>&1; then echo PKG_MANAGER=yum; elif command -v apk >/dev/null 2>&1; then echo PKG_MANAGER=apk; else echo PKG_MANAGER=unknown; fi',
       'command -v docker >/dev/null 2>&1 && echo HAS_DOCKER=1 || echo HAS_DOCKER=0',
       '(docker compose version >/dev/null 2>&1 || docker-compose version >/dev/null 2>&1) && echo HAS_DOCKER_COMPOSE=1 || echo HAS_DOCKER_COMPOSE=0',
       'command -v nginx >/dev/null 2>&1 && echo HAS_NGINX=1 || echo HAS_NGINX=0',
@@ -45,6 +46,13 @@ export class ServerInspector {
       homeDir: values.HOME_DIR || '~',
       os: values.OS || 'Linux',
       arch: values.ARCH || 'x86_64',
+      packageManager:
+        values.PKG_MANAGER === 'apt' ||
+        values.PKG_MANAGER === 'dnf' ||
+        values.PKG_MANAGER === 'yum' ||
+        values.PKG_MANAGER === 'apk'
+          ? (values.PKG_MANAGER as ServerSpec['packageManager'])
+          : 'unknown',
       hasDocker: values.HAS_DOCKER === '1',
       hasDockerCompose: values.HAS_DOCKER_COMPOSE === '1',
       hasNginx: values.HAS_NGINX === '1',

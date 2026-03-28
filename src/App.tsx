@@ -143,7 +143,7 @@ function App() {
       return newSessions;
     });
 
-    // Notify main process to clean up AgentManager state for this session
+    // Notify main process to clean up agent runtime state for this session
     (window as any).electron?.agentSessionClose?.(id);
   };
 

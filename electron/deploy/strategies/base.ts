@@ -117,12 +117,94 @@ export function installCommand(packageManager?: PackageManager): string {
   }
 }
 
+export function canInstallSystemPackages(server: ServerSpec): boolean {
+  return server.sudoMode !== 'unavailable' && server.packageManager !== 'unknown';
+}
+
+export function canProvideNodeRuntime(server: ServerSpec): boolean {
+  return server.hasNode || canInstallSystemPackages(server);
+}
+
+export function canProvidePythonRuntime(server: ServerSpec): boolean {
+  return server.hasPython || canInstallSystemPackages(server);
+}
+
+export function canProvideNginx(server: ServerSpec): boolean {
+  return server.hasNginx || canInstallSystemPackages(server);
+}
+
+export function installSystemPackagesCommand(server: ServerSpec, packages: string[]): string | null {
+  const uniquePackages = Array.from(new Set(packages.filter(Boolean)));
+  if (uniquePackages.length === 0) return null;
+
+  switch (server.packageManager) {
+    case 'apt':
+      return `export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y ${uniquePackages.join(' ')}`;
+    case 'dnf':
+      return `dnf install -y ${uniquePackages.join(' ')}`;
+    case 'yum':
+      return `yum install -y ${uniquePackages.join(' ')}`;
+    case 'apk':
+      return `apk add --no-cache ${uniquePackages.join(' ')}`;
+    default:
+      return null;
+  }
+}
+
+export function buildEnsureNodeCommand(server: ServerSpec): string | null {
+  const install = installSystemPackagesCommand(server, ['nodejs', 'npm']);
+  if (!install) return null;
+  return `if ! command -v node >/dev/null 2>&1; then ${install}; fi`;
+}
+
+export function buildEnsureNginxCommand(server: ServerSpec): string | null {
+  const install = installSystemPackagesCommand(server, ['nginx']);
+  if (!install) return null;
+  const hasSystemd = server.hasSystemd;
+  return [
+    `if ! command -v nginx >/dev/null 2>&1; then ${install}; fi`,
+    hasSystemd ? 'systemctl enable nginx >/dev/null 2>&1 || true' : '',
+    hasSystemd ? 'systemctl start nginx >/dev/null 2>&1 || true' : '',
+  ]
+    .filter(Boolean)
+    .join(' && ');
+}
+
+export function buildEnsureNodePackageManagerCommand(packageManager?: PackageManager): string | null {
+  switch (packageManager) {
+    case 'pnpm':
+      return 'corepack enable && corepack prepare pnpm@latest --activate';
+    case 'yarn':
+      return 'corepack enable && corepack prepare yarn@stable --activate';
+    default:
+      return null;
+  }
+}
+
+export function buildEnsurePythonCommand(server: ServerSpec): string | null {
+  const packageMap: Record<ServerSpec['packageManager'], string[]> = {
+    apt: ['python3', 'python3-venv', 'python3-pip'],
+    dnf: ['python3', 'python3-pip'],
+    yum: ['python3', 'python3-pip'],
+    apk: ['python3', 'py3-pip'],
+    unknown: [],
+  };
+  const install = installSystemPackagesCommand(server, packageMap[server.packageManager]);
+  if (!install) return null;
+  return `if ! command -v python3 >/dev/null 2>&1; then ${install}; fi`;
+}
+
 export function startCommand(project: ProjectSpec, runtimePort?: number): string {
   const portPrefix = runtimePort ? `PORT=${runtimePort} ` : '';
   if (project.startCommand) return `${portPrefix}${project.startCommand}`;
   if (project.framework === 'nextjs') return `${portPrefix}npm run start`;
   if (project.framework === 'node-service') return `${portPrefix}npm start`;
   return `${portPrefix}node server.js`;
+}
+
+export function withOptionalEnvFile(command: string, envFilePath?: string): string {
+  if (!envFilePath) return command;
+  return `set -a && . ${shQuote(envFilePath)} && set +a && ${command}`;
 }
 
 export function buildCommand(project: ProjectSpec): string | null {

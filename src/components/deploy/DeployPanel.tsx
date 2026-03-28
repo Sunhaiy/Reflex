@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -13,8 +13,10 @@ import {
 import {
   DeployDraft,
   DeployRun,
+  DeployStepRuntime,
   DeploymentStrategyId,
 } from '../../shared/deployTypes';
+import { useTranslation } from '../../hooks/useTranslation';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 
@@ -26,15 +28,33 @@ interface DeployPanelProps {
   isConnected: boolean;
 }
 
-const STRATEGY_OPTIONS: { id: '' | DeploymentStrategyId; label: string }[] = [
-  { id: '', label: 'Auto' },
-  { id: 'static-nginx', label: 'Static + Nginx' },
-  { id: 'node-systemd', label: 'Node + systemd' },
-  { id: 'next-standalone', label: 'Next.js' },
-  { id: 'dockerfile', label: 'Dockerfile' },
-  { id: 'docker-compose', label: 'Docker Compose' },
-  { id: 'python-systemd', label: 'Python + systemd' },
-];
+const STEP_TRANSLATION_KEYS: Record<string, string> = {
+  scan: 'deploy.steps.scan',
+  pack: 'deploy.steps.pack',
+  prepare: 'deploy.steps.prepare',
+  upload: 'deploy.steps.upload',
+  extract: 'deploy.steps.extract',
+  env: 'deploy.steps.env',
+  'fix-ownership': 'deploy.steps.fix-ownership',
+  'install-node': 'deploy.steps.install-node',
+  'install-nginx': 'deploy.steps.install-nginx',
+  'install-python': 'deploy.steps.install-python',
+  install: 'deploy.steps.install',
+  'install-postgres': 'deploy.steps.install-postgres',
+  'configure-postgres': 'deploy.steps.configure-postgres',
+  'provision-postgres': 'deploy.steps.provision-postgres',
+  'wait-postgres': 'deploy.steps.wait-postgres',
+  build: 'deploy.steps.build',
+  'snapshot-current': 'deploy.steps.snapshot-current',
+  switch: 'deploy.steps.switch',
+  systemd: 'deploy.steps.systemd',
+  'systemd-reload': 'deploy.steps.systemd-reload',
+  'service-verify': 'deploy.steps.service-verify',
+  'nginx-config': 'deploy.steps.nginx-config',
+  'nginx-reload': 'deploy.steps.nginx-reload',
+  verify: 'deploy.steps.verify',
+  output: 'deploy.steps.output',
+};
 
 function parseEnvText(text: string): Record<string, string> {
   return text
@@ -42,18 +62,59 @@ function parseEnvText(text: string): Record<string, string> {
     .map((line) => line.trim())
     .filter(Boolean)
     .reduce<Record<string, string>>((acc, line) => {
-      const idx = line.indexOf('=');
+      const normalized = line.startsWith('export ') ? line.slice(7).trim() : line;
+      const idx = normalized.indexOf('=');
       if (idx === -1) return acc;
-      const key = line.slice(0, idx).trim();
-      const value = line.slice(idx + 1);
+      const key = normalized.slice(0, idx).trim();
+      const value = normalized.slice(idx + 1);
       if (key) acc[key] = value;
       return acc;
     }, {});
 }
 
-function formatStatus(run?: DeployRun | null) {
-  if (!run) return 'Idle';
-  return `${run.status} / ${run.phase}`;
+function envVarsToText(envVars?: Record<string, string>) {
+  return Object.entries(envVars || {})
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+}
+
+function useStrategyOptions(t: (key: string) => string) {
+  return useMemo<{ id: '' | DeploymentStrategyId; label: string }[]>(
+    () => [
+      { id: '', label: t('deploy.options.auto') },
+      { id: 'static-nginx', label: t('deploy.options.staticNginx') },
+      { id: 'node-systemd', label: t('deploy.options.nodeSystemd') },
+      { id: 'next-standalone', label: t('deploy.options.nextStandalone') },
+      { id: 'dockerfile', label: t('deploy.options.dockerfile') },
+      { id: 'docker-compose', label: t('deploy.options.dockerCompose') },
+      { id: 'python-systemd', label: t('deploy.options.pythonSystemd') },
+    ],
+    [t],
+  );
+}
+
+function formatRunStatus(t: (key: string) => string, run?: DeployRun | null) {
+  if (!run) return t('deploy.runStatus.idle');
+  return `${t(`deploy.runStatus.${run.status}`)} / ${t(`deploy.phases.${run.phase}`)}`;
+}
+
+function translateStepLabel(t: (key: string) => string, step: DeployStepRuntime) {
+  const key = STEP_TRANSLATION_KEYS[step.id];
+  if (!key) return step.label;
+  const translated = t(key);
+  return translated === key ? step.label : translated;
+}
+
+function translateStrategy(t: (key: string) => string, strategyId: DeploymentStrategyId) {
+  const keyMap: Record<DeploymentStrategyId, string> = {
+    'static-nginx': 'deploy.options.staticNginx',
+    'node-systemd': 'deploy.options.nodeSystemd',
+    'next-standalone': 'deploy.options.nextStandalone',
+    dockerfile: 'deploy.options.dockerfile',
+    'docker-compose': 'deploy.options.dockerCompose',
+    'python-systemd': 'deploy.options.pythonSystemd',
+  };
+  return t(keyMap[strategyId]);
 }
 
 export function DeployPanel({
@@ -63,6 +124,8 @@ export function DeployPanel({
   connectionName,
   isConnected,
 }: DeployPanelProps) {
+  const { t } = useTranslation();
+  const strategyOptions = useStrategyOptions(t);
   const [projectRoot, setProjectRoot] = useState('');
   const [appName, setAppName] = useState('');
   const [domain, setDomain] = useState('');
@@ -78,29 +141,29 @@ export function DeployPanel({
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const syncFromProfile = (profile: DeployDraft['profile'] | DeployRun['profile']) => {
+    if (!profile) return;
+    setProjectRoot(profile.projectRoot);
+    setAppName(profile.appName);
+    setDomain(profile.domain || '');
+    setRuntimePort(String(profile.runtimePort || '3000'));
+    setHealthCheckPath(profile.healthCheckPath || '/');
+    setPreferredStrategy((profile.preferredStrategy || '') as '' | DeploymentStrategyId);
+    setEnableHttps(profile.enableHttps);
+    setInstallMissingDependencies(profile.installMissingDependencies);
+    setEnvText(envVarsToText(profile.envVars));
+  };
+
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       try {
         const runs = await window.electron.deployListRuns(profileId);
         if (!mounted || !runs.length) return;
         const latest = runs[0];
         setRun(latest);
-        if (latest.profile) {
-          setProjectRoot(latest.profile.projectRoot);
-          setAppName(latest.profile.appName);
-          setDomain(latest.profile.domain || '');
-          setRuntimePort(String(latest.profile.runtimePort || '3000'));
-          setHealthCheckPath(latest.profile.healthCheckPath || '/');
-          setPreferredStrategy((latest.profile.preferredStrategy || '') as '' | DeploymentStrategyId);
-          setEnableHttps(latest.profile.enableHttps);
-          setInstallMissingDependencies(latest.profile.installMissingDependencies);
-          setEnvText(
-            Object.entries(latest.profile.envVars || {})
-              .map(([key, value]) => `${key}=${value}`)
-              .join('\n'),
-          );
-        }
+        syncFromProfile(latest.profile);
       } catch {
         // ignore
       }
@@ -111,7 +174,13 @@ export function DeployPanel({
       setRun(nextRun);
       if (nextRun.profile) {
         setDraft((current) =>
-          current ? { ...current, profile: nextRun.profile!, strategyId: nextRun.outputs.strategyId || current.strategyId } : current,
+          current
+            ? {
+                ...current,
+                profile: nextRun.profile!,
+                strategyId: nextRun.outputs.strategyId || current.strategyId,
+              }
+            : current,
         );
       }
       if (nextRun.status !== 'running') {
@@ -123,6 +192,7 @@ export function DeployPanel({
       setRun(finished);
       setIsStarting(false);
     });
+
     return () => {
       mounted = false;
       cleanUpdate();
@@ -130,23 +200,26 @@ export function DeployPanel({
     };
   }, [connectionId, profileId]);
 
-  const buildPayload = () => ({
-    sessionId: connectionId,
-    serverProfileId: profileId,
-    projectRoot,
-    appName: appName || undefined,
-    domain: domain || undefined,
-    preferredStrategy: preferredStrategy || undefined,
-    runtimePort: Number(runtimePort) || undefined,
-    envVars: parseEnvText(envText),
-    installMissingDependencies,
-    enableHttps,
-    healthCheckPath: healthCheckPath || '/',
-  });
+  const buildPayload = () => {
+    const parsedEnv = parseEnvText(envText);
+    return {
+      sessionId: connectionId,
+      serverProfileId: profileId,
+      projectRoot,
+      appName: appName || undefined,
+      domain: domain || undefined,
+      preferredStrategy: preferredStrategy || undefined,
+      runtimePort: Number(runtimePort) || undefined,
+      envVars: Object.keys(parsedEnv).length > 0 ? parsedEnv : undefined,
+      installMissingDependencies,
+      enableHttps,
+      healthCheckPath: healthCheckPath || '/',
+    };
+  };
 
   const browseProject = async () => {
     const selected = await window.electron.openDirectoryDialog({
-      title: 'Select local project directory',
+      title: t('deploy.fields.projectDir'),
     });
     if (selected) {
       setProjectRoot(selected);
@@ -159,7 +232,7 @@ export function DeployPanel({
 
   const analyze = async () => {
     if (!projectRoot) {
-      setError('Project directory is required');
+      setError(t('deploy.messages.projectRequired'));
       return;
     }
     setError(null);
@@ -167,8 +240,7 @@ export function DeployPanel({
     try {
       const nextDraft = await window.electron.deployCreateDraft(buildPayload());
       setDraft(nextDraft);
-      setAppName(nextDraft.profile.appName);
-      setRuntimePort(String(nextDraft.profile.runtimePort || '3000'));
+      syncFromProfile(nextDraft.profile);
     } catch (err: any) {
       setError(err?.message || String(err));
     } finally {
@@ -178,7 +250,7 @@ export function DeployPanel({
 
   const startDeploy = async () => {
     if (!projectRoot) {
-      setError('Project directory is required');
+      setError(t('deploy.messages.projectRequired'));
       return;
     }
     setError(null);
@@ -203,9 +275,9 @@ export function DeployPanel({
             <Rocket className="w-4 h-4 text-primary" />
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-semibold">Deploy</div>
+            <div className="text-sm font-semibold">{t('deploy.title')}</div>
             <div className="text-[11px] text-muted-foreground truncate">
-              {connectionName || host} · {formatStatus(run)}
+              {connectionName || host} • {formatRunStatus(t, run)}
             </div>
           </div>
         </div>
@@ -213,30 +285,30 @@ export function DeployPanel({
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         <div className="rounded-xl border border-border/50 bg-background/40 p-3 space-y-3">
-          <div className="text-xs font-medium text-muted-foreground">Project</div>
+          <div className="text-xs font-medium text-muted-foreground">{t('deploy.sections.project')}</div>
           <div className="flex gap-2">
             <Input
               value={projectRoot}
               onChange={(e) => setProjectRoot(e.target.value)}
-              placeholder="Local project directory"
+              placeholder={t('deploy.placeholders.projectDir')}
               className="h-8 text-xs"
             />
             <Button variant="outline" size="sm" onClick={browseProject} className="gap-1.5 shrink-0">
               <FolderOpen className="w-3.5 h-3.5" />
-              Browse
+              {t('deploy.actions.browse')}
             </Button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Input
               value={appName}
               onChange={(e) => setAppName(e.target.value)}
-              placeholder="App name"
+              placeholder={t('deploy.placeholders.appName')}
               className="h-8 text-xs"
             />
             <Input
               value={runtimePort}
               onChange={(e) => setRuntimePort(e.target.value)}
-              placeholder="Runtime port"
+              placeholder={t('deploy.placeholders.runtimePort')}
               className="h-8 text-xs"
             />
           </div>
@@ -244,13 +316,13 @@ export function DeployPanel({
             <Input
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
-              placeholder="Domain (optional)"
+              placeholder={t('deploy.placeholders.domain')}
               className="h-8 text-xs"
             />
             <Input
               value={healthCheckPath}
               onChange={(e) => setHealthCheckPath(e.target.value)}
-              placeholder="Health path"
+              placeholder={t('deploy.placeholders.healthPath')}
               className="h-8 text-xs"
             />
           </div>
@@ -259,7 +331,7 @@ export function DeployPanel({
             onChange={(e) => setPreferredStrategy(e.target.value as '' | DeploymentStrategyId)}
             className="w-full h-8 rounded-md border border-input bg-background/50 px-3 text-xs"
           >
-            {STRATEGY_OPTIONS.map((option) => (
+            {strategyOptions.map((option) => (
               <option key={option.id || 'auto'} value={option.id}>
                 {option.label}
               </option>
@@ -268,7 +340,7 @@ export function DeployPanel({
           <textarea
             value={envText}
             onChange={(e) => setEnvText(e.target.value)}
-            placeholder={'ENV_VAR=value\nAPI_URL=https://api.example.com'}
+            placeholder={t('deploy.placeholders.envVars')}
             className="w-full min-h-[88px] rounded-md border border-input bg-background/50 px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-ring"
           />
           <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
@@ -278,7 +350,7 @@ export function DeployPanel({
                 checked={installMissingDependencies}
                 onChange={(e) => setInstallMissingDependencies(e.target.checked)}
               />
-              Install missing dependencies
+              {t('deploy.toggles.installDependencies')}
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -286,7 +358,7 @@ export function DeployPanel({
                 checked={enableHttps}
                 onChange={(e) => setEnableHttps(e.target.checked)}
               />
-              Enable HTTPS
+              {t('deploy.toggles.enableHttps')}
             </label>
           </div>
           <div className="flex gap-2">
@@ -298,12 +370,12 @@ export function DeployPanel({
               className="gap-1.5"
             >
               {isDrafting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
-              Analyze
+              {t('deploy.actions.analyze')}
             </Button>
             {run?.status === 'running' ? (
               <Button variant="destructive" size="sm" onClick={cancelDeploy} className="gap-1.5">
                 <Square className="w-3.5 h-3.5" />
-                Cancel
+                {t('deploy.actions.cancel')}
               </Button>
             ) : (
               <Button
@@ -313,12 +385,12 @@ export function DeployPanel({
                 className="gap-1.5"
               >
                 {isStarting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                Deploy
+                {t('deploy.actions.deploy')}
               </Button>
             )}
           </div>
           {error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400 whitespace-pre-wrap break-all">
               {error}
             </div>
           )}
@@ -327,28 +399,29 @@ export function DeployPanel({
         {draft && (
           <div className="rounded-xl border border-border/50 bg-background/40 p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-medium text-muted-foreground">Draft</div>
+              <div className="text-xs font-medium text-muted-foreground">{t('deploy.sections.draft')}</div>
               <div className="text-[11px] px-2 py-1 rounded-full bg-primary/10 text-primary">
-                {draft.strategyId}
+                {translateStrategy(t, draft.strategyId)}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-lg border border-border/40 p-2">
-                <div className="text-muted-foreground mb-1">Project</div>
+                <div className="text-muted-foreground mb-1">{t('deploy.draft.project')}</div>
                 <div className="font-medium">{draft.projectSpec.framework}</div>
                 <div className="text-muted-foreground/80 mt-1 break-all">{draft.projectSpec.rootPath}</div>
               </div>
               <div className="rounded-lg border border-border/40 p-2">
-                <div className="text-muted-foreground mb-1">Server</div>
+                <div className="text-muted-foreground mb-1">{t('deploy.draft.server')}</div>
                 <div className="font-medium">{draft.serverSpec.os}</div>
                 <div className="text-muted-foreground/80 mt-1">
-                  Docker {draft.serverSpec.hasDocker ? 'yes' : 'no'} · Nginx {draft.serverSpec.hasNginx ? 'yes' : 'no'}
+                  {t('deploy.draft.docker')} {draft.serverSpec.hasDocker ? t('deploy.bool.yes') : t('deploy.bool.no')} •{' '}
+                  {t('deploy.draft.nginx')} {draft.serverSpec.hasNginx ? t('deploy.bool.yes') : t('deploy.bool.no')}
                 </div>
               </div>
             </div>
             {draft.projectSpec.evidence.length > 0 && (
               <div className="text-[11px] text-muted-foreground">
-                Evidence: {draft.projectSpec.evidence.join(' · ')}
+                {t('deploy.draft.evidence')}: {draft.projectSpec.evidence.join(' • ')}
               </div>
             )}
             {draft.warnings.length > 0 && (
@@ -376,7 +449,7 @@ export function DeployPanel({
 
         <div className="rounded-xl border border-border/50 bg-background/40 p-3 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-xs font-medium text-muted-foreground">Run</div>
+            <div className="text-xs font-medium text-muted-foreground">{t('deploy.sections.run')}</div>
             {run?.outputs.url && (
               <a
                 href={run.outputs.url}
@@ -385,7 +458,7 @@ export function DeployPanel({
                 className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
               >
                 <Globe className="w-3 h-3" />
-                Open
+                {t('deploy.actions.open')}
               </a>
             )}
           </div>
@@ -399,7 +472,7 @@ export function DeployPanel({
                 ) : (
                   <Loader2 className="w-4 h-4 text-primary animate-spin" />
                 )}
-                <span className="font-medium">{formatStatus(run)}</span>
+                <span className="font-medium">{formatRunStatus(t, run)}</span>
                 {run.outputs.url && <span className="text-muted-foreground truncate">{run.outputs.url}</span>}
               </div>
               <div className="space-y-1">
@@ -420,10 +493,8 @@ export function DeployPanel({
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-medium">{step.label}</div>
-                      <div className="text-muted-foreground break-all">
-                        {step.error || step.result || step.kind}
-                      </div>
+                      <div className="font-medium">{translateStepLabel(t, step)}</div>
+                      <div className="text-muted-foreground break-all">{step.error || step.result || step.kind}</div>
                     </div>
                   </div>
                 ))}
@@ -439,13 +510,13 @@ export function DeployPanel({
                 </div>
               )}
               {run.error && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400">
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] text-red-400 whitespace-pre-wrap break-all">
                   {run.error}
                 </div>
               )}
             </>
           ) : (
-            <div className="text-[11px] text-muted-foreground">No deployment run yet.</div>
+            <div className="text-[11px] text-muted-foreground">{t('deploy.messages.noRun')}</div>
           )}
         </div>
       </div>

@@ -240,9 +240,9 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     }
   };
 
-  return (
+    return (
     <div
-      className="h-full w-full relative"
+      className="agent-terminal-canvas relative h-full w-full"
       onMouseDown={() => {
         // Ensure terminal gets focus when clicking anywhere in its container
         termRef.current?.focus();

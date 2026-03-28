@@ -1,10 +1,12 @@
+import path from 'path';
 import { DeployPlan, ProjectSpec, ServerSpec } from '../../../src/shared/deployTypes.js';
 import { renderStaticNginxConfig } from '../templates/nginx.js';
-import { renderEnvTemplate } from '../templates/env.js';
 import {
   BuildPlanInput,
   DeployStrategy,
+  buildEnsureNginxCommand,
   buildCommand,
+  canProvideNginx,
   installCommand,
   shQuote,
   withContext,
@@ -14,11 +16,7 @@ export class StaticNginxStrategy implements DeployStrategy {
   id = 'static-nginx' as const;
 
   supports(project: ProjectSpec, server: ServerSpec): boolean {
-    return (
-      (project.framework === 'vite-static' || project.framework === 'react-spa') &&
-      server.hasNginx &&
-      server.hasNode
-    );
+    return (project.framework === 'vite-static' || project.framework === 'react-spa') && canProvideNginx(server);
   }
 
   async buildPlan(input: BuildPlanInput): Promise<DeployPlan> {
@@ -26,7 +24,9 @@ export class StaticNginxStrategy implements DeployStrategy {
     const install = installCommand(ctx.project.packageManager);
     const build = buildCommand(ctx.project) || 'npm run build';
     const outputDir = ctx.project.outputDir || 'dist';
+    const builtOutputDir = path.join(ctx.profile.projectRoot, outputDir);
     const serverName = ctx.profile.domain || '_';
+    const runtimeProvisionSteps = buildRuntimeProvisionSteps(ctx.server);
 
     return {
       id: `deploy-plan-${Date.now()}`,
@@ -36,10 +36,25 @@ export class StaticNginxStrategy implements DeployStrategy {
       steps: [
         { kind: 'local_scan', id: 'scan', label: 'Analyze project' },
         {
+          kind: 'local_exec',
+          id: 'local-install',
+          label: 'Install local dependencies',
+          command: install,
+          cwd: ctx.profile.projectRoot,
+        },
+        {
+          kind: 'local_exec',
+          id: 'local-build',
+          label: 'Build local production assets',
+          command: build,
+          cwd: ctx.profile.projectRoot,
+          env: ctx.profile.envVars,
+        },
+        {
           kind: 'local_pack',
           id: 'pack',
-          label: 'Pack project',
-          sourceDir: ctx.profile.projectRoot,
+          label: `Pack ${outputDir} assets`,
+          sourceDir: builtOutputDir,
           outFile: ctx.archiveLocalPath,
         },
         {
@@ -49,6 +64,7 @@ export class StaticNginxStrategy implements DeployStrategy {
           command: `mkdir -p ${shQuote(`${ctx.profile.remoteRoot}/releases`)} ${shQuote(ctx.sharedDir)}`,
           sudo: true,
         },
+        ...runtimeProvisionSteps,
         {
           kind: 'sftp_upload',
           id: 'upload',
@@ -62,29 +78,6 @@ export class StaticNginxStrategy implements DeployStrategy {
           label: 'Extract release',
           archivePath: ctx.archiveRemotePath,
           targetDir: ctx.releaseDir,
-        },
-        ...(Object.keys(ctx.profile.envVars).length > 0
-          ? [{
-              kind: 'remote_write_file' as const,
-              id: 'env',
-              label: 'Write env file',
-              path: `${ctx.releaseDir}/.env`,
-              content: renderEnvTemplate(ctx.profile.envVars),
-            }]
-          : []),
-        {
-          kind: 'ssh_exec',
-          id: 'install',
-          label: 'Install dependencies',
-          command: install,
-          cwd: ctx.releaseDir,
-        },
-        {
-          kind: 'ssh_exec',
-          id: 'build',
-          label: 'Build static assets',
-          command: build,
-          cwd: ctx.releaseDir,
         },
         {
           kind: 'ssh_exec',
@@ -108,7 +101,7 @@ export class StaticNginxStrategy implements DeployStrategy {
           sudo: true,
           content: renderStaticNginxConfig({
             serverName,
-            root: `${ctx.currentDir}/${outputDir}`,
+            root: ctx.currentDir,
           }),
         },
         {
@@ -150,4 +143,20 @@ export class StaticNginxStrategy implements DeployStrategy {
       ],
     };
   }
+}
+
+function buildRuntimeProvisionSteps(server: ServerSpec) {
+  const steps: DeployPlan['steps'] = [];
+  const ensureNginx = !server.hasNginx ? buildEnsureNginxCommand(server) : null;
+  if (ensureNginx) {
+    steps.push({
+      kind: 'ssh_exec',
+      id: 'install-nginx',
+      label: 'Install Nginx',
+      command: ensureNginx,
+      sudo: true,
+    });
+  }
+
+  return steps;
 }

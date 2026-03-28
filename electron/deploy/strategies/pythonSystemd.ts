@@ -2,7 +2,16 @@ import { DeployPlan, ProjectSpec, ServerSpec } from '../../../src/shared/deployT
 import { renderProxyNginxConfig } from '../templates/nginx.js';
 import { renderEnvTemplate } from '../templates/env.js';
 import { renderSystemdService } from '../templates/systemd.js';
-import { BuildPlanInput, DeployStrategy, shQuote, withContext } from './base.js';
+import {
+  BuildPlanInput,
+  DeployStrategy,
+  buildEnsureNginxCommand,
+  buildEnsurePythonCommand,
+  canProvidePythonRuntime,
+  shQuote,
+  withOptionalEnvFile,
+  withContext,
+} from './base.js';
 
 export class PythonSystemdStrategy implements DeployStrategy {
   id = 'python-systemd' as const;
@@ -12,7 +21,7 @@ export class PythonSystemdStrategy implements DeployStrategy {
       (project.framework === 'python-fastapi' ||
         project.framework === 'python-flask' ||
         project.framework === 'python-service') &&
-      server.hasPython &&
+      canProvidePythonRuntime(server) &&
       server.hasSystemd
     );
   }
@@ -21,6 +30,7 @@ export class PythonSystemdStrategy implements DeployStrategy {
     const ctx = withContext(input);
     const runtimePort = ctx.profile.runtimePort || ctx.project.ports[0] || 8000;
     const envFilePath = `${ctx.sharedDir}/.env`;
+    const runtimeEnvFilePath = Object.keys(ctx.profile.envVars).length > 0 ? envFilePath : undefined;
     const serviceFilePath = `/etc/systemd/system/${ctx.serviceName}`;
     const defaultStart =
       ctx.project.framework === 'python-flask'
@@ -29,6 +39,8 @@ export class PythonSystemdStrategy implements DeployStrategy {
     const finalUrl = ctx.profile.domain
       ? `${ctx.profile.enableHttps ? 'https' : 'http'}://${ctx.profile.domain}${ctx.profile.healthCheckPath || ''}`
       : `http://${ctx.connectionHost}:${runtimePort}${ctx.profile.healthCheckPath || ''}`;
+    const runtimeProvisionSteps = buildRuntimeProvisionSteps(ctx.server, Boolean(ctx.profile.domain));
+    const migrationSteps = buildMigrationSteps(ctx.project.migrationCommands, runtimeEnvFilePath, ctx.releaseDir);
 
     return {
       id: `deploy-plan-${Date.now()}`,
@@ -51,6 +63,7 @@ export class PythonSystemdStrategy implements DeployStrategy {
           command: `mkdir -p ${shQuote(`${ctx.profile.remoteRoot}/releases`)} ${shQuote(ctx.sharedDir)}`,
           sudo: true,
         },
+        ...runtimeProvisionSteps,
         {
           kind: 'sftp_upload',
           id: 'upload',
@@ -89,6 +102,7 @@ export class PythonSystemdStrategy implements DeployStrategy {
           command: '.venv/bin/pip install -r requirements.txt',
           cwd: ctx.releaseDir,
         },
+        ...migrationSteps,
         {
           kind: 'ssh_exec',
           id: 'snapshot-current',
@@ -184,4 +198,43 @@ export class PythonSystemdStrategy implements DeployStrategy {
       ],
     };
   }
+}
+
+function buildMigrationSteps(commands: string[], envFilePath: string | undefined, cwd: string) {
+  return commands.map((command, index) => ({
+    kind: 'ssh_exec' as const,
+    id: `migrate-${index + 1}`,
+    label: `Run migration: ${command}`,
+    command: withOptionalEnvFile(command, envFilePath),
+    cwd,
+  })) as DeployPlan['steps'];
+}
+
+function buildRuntimeProvisionSteps(server: ServerSpec, needsNginx: boolean) {
+  const steps: DeployPlan['steps'] = [];
+  const ensurePython = !server.hasPython ? buildEnsurePythonCommand(server) : null;
+  if (ensurePython) {
+    steps.push({
+      kind: 'ssh_exec',
+      id: 'install-python',
+      label: 'Install Python runtime',
+      command: ensurePython,
+      sudo: true,
+    });
+  }
+
+  if (needsNginx) {
+    const ensureNginx = !server.hasNginx ? buildEnsureNginxCommand(server) : null;
+    if (ensureNginx) {
+      steps.push({
+        kind: 'ssh_exec',
+        id: 'install-nginx',
+        label: 'Install Nginx',
+        command: ensureNginx,
+        sudo: true,
+      });
+    }
+  }
+
+  return steps;
 }

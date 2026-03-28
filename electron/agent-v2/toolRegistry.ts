@@ -1,0 +1,394 @@
+import os from 'os';
+import path from 'path';
+import { promises as fs } from 'fs';
+import { execFile as execFileCallback } from 'child_process';
+import { promisify } from 'util';
+import { DeploymentManager } from '../deploy/deploymentManager.js';
+import { shQuote } from '../deploy/strategies/base.js';
+import { SSHManager } from '../ssh/sshManager.js';
+import { AgentThreadSession, AgentToolCallArgs, AgentToolDefinition } from './types.js';
+
+const execFile = promisify(execFileCallback);
+
+function stringify(value: unknown): string {
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function normalizeLocalPath(targetPath: string): string {
+  if (path.isAbsolute(targetPath)) return path.normalize(targetPath);
+  return path.resolve(targetPath);
+}
+
+function truncate(text: string, maxChars = 4000): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n...[truncated]`;
+}
+
+function requireString(args: AgentToolCallArgs, field: string): string {
+  const value = args[field];
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Missing required string field: ${field}`);
+  }
+  return value.trim();
+}
+
+async function runLocalCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const shell = process.platform === 'win32' ? 'powershell.exe' : 'sh';
+  const shellArgs = process.platform === 'win32'
+    ? ['-NoProfile', '-NonInteractive', '-Command', command]
+    : ['-lc', command];
+
+  try {
+    const { stdout, stderr } = await execFile(shell, shellArgs, {
+      timeout: 120000,
+      maxBuffer: 1024 * 1024 * 4,
+      windowsHide: true,
+    });
+    return { stdout: String(stdout), stderr: String(stderr), exitCode: 0 };
+  } catch (error: any) {
+    return {
+      stdout: error?.stdout ? String(error.stdout) : '',
+      stderr: error?.stderr ? String(error.stderr) : (error?.message || String(error)),
+      exitCode: typeof error?.code === 'number' ? error.code : 1,
+    };
+  }
+}
+
+async function probeRemoteContext(sshMgr: SSHManager, connectionId: string, host: string) {
+  const script = [
+    'USER_NAME=$(whoami 2>/dev/null || echo unknown)',
+    'PWD_NOW=$(pwd 2>/dev/null || echo ~)',
+    'OS_NAME=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d \'"\' || uname -a)',
+    'NODE_VERSION=$(node -v 2>/dev/null || echo missing)',
+    'DOCKER_STATUS=$(docker --version 2>/dev/null || echo missing)',
+    'printf "USER:%s\\nPWD:%s\\nOS:%s\\nNODE:%s\\nDOCKER:%s\\n" "$USER_NAME" "$PWD_NOW" "$OS_NAME" "$NODE_VERSION" "$DOCKER_STATUS"',
+  ].join('\n');
+  const result = await sshMgr.exec(connectionId, `sh -lc ${shQuote(script)}`, 20000);
+  const lines = result.stdout.split('\n');
+  const read = (prefix: string) => lines.find((line) => line.startsWith(prefix))?.slice(prefix.length).trim() || 'unknown';
+  return {
+    host,
+    user: read('USER:'),
+    pwd: read('PWD:'),
+    os: read('OS:'),
+    node: read('NODE:'),
+    docker: read('DOCKER:'),
+  };
+}
+
+function describeList(entries: Array<{ name: string; type?: string; size?: number }>): string {
+  if (!entries.length) return '(empty directory)';
+  return entries
+    .slice(0, 80)
+    .map((entry) => `${entry.type === 'd' ? '[dir]' : '[file]'} ${entry.name}${typeof entry.size === 'number' ? ` (${entry.size} bytes)` : ''}`)
+    .join('\n');
+}
+
+export function createAgentToolRegistry(
+  sshMgr: SSHManager,
+  deploymentManager: DeploymentManager,
+): AgentToolDefinition {
+  const definitions = [
+    {
+      type: 'function' as const,
+      function: {
+        name: 'local_list_directory',
+        description: 'List a local directory on the user machine. Use this to inspect desktop projects before deployment.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute or relative local directory path.' },
+          },
+          required: ['path'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'local_read_file',
+        description: 'Read a local text file from the user machine.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute or relative local file path.' },
+          },
+          required: ['path'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'local_write_file',
+        description: 'Create or overwrite a local text file on the user machine.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute or relative local file path.' },
+            content: { type: 'string', description: 'Text content to write.' },
+          },
+          required: ['path', 'content'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'local_exec',
+        description: 'Execute a command on the local machine. Prefer for project inspection or build checks.',
+        parameters: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'Shell command to execute locally.' },
+          },
+          required: ['command'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'remote_exec',
+        description: 'Execute a shell command on the connected remote server over SSH.',
+        parameters: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'Shell command to execute remotely.' },
+          },
+          required: ['command'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'remote_list_directory',
+        description: 'List a directory on the remote server over SFTP.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute remote directory path.' },
+          },
+          required: ['path'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'remote_read_file',
+        description: 'Read a text file from the remote server over SFTP.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute remote file path.' },
+          },
+          required: ['path'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'remote_write_file',
+        description: 'Write a text file to the remote server over SFTP.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute remote file path.' },
+            content: { type: 'string', description: 'Text content to write.' },
+          },
+          required: ['path', 'content'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'deploy_project',
+        description: 'Run the deterministic deployment engine for a local project path against the currently connected remote server.',
+        parameters: {
+          type: 'object',
+          properties: {
+            projectRoot: { type: 'string', description: 'Absolute local project directory path.' },
+          },
+          required: ['projectRoot'],
+        },
+      },
+    },
+  ];
+
+  return {
+    definitions,
+    async execute(name, args, session) {
+      switch (name) {
+        case 'local_list_directory': {
+          const targetPath = normalizeLocalPath(requireString(args, 'path'));
+          const entries = await fs.readdir(targetPath, { withFileTypes: true });
+          const serialized = await Promise.all(entries.slice(0, 200).map(async (entry) => {
+            const absolutePath = path.join(targetPath, entry.name);
+            const stat = await fs.stat(absolutePath);
+            return {
+              name: entry.name,
+              type: entry.isDirectory() ? 'd' : '-',
+              size: stat.size,
+            };
+          }));
+          return {
+            ok: true,
+            displayCommand: `local ls ${targetPath}`,
+            content: describeList(serialized),
+            structured: { path: targetPath, entries: serialized },
+            scratchpadNote: `发现本地目录 ${targetPath}`,
+          };
+        }
+        case 'local_read_file': {
+          const targetPath = normalizeLocalPath(requireString(args, 'path'));
+          const content = await fs.readFile(targetPath, 'utf8');
+          return {
+            ok: true,
+            displayCommand: `local cat ${targetPath}`,
+            content: truncate(content),
+            structured: { path: targetPath, content },
+            scratchpadNote: `读取本地文件 ${targetPath}`,
+          };
+        }
+        case 'local_write_file': {
+          const targetPath = normalizeLocalPath(requireString(args, 'path'));
+          const content = stringify(args.content ?? '');
+          await fs.mkdir(path.dirname(targetPath), { recursive: true });
+          await fs.writeFile(targetPath, content, 'utf8');
+          return {
+            ok: true,
+            displayCommand: `local write ${targetPath}`,
+            content: `Wrote ${targetPath}`,
+            structured: { path: targetPath },
+            scratchpadNote: `写入本地文件 ${targetPath}`,
+          };
+        }
+        case 'local_exec': {
+          const command = requireString(args, 'command');
+          const result = await runLocalCommand(command);
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: command,
+            content: truncate([result.stdout, result.stderr ? `[stderr]\n${result.stderr}` : ''].filter(Boolean).join('\n') || '(no output)'),
+            structured: result,
+            scratchpadNote: result.exitCode === 0 ? `本地命令成功: ${command}` : `本地命令失败: ${command}`,
+          };
+        }
+        case 'remote_exec': {
+          const command = requireString(args, 'command');
+          const wrapped = `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb sh -lc ${shQuote(command)}`;
+          session.webContents.send('terminal-data', {
+            id: session.connectionId,
+            data: `\r\n\x1b[36;2m[Agent] $ ${command}\x1b[0m\r\n`,
+          });
+          const result = await sshMgr.exec(session.connectionId, wrapped, 120000);
+          if (result.stdout) {
+            session.webContents.send('terminal-data', {
+              id: session.connectionId,
+              data: result.stdout.replace(/\n/g, '\r\n'),
+            });
+          }
+          if (result.stderr) {
+            session.webContents.send('terminal-data', {
+              id: session.connectionId,
+              data: `\x1b[33m${result.stderr.replace(/\n/g, '\r\n')}\x1b[0m`,
+            });
+          }
+          session.webContents.send('terminal-data', {
+            id: session.connectionId,
+            data: `\x1b[2m[exit ${result.exitCode}]\x1b[0m\r\n`,
+          });
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: command,
+            content: truncate([result.stdout, result.stderr ? `[stderr]\n${result.stderr}` : ''].filter(Boolean).join('\n') || '(no output)'),
+            structured: result,
+            scratchpadNote: result.exitCode === 0 ? `远程命令成功: ${command}` : `远程命令失败: ${command}`,
+          };
+        }
+        case 'remote_list_directory': {
+          const targetPath = requireString(args, 'path');
+          const entries = await sshMgr.listFiles(session.connectionId, targetPath);
+          return {
+            ok: true,
+            displayCommand: `remote ls ${targetPath}`,
+            content: describeList(entries),
+            structured: { path: targetPath, entries },
+            scratchpadNote: `查看远程目录 ${targetPath}`,
+          };
+        }
+        case 'remote_read_file': {
+          const targetPath = requireString(args, 'path');
+          const content = await sshMgr.readFile(session.connectionId, targetPath);
+          return {
+            ok: true,
+            displayCommand: `remote cat ${targetPath}`,
+            content: truncate(content),
+            structured: { path: targetPath, content },
+            scratchpadNote: `读取远程文件 ${targetPath}`,
+          };
+        }
+        case 'remote_write_file': {
+          const targetPath = requireString(args, 'path');
+          const content = stringify(args.content ?? '');
+          await sshMgr.writeFile(session.connectionId, targetPath, content);
+          return {
+            ok: true,
+            displayCommand: `remote write ${targetPath}`,
+            content: `Wrote ${targetPath}`,
+            structured: { path: targetPath },
+            scratchpadNote: `写入远程文件 ${targetPath}`,
+          };
+        }
+        case 'deploy_project': {
+          const projectRoot = normalizeLocalPath(requireString(args, 'projectRoot'));
+          const stats = await fs.stat(projectRoot).catch(() => null);
+          if (!stats?.isDirectory()) {
+            throw new Error(`Local project path does not exist: ${projectRoot}`);
+          }
+          const connection = sshMgr.getConnectionConfig(session.connectionId);
+          const run = await deploymentManager.runBlocking(session.connectionId, session.webContents, {
+            sessionId: session.connectionId,
+            serverProfileId: connection?.id || session.connectionId,
+            projectRoot,
+          });
+          const summary = {
+            status: run.status,
+            url: run.outputs.url || run.outputs.healthCheckUrl || '',
+            strategyId: run.outputs.strategyId || '',
+            error: run.error || '',
+            warnings: run.warnings,
+          };
+          return {
+            ok: run.status === 'completed',
+            displayCommand: `deploy ${projectRoot}`,
+            content: stringify(summary),
+            structured: summary,
+            scratchpadNote: run.status === 'completed'
+              ? `部署成功: ${projectRoot} -> ${summary.url || session.sshHost}`
+              : `部署失败: ${projectRoot} -> ${summary.error || 'unknown error'}`,
+          };
+        }
+        default:
+          throw new Error(`Unknown tool: ${name}`);
+      }
+    },
+  };
+}
+
+export async function buildLocalContext() {
+  const homeDir = os.homedir();
+  return {
+    cwd: process.cwd(),
+    homeDir,
+    desktopDir: path.join(homeDir, 'Desktop'),
+    platform: process.platform,
+  };
+}
+
+export { probeRemoteContext };

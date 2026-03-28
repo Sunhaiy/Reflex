@@ -40,6 +40,22 @@ interface AIChatPanelProps {
     className?: string;
 }
 
+const DEPLOY_INTENT_RE = /(?:\bdeploy\b|\bpublish\b|部署|发布|上线)/i;
+const LOCAL_PROJECT_PATH_RE = /[A-Za-z]:\\[^\r\n"'`<>|]+|\/(?:Users|home|opt|srv|var|tmp)[^\r\n"'`<>|]*/g;
+
+function extractDeployProjectPath(input: string): string | null {
+    const matches = input.match(LOCAL_PROJECT_PATH_RE);
+    if (!matches?.length) return null;
+    return matches.sort((a, b) => b.length - a.length)[0].trim();
+}
+
+function formatTemplate(template: string, values: Record<string, string>) {
+    return Object.entries(values).reduce(
+        (acc, [key, value]) => acc.replace(new RegExp(`\\{${key}\\}`, 'g'), value),
+        template,
+    );
+}
+
 export function AIChatPanel({ connectionId, profileId, host, messages, onMessagesChange, onExecuteCommand, sessionId, onSaveComplete, className }: AIChatPanelProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -52,6 +68,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     // ── Plan Mode state ───────────────────────────────────────────────────────
     const planMode = true; // 计划模式始终开启
     const [planState, setPlanState] = useState<PlanState | null>(null);
+    const [contextWindow, setContextWindow] = useState<{ promptTokens: number; limitTokens: number; percentUsed: number; compressionCount: number; autoCompressed: boolean; summaryChars: number; } | null>(null);
     const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'executing' | 'done' | 'stopped' | 'paused' | 'waiting_approval'>('idle');
     const [planCollapsed, setPlanCollapsed] = useState(false);
     const planStateRef = useRef<PlanState | null>(null);
@@ -60,15 +77,18 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const modeMenuRef = useRef<HTMLDivElement>(null);
     const modelMenuRef = useRef<HTMLDivElement>(null);
     const latestMessagesRef = useRef(messages);
+    const onMessagesChangeRef = useRef(onMessagesChange);
     const { aiSendShortcut, agentControlMode, setAgentControlMode, agentWhitelist, aiProfiles, activeProfileId } = useSettingsStore();
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const agentControlModeRef = useRef(agentControlMode);
     const agentWhitelistRef = useRef(agentWhitelist);
     const isLoadingRef = useRef(false);
     const envContextRef = useRef<string>(''); // cached server environment for agent system prompt
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const sessionIdRef = useRef(sessionId);
+    const pendingChatDeployRef = useRef<{ chatSessionId: string; projectRoot: string } | null>(null);
     useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+    useEffect(() => { onMessagesChangeRef.current = onMessagesChange; }, [onMessagesChange]);
 
     // Inject CSS keyframes for AI chat animations (runs once)
     useEffect(() => {
@@ -127,6 +147,17 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     useEffect(() => { agentControlModeRef.current = agentControlMode; }, [agentControlMode]);
     useEffect(() => { agentWhitelistRef.current = agentWhitelist; }, [agentWhitelist]);
 
+    // Reset per-chat execution state when switching chat sessions.
+    useEffect(() => {
+        setPlanState(null);
+        planStateRef.current = null;
+        setContextWindow(null);
+        setPlanStatus('idle');
+        setPendingCommands([]);
+        setIsLoading(false);
+        isLoadingRef.current = false;
+    }, [sessionId]);
+
     // ── Auto-save session to store (debounced 800ms) ──────────────────────────
     useEffect(() => {
         if (messages.length === 0) return;
@@ -176,10 +207,11 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     useEffect(() => {
         const eWin = window as any;
         const cleanPlan = eWin.electron?.onAgentPlanUpdate?.(
-            ({ sessionId, planState: ps, planPhase }: any) => {
-                if (sessionId !== connectionId) return;
+            ({ sessionId: eventSessionId, planState: ps, planPhase, contextWindow: ctxWindow }: any) => {
+                if (eventSessionId !== sessionIdRef.current) return;
                 setPlanState(ps);
                 planStateRef.current = ps;
+                setContextWindow(ctxWindow || null);
                 setPlanStatus(planPhase);
                 if (['done', 'stopped', 'paused', 'waiting_approval'].includes(planPhase)) {
                     setIsLoading(false);
@@ -187,19 +219,43 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 }
             });
         const cleanMsg = eWin.electron?.onAgentPushMsg?.(
-            ({ sessionId, message }: any) => {
-                if (sessionId !== connectionId) return;
-                onMessagesChange([...latestMessagesRef.current, message]);
+            ({ sessionId: eventSessionId, message }: any) => {
+                if (eventSessionId !== sessionIdRef.current) return;
+                onMessagesChangeRef.current([...latestMessagesRef.current, message]);
             });
         const cleanUpd = eWin.electron?.onAgentUpdateMsg?.(
-            ({ sessionId, messageId, updates }: any) => {
-                if (sessionId !== connectionId) return;
-                onMessagesChange(latestMessagesRef.current.map((m: any) =>
+            ({ sessionId: eventSessionId, messageId, updates }: any) => {
+                if (eventSessionId !== sessionIdRef.current) return;
+                onMessagesChangeRef.current(latestMessagesRef.current.map((m: any) =>
                     m.id === messageId ? { ...m, ...updates } : m));
             });
         return () => { cleanPlan?.(); cleanMsg?.(); cleanUpd?.(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [connectionId]);
+    }, []);
+
+    useEffect(() => {
+        const eWin = window as any;
+        const cleanFinished = eWin.electron?.onDeployRunFinished?.(({ sessionId: deploySessionId, run }: any) => {
+            const pending = pendingChatDeployRef.current;
+            if (!pending) return;
+            if (deploySessionId !== connectionId || pending.chatSessionId !== sessionIdRef.current) return;
+
+            pendingChatDeployRef.current = null;
+            const content = run?.status === 'completed'
+                ? `部署已完成。\n访问地址：${run?.outputs?.url || run?.outputs?.healthCheckUrl || host}`
+                : `部署失败，系统已自动尝试修复但仍未完成。\n${run?.error || '未知错误'}`;
+            onMessagesChangeRef.current([
+                ...latestMessagesRef.current,
+                {
+                    id: `deploy-finished-${Date.now()}`,
+                    role: 'assistant',
+                    content,
+                    timestamp: Date.now(),
+                    isError: run?.status !== 'completed',
+                },
+            ]);
+        });
+        return () => { cleanFinished?.(); };
+    }, [connectionId, host]);
 
     // Execute a command via SSH exec IPC and return result
     // Auto-retries up to 5 times on connection errors, attempting to reconnect between tries.
@@ -625,7 +681,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         }
 
         if (planMode) {
-            // Plan mode: delegate to main-process AgentManager (fire-and-forget)
+            // Agent V2 runtime lives in the main process and owns the full tool loop.
             // isLoading is reset by the agent-plan-update push event (done/stopped/paused)
             const profile = getSelectedProfile();
             setIsLoading(true);
@@ -633,19 +689,24 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
             if (isResuming) {
                 (window as any).electron?.agentPlanResume?.({
-                    sessionId: connectionId,
+                    sessionId,
+                    connectionId,
                     userInput: userMsg.content,
                     profile,
                     sshHost: host,
+                    threadMessages: messages,
                 });
             } else {
                 setPlanState(null);
                 planStateRef.current = null;
                 setPlanStatus('generating');
                 (window as any).electron?.agentPlanStart?.({
-                    sessionId: connectionId,
+                    sessionId,
+                    connectionId,
                     goal: userMsg.content,
                     profile,
+                    sshHost: host,
+                    threadMessages: messages,
                 });
             }
         } else {
@@ -675,26 +736,123 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         isLoadingRef.current = false;
         setIsLoading(false);
         if (planMode) {
-            (window as any).electron?.agentPlanStop?.({ sessionId: connectionId });
+            (window as any).electron?.agentPlanStop?.({ sessionId });
         }
     };
 
+    const formatTokenCount = (count: number) => {
+        if (count >= 1000) return `${Math.round(count / 1000)}k`;
+        return `${count}`;
+    };
+
+    const contextWindowTitle = language === 'zh' ? '背景信息窗口' : 'Context Window';
+    const contextWindowUsed = language === 'zh' ? '已用' : 'used';
+    const contextWindowAutoCompressed = language === 'zh' ? '自动压缩' : 'Auto-compressed';
+    const contextWindowTokens = language === 'zh' ? '标记' : 'tokens';
+
+    const latestGoal = [...messages].reverse().find(message => message.role === 'user')?.content || '';
+    const starterPrompts = language === 'zh'
+        ? ['部署我桌面上的项目到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清楚并修复']
+        : ['Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];
+    const workspaceTitle = language === 'zh' ? 'AI 接管对话区' : 'AI Conversation Workspace';
+    const workspaceSubtitle = host
+        ? (language === 'zh' ? `当前目标服务器 ${host}` : `Working against ${host}`)
+        : (language === 'zh' ? '直接告诉 AI 目标，它会自己继续执行。' : 'Give the AI a goal and let it continue the workflow.');
+    const currentModeLabel = agentControlMode === 'auto'
+        ? (language === 'zh' ? '完全 AI 控制' : 'Full AI Control')
+        : agentControlMode === 'approval'
+            ? (language === 'zh' ? '审批模式' : 'Approval Mode')
+            : (language === 'zh' ? '白名单模式' : 'Whitelist Mode');
+    const currentModelLabel = (() => {
+        const profile = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
+        if (agentModel) return agentModel;
+        if (profile?.model) return profile.model;
+        if (profile) return profile.name;
+        return language === 'zh' ? '默认模型' : 'Default Model';
+    })();
+    const runStatusLabel = planStatus === 'executing'
+        ? (language === 'zh' ? '正在执行' : 'Executing')
+        : planStatus === 'generating'
+            ? (language === 'zh' ? '正在规划' : 'Planning')
+            : planStatus === 'paused'
+                ? (language === 'zh' ? '等待继续' : 'Paused')
+                : planStatus === 'waiting_approval'
+                    ? (language === 'zh' ? '等待审批' : 'Awaiting Approval')
+                    : planStatus === 'done'
+                        ? (language === 'zh' ? '执行完成' : 'Completed')
+                        : planStatus === 'stopped'
+                            ? (language === 'zh' ? '已停止' : 'Stopped')
+                            : (language === 'zh' ? '待命中' : 'Standing By');
+
     return (
-        <div className={cn("flex flex-col h-full", className)}>
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+        <div className={cn("flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.05),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_22%)]", className)}>
+            <div className="shrink-0 px-4 pt-4">
+                <div className="mx-auto max-w-4xl overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+                    <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary/90">
+                                <Bot className="h-3.5 w-3.5" />
+                                {workspaceTitle}
+                            </div>
+                            <div className="mt-3 text-sm font-semibold text-foreground/92">
+                                {latestGoal || (language === 'zh' ? '告诉 AI 一个目标，它会自己拆解并执行。' : 'Give the AI one objective and let it drive the workflow.')}
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground/65">
+                                {workspaceSubtitle}
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 lg:max-w-[44%] lg:justify-end">
+                            <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-muted-foreground/75">
+                                {currentModeLabel}
+                            </span>
+                            <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-muted-foreground/75">
+                                {currentModelLabel}
+                            </span>
+                            <span className="rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary/85">
+                                {runStatusLabel}
+                            </span>
+                        </div>
+                    </div>
+                    {contextWindow && (
+                        <div className="border-t border-white/8 bg-black/10 px-4 py-3">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground/72">
+                                <span>{contextWindowTitle}</span>
+                                <span>{Math.round(contextWindow.percentUsed)}% {contextWindowUsed}</span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/8">
+                                <div
+                                    className={cn(
+                                        "h-full transition-all duration-500",
+                                        contextWindow.percentUsed >= 85 ? "bg-red-400/85" : contextWindow.percentUsed >= 70 ? "bg-yellow-400/85" : "bg-emerald-400/85",
+                                    )}
+                                    style={{ width: `${Math.min(100, Math.max(2, contextWindow.percentUsed))}%` }}
+                                />
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/62">
+                                <span>{contextWindowUsed} {formatTokenCount(contextWindow.promptTokens)} {contextWindowTokens} / {formatTokenCount(contextWindow.limitTokens)}</span>
+                                {contextWindow.compressionCount > 0 && (
+                                    <span className="text-emerald-400/75">{contextWindowAutoCompressed} ×{contextWindow.compressionCount}</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-4">
+                <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-5">
                 {messages.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground/60 gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] px-6 py-8 text-muted-foreground/60 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-primary/18 bg-primary/10">
                             <Bot className="w-6 h-6 text-primary/60" />
                         </div>
                         <p className="text-sm">输入指令，AI 将自动操作服务器</p>
-                        <div className="flex flex-wrap gap-2 mt-2 max-w-sm justify-center">
+                        <div className="mt-4 flex max-w-2xl flex-wrap justify-center gap-3">
                             {['查看磁盘空间', '列出运行中的服务', '查看系统负载'].map(hint => (
                                 <button
                                     key={hint}
                                     onClick={() => setInput(hint)}
-                                    className="px-3 py-1.5 rounded-full text-xs bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors border border-border/50"
+                                    className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-left text-sm text-muted-foreground/82 transition-all hover:border-primary/20 hover:bg-primary/8 hover:text-foreground"
                                 >
                                     {hint}
                                 </button>
@@ -708,14 +866,14 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 ))}
 
                 {isLoading && messages[messages.length - 1]?.content === '' && (
-                    <div className="flex items-center gap-3 px-4">
+                    <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
                         {/* Terminal blink cursor */}
                         <span
                             className="text-primary font-mono text-base leading-none"
                             style={{ animation: 'agentCursorBlink 0.8s step-end infinite' }}
                         >█</span>
                         {/* Shimmer skeleton bar */}
-                        <div className="relative flex-1 h-2.5 rounded-full bg-muted/40 overflow-hidden max-w-[140px]">
+                        <div className="relative flex-1 h-2.5 rounded-full bg-muted/35 overflow-hidden max-w-[160px]">
                             <div
                                 className="absolute inset-0 rounded-full"
                                 style={{
@@ -724,24 +882,25 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                 }}
                             />
                         </div>
-                        <span className="text-xs text-muted-foreground/60 font-mono">thinking...</span>
+                        <span className="text-xs text-muted-foreground/60 font-mono">{t('agent.thinking')}</span>
                     </div>
                 )}
 
                 <div ref={messagesEndRef} />
+                </div>
             </div>
 
             {/* ── Plan Card (plan mode v2) ─────────────────────────────────── */}
             {planMode && planStatus !== 'idle' && (
-                <div className="border-t border-border mx-3 mt-0 mb-0">
+                <div className="mx-auto w-full max-w-4xl px-4 pb-3">
                     <div
-                        className="mt-2 mb-1 rounded-xl border border-border/20 bg-card/30 overflow-hidden"
+                        className="overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
                         style={{ animation: 'agentSlideInUp 0.22s ease-out' }}
                     >
                         {/* ── Header bar ── */}
                         <div className={cn(
-                            "flex items-center gap-2 px-3 py-2 border-b border-border/15 cursor-pointer select-none",
-                            planStatus === 'paused' ? "bg-yellow-500/8" : planStatus === 'waiting_approval' ? "bg-yellow-500/12" : "bg-secondary/10",
+                            "flex cursor-pointer select-none items-center gap-2 border-b border-white/8 px-4 py-3",
+                            planStatus === 'paused' ? "bg-yellow-500/8" : planStatus === 'waiting_approval' ? "bg-yellow-500/12" : "bg-white/[0.03]",
                         )} onClick={() => setPlanCollapsed(v => !v)}>
                             <ListChecks className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
                             <span className="text-[11px] font-semibold text-foreground/60 tracking-wide">执行计划</span>
@@ -801,6 +960,34 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         )}
 
                         {/* ── Goal ── */}
+                        {contextWindow && (
+                            <div className="px-3 py-2 border-b border-border/10 bg-muted/10">
+                                <div className="flex items-center justify-between text-[10px] text-muted-foreground/70">
+                                    <span>{contextWindowTitle}</span>
+                                    <span>{Math.round(contextWindow.percentUsed)}% {contextWindowUsed}</span>
+                                </div>
+                                <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-foreground/70">
+                                    <span>
+                                        {contextWindowUsed} {formatTokenCount(contextWindow.promptTokens)} {contextWindowTokens} / {formatTokenCount(contextWindow.limitTokens)}
+                                    </span>
+                                    {contextWindow.compressionCount > 0 && (
+                                        <span className="text-emerald-400/70">
+                                            {contextWindowAutoCompressed} ×{contextWindow.compressionCount}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mt-1 h-1 rounded-full bg-muted/30 overflow-hidden">
+                                    <div
+                                        className={cn(
+                                            "h-full transition-all duration-500",
+                                            contextWindow.percentUsed >= 85 ? "bg-red-400/80" : contextWindow.percentUsed >= 70 ? "bg-yellow-400/80" : "bg-emerald-400/80",
+                                        )}
+                                        style={{ width: `${Math.min(100, Math.max(2, contextWindow.percentUsed))}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {planState && (
                             <div className="flex items-start gap-2 px-3 py-2 border-b border-border/10">
                                 <Target className="w-3 h-3 text-muted-foreground/40 flex-shrink-0 mt-0.5" />
@@ -923,7 +1110,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
             {/* Pending approval bar */}
             {pendingCommands.length > 0 && (
-                <div className="border-t border-border px-3 py-2 bg-yellow-500/5">
+                <div className="mx-auto mb-3 w-full max-w-4xl rounded-[20px] border border-yellow-500/20 bg-yellow-500/6 px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.14)]">
                     <div className="text-[11px] font-medium text-yellow-600 dark:text-yellow-400 mb-1.5">⏳ {pendingCommands.length} 个命令等待批准</div>
                     <div className="space-y-1">
                         {pendingCommands.map(({ cmd, msgId, aiMessages }, idx) => (
@@ -992,14 +1179,15 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             )}
 
             {/* Input Area */}
-            <div className="border-t border-border p-3 bg-background shrink-0">
+            <div className="shrink-0 border-t border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.08))] px-4 pb-4 pt-3">
+                <div className="mx-auto max-w-4xl rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
                 {/* Mode & Model selector bar — horizontal */}
-                <div className="flex items-center gap-2 mb-2">
+                <div className="mb-3 flex items-center gap-2">
                     {/* Control Mode Selector */}
                     <div className="relative" ref={modeMenuRef}>
                         <button
                             onClick={() => { setShowModeMenu(!showModeMenu); setShowModelMenu(false); }}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40"
+                            className="flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/8"
                         >
                             {agentControlMode === 'auto' && <><Zap className="w-3 h-3 text-green-500" />完全 AI 控制</>}
                             {agentControlMode === 'approval' && <><Shield className="w-3 h-3 text-yellow-500" />批准模式</>}
@@ -1037,7 +1225,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     <div className="relative" ref={modelMenuRef}>
                         <button
                             onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-secondary/50 hover:bg-secondary/80 text-muted-foreground transition-colors border border-border/40 max-w-[200px]"
+                            className="flex max-w-[220px] items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/8"
                             title={agentModel || 'Default model from settings'}
                         >
                             <Cpu className="w-3 h-3 flex-shrink-0" />
@@ -1133,13 +1321,13 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         onKeyDown={handleKeyDown}
                         placeholder="告诉 AI 你想做什么..."
                         rows={1}
-                        className="w-full resize-none overflow-hidden rounded-md border border-input bg-background/50 px-4 py-2.5 pr-12 text-sm transition-all placeholder:text-muted-foreground/50 hover:bg-accent/30 hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full resize-none overflow-hidden rounded-[20px] border border-white/8 bg-black/15 px-4 py-3 pr-12 text-sm transition-all placeholder:text-muted-foreground/45 hover:border-primary/15 hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isLoading}
                     />
                     {isLoading ? (
                         <button
                             onClick={handleStop}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-destructive/20 text-destructive transition-all duration-150 hover:bg-destructive/40 hover:scale-110 active:scale-95"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-2xl border border-destructive/20 bg-destructive/15 p-2 text-destructive transition-all duration-150 hover:bg-destructive/30 hover:scale-105 active:scale-95"
                             title="停止生成"
                             style={{ transformOrigin: 'center' }}
                         >
@@ -1150,10 +1338,10 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             onClick={handleSend}
                             disabled={!input.trim()}
                             className={cn(
-                                "absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors",
+                                "absolute right-2 top-1/2 -translate-y-1/2 rounded-2xl border p-2 transition-all",
                                 input.trim()
-                                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                                    : "bg-secondary/60 text-muted-foreground cursor-not-allowed"
+                                    ? "border-primary/25 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_10px_24px_rgba(16,185,129,0.18)]"
+                                    : "border-white/8 bg-white/[0.04] text-muted-foreground cursor-not-allowed"
                             )}
                             title={aiSendShortcut === 'ctrlEnter' ? '发送 (Ctrl+Enter)' : '发送 (Enter)'}
                         >
@@ -1161,8 +1349,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         </button>
                     )}
                 </div>
-                <div className="text-[10px] text-muted-foreground/50 mt-1.5 px-1">
+                <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-muted-foreground/52">
                     {aiSendShortcut === 'ctrlEnter' ? 'Ctrl+Enter 发送 · Shift+Enter 换行' : 'Enter 发送 · Shift+Enter 换行'}
+                </div>
                 </div>
             </div>
         </div>
@@ -1177,16 +1366,26 @@ function MessageBubble({ message }: { message: AgentMessage }) {
     const renderToolCall = (toolCall: NonNullable<AgentMessage['toolCall']>, content?: string) => {
         const isPending = toolCall.status === 'pending';
         // Determine icon and color based on tool name
-        const isRead = toolCall.name === 'read_file';
-        const isWrite = toolCall.name === 'write_file';
-        const isList = toolCall.name === 'list_directory';
+        const isRead = ['read_file', 'local_read_file', 'remote_read_file'].includes(toolCall.name);
+        const isWrite = ['write_file', 'local_write_file', 'remote_write_file'].includes(toolCall.name);
+        const isList = ['list_directory', 'local_list_directory', 'remote_list_directory'].includes(toolCall.name);
+        const isDeploy = toolCall.name === 'deploy_project';
         const isFileOp = isRead || isWrite || isList;
-        const ToolIcon = isRead ? FileText : isWrite ? Pencil : isList ? FolderOpen : Terminal;
+        const ToolIcon = isRead ? FileText : isWrite ? Pencil : isList ? FolderOpen : isDeploy ? Sparkles : Terminal;
         // Color configs per tool type
         const colorMap = {
             read_file: { accent: '#3b82f6', light: 'rgba(59,130,246,0.12)', label: '读取文件' },
             write_file: { accent: '#f59e0b', light: 'rgba(245,158,11,0.12)', label: '写入文件' },
             list_directory: { accent: '#06b6d4', light: 'rgba(6,182,212,0.12)', label: '列出目录' },
+            local_read_file: { accent: '#3b82f6', light: 'rgba(59,130,246,0.12)', label: '读取本地文件' },
+            local_write_file: { accent: '#f59e0b', light: 'rgba(245,158,11,0.12)', label: '写入本地文件' },
+            local_list_directory: { accent: '#06b6d4', light: 'rgba(6,182,212,0.12)', label: '本地目录' },
+            remote_read_file: { accent: '#60a5fa', light: 'rgba(96,165,250,0.12)', label: '读取远程文件' },
+            remote_write_file: { accent: '#fbbf24', light: 'rgba(251,191,36,0.12)', label: '写入远程文件' },
+            remote_list_directory: { accent: '#22d3ee', light: 'rgba(34,211,238,0.12)', label: '远程目录' },
+            local_exec: { accent: isPending ? '#eab308' : '#22c55e', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(34,197,94,0.06)', label: isPending ? '执行本地命令' : '本地命令完成' },
+            remote_exec: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '执行远程命令' : '远程命令完成' },
+            deploy_project: { accent: isPending ? '#eab308' : '#8b5cf6', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(139,92,246,0.08)', label: isPending ? '自动部署中' : '部署完成' },
             execute_ssh_command: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '待批准' : '已执行' },
         };
         const colors = colorMap[toolCall.name as keyof typeof colorMap] || colorMap.execute_ssh_command;
@@ -1212,25 +1411,25 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 {/* If the assistant included text explanation, show it above */}
                 {content && content.trim() && (
                     <div className="flex gap-3">
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 bg-secondary">
+                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04]">
                             <Bot className="w-3.5 h-3.5 text-muted-foreground" />
                         </div>
-                        <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed bg-secondary/60 text-foreground rounded-tl-md">
+                        <div className="max-w-[82%] rounded-[22px] rounded-tl-md border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] px-4 py-3 text-sm leading-relaxed text-foreground shadow-[0_14px_34px_rgba(0,0,0,0.14)]">
                             <MessageContent content={content} isUser={false} />
                         </div>
                     </div>
                 )}
                 {/* ── Tool block with accent strip ── */}
                 <div
-                    className="mx-1 rounded-lg overflow-hidden transition-all duration-300"
+                    className="mx-1 overflow-hidden rounded-[22px] border bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015))] shadow-[0_14px_34px_rgba(0,0,0,0.12)] transition-all duration-300"
                     style={{
-                        border: `1px solid ${colors.accent}20`,
+                        borderColor: `${colors.accent}20`,
                     }}
                 >
                     {/* Command header with left accent strip */}
                     <button
                         onClick={() => setExpanded(!expanded)}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[hsl(var(--card)/0.6)]"
+                        className="flex w-full items-center gap-2 px-4 py-3 text-xs transition-colors hover:bg-white/[0.03]"
                         style={{ background: `linear-gradient(90deg, ${colors.accent}08, transparent)` }}
                     >
                         {/* Left accent strip */}
@@ -1285,7 +1484,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
     const tokenInfo = !isUser && message.usage ? message.usage : null;
 
     return (
-        <div className={cn("flex flex-col gap-0.5", isUser && "items-end")}>
+        <div className={cn("flex flex-col gap-1.5", isUser && "items-end")}>
             {/* Reasoning block for non-tool assistant messages */}
             {!isUser && message.reasoning && (
                 <div className="mx-1 mb-1 rounded-lg border border-purple-500/20 bg-purple-500/5 overflow-hidden max-w-[85%]">
@@ -1309,10 +1508,10 @@ function MessageBubble({ message }: { message: AgentMessage }) {
             <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
                 {/* Avatar */}
                 <div className={cn(
-                    "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
+                    "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border",
                     isUser
-                        ? "bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20"
-                        : "bg-gradient-to-br from-secondary to-secondary/60 border border-border/30"
+                        ? "border-primary/20 bg-gradient-to-br from-primary/30 to-primary/10"
+                        : "border-white/8 bg-gradient-to-br from-white/[0.06] to-white/[0.02]"
                 )}>
                     {isUser ? (
                         <User className="w-3.5 h-3.5 text-primary" />
@@ -1324,11 +1523,11 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 {/* Content */}
                 <div
                     className={cn(
-                        "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                        "max-w-[82%] rounded-[22px] px-4 py-3 text-sm leading-relaxed shadow-[0_14px_34px_rgba(0,0,0,0.14)]",
                         isUser
-                            ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-md shadow-[0_2px_12px_rgba(var(--primary-rgb,234,88,12),0.15)]"
-                            : "bg-secondary/60 text-foreground rounded-tl-md backdrop-blur-sm border border-border/20",
-                        message.isError && "border-red-500/30 bg-red-500/10"
+                            ? "rounded-tr-md border border-primary/20 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground"
+                            : "rounded-tl-md border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] text-foreground backdrop-blur-sm",
+                        message.isError && "border-red-500/30 bg-red-500/10 shadow-[0_14px_34px_rgba(127,29,29,0.18)]"
                     )}
                     style={message.isError ? {
                         animation: 'agentSlideInUp 0.2s ease-out, agentShakeX 0.35s ease-in-out 0.2s'

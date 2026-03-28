@@ -1,6 +1,8 @@
 import path from 'path';
 import { WebContents } from 'electron';
 import { promises as fs } from 'fs';
+import { execFile as execFileCallback } from 'child_process';
+import { promisify } from 'util';
 import Store from 'electron-store';
 import {
   CreateDeployDraftInput,
@@ -21,6 +23,8 @@ import { RollbackRunner } from './rollback.js';
 import { createArchive } from './packager/archivePackager.js';
 import { shQuote } from './strategies/base.js';
 
+const execFile = promisify(execFileCallback);
+
 interface ActiveRunSession {
   run: DeployRun;
   webContents: WebContents;
@@ -38,6 +42,8 @@ function logId() {
 function pathNeedsSudo(targetPath: string): boolean {
   return ['/opt/', '/etc/', '/usr/', '/var/'].some((prefix) => targetPath.startsWith(prefix));
 }
+
+const DEFAULT_HEALTH_CHECK_PATHS = ['/health', '/api/health', '/healthz', '/api/ping', '/ping'];
 
 function stepToRuntime(step: DeployStep): DeployStepRuntime {
   return { ...step, status: 'pending' };
@@ -68,11 +74,18 @@ export class DeploymentManager {
 
   async createDraft(sessionId: string, input: CreateDeployDraftInput): Promise<DeployDraft> {
     const project = await this.scanner.scan(input.projectRoot);
+    const normalizedInput = {
+      ...input,
+      projectRoot: project.rootPath,
+    };
     const connection = this.sshMgr.getConnectionConfig(sessionId);
     const server = await this.inspector.inspect(sessionId, connection?.host || 'server');
-    const existingProfile = this.deployStore.findProfile(input.serverProfileId, input.projectRoot);
+    const existingProfile = this.deployStore.findProfile(
+      normalizedInput.serverProfileId,
+      normalizedInput.projectRoot,
+    );
     const draft = this.selector.buildDraft({
-      input,
+      input: normalizedInput,
       project,
       server,
       existingProfile,
@@ -102,117 +115,126 @@ export class DeploymentManager {
   }
 
   start(sessionId: string, webContents: WebContents, input: StartDeployInput): void {
-    (async () => {
-      const runId = `deploy-run-${Date.now()}`;
-      const initialRun: DeployRun = {
-        id: runId,
-        sessionId,
-        serverProfileId: input.serverProfileId,
-        projectRoot: input.projectRoot,
-        createdAt: now(),
-        updatedAt: now(),
-        status: 'running',
-        phase: 'analyzing_project',
-        steps: [],
-        logs: [],
-        outputs: {},
-        warnings: [],
-        missingInfo: [],
-        rollbackStatus: 'not_needed',
-      };
-
-      this.activeRuns.set(sessionId, { run: initialRun, webContents, cancelled: false });
-      this.deployStore.saveRun(initialRun);
-      this.pushRun(sessionId, webContents, initialRun);
-
-      try {
-        const draft = await this.createDraft(sessionId, input);
-        const active = this.requireActive(sessionId);
-        active.run.projectSpec = draft.projectSpec;
-        active.run.serverSpec = draft.serverSpec;
-        active.run.profile = draft.profile;
-        active.run.warnings = draft.warnings;
-        active.run.missingInfo = draft.missingInfo;
-        active.run.updatedAt = now();
-        this.log(sessionId, webContents, {
-          level: 'info',
-          message: `Strategy selected: ${draft.strategyId}`,
-        });
-
-        const connection = this.sshMgr.getConnectionConfig(sessionId);
-        const strategy = this.selector.select(
-          draft.projectSpec,
-          draft.serverSpec,
-          draft.strategyId,
-        );
-        const plan = await strategy.buildPlan({
-          profile: draft.profile,
-          project: draft.projectSpec,
-          server: draft.serverSpec,
-          connectionHost: connection?.host || draft.serverSpec.host,
-        });
-
-        active.run.phase = 'planning';
-        active.run.plan = plan;
-        active.run.outputs.releaseId = plan.releaseId;
-        active.run.outputs.strategyId = plan.strategyId;
-        active.run.outputs.remoteRoot = draft.profile.remoteRoot;
-        active.run.steps = plan.steps.map(stepToRuntime);
-        active.run.updatedAt = now();
-        this.updateRun(sessionId, webContents);
-
-        for (const step of active.run.steps) {
-          this.throwIfCancelled(sessionId);
-          await this.executeRuntimeStep(sessionId, webContents, step);
-        }
-
-        active.run.phase = 'completed';
-        active.run.status = 'completed';
-        active.run.updatedAt = now();
-        this.updateRun(sessionId, webContents);
-        this.finish(sessionId, webContents, active.run);
-      } catch (error: any) {
-        const active = this.requireActive(sessionId);
-        active.run.error = error?.message || String(error);
-        active.run.status = active.cancelled ? 'cancelled' : 'failed';
-        active.run.phase = active.cancelled ? 'cancelled' : 'failed';
-        active.run.updatedAt = now();
-        this.log(sessionId, webContents, {
-          level: 'error',
-          message: active.run.error || 'Deployment failed',
-        });
-
-        if (!active.cancelled && active.run.plan?.rollbackSteps?.length) {
-          active.run.rollbackStatus = 'running';
-          active.run.phase = 'rolling_back';
-          active.run.updatedAt = now();
-          this.updateRun(sessionId, webContents);
-          try {
-            await this.rollbackRunner.run(active.run.plan.rollbackSteps, async (step) => {
-              await this.executeStep(sessionId, webContents, step);
-            });
-            active.run.rollbackStatus = 'completed';
-            this.log(sessionId, webContents, {
-              level: 'success',
-              message: 'Rollback completed',
-            });
-          } catch (rollbackError: any) {
-            active.run.rollbackStatus = 'failed';
-            this.log(sessionId, webContents, {
-              level: 'error',
-              message: `Rollback failed: ${rollbackError?.message || rollbackError}`,
-            });
-          }
-        }
-
-        this.updateRun(sessionId, webContents);
-        this.finish(sessionId, webContents, active.run);
-      } finally {
-        this.activeRuns.delete(sessionId);
-      }
-    })().catch((error) => {
+    this.runBlocking(sessionId, webContents, input).catch((error) => {
       console.error('[DeploymentManager] start error:', error);
     });
+  }
+
+  async runBlocking(
+    sessionId: string,
+    webContents: WebContents,
+    input: StartDeployInput,
+  ): Promise<DeployRun> {
+    const runId = `deploy-run-${Date.now()}`;
+    const initialRun: DeployRun = {
+      id: runId,
+      sessionId,
+      serverProfileId: input.serverProfileId,
+      projectRoot: input.projectRoot,
+      createdAt: now(),
+      updatedAt: now(),
+      status: 'running',
+      phase: 'analyzing_project',
+      steps: [],
+      logs: [],
+      outputs: {},
+      warnings: [],
+      missingInfo: [],
+      rollbackStatus: 'not_needed',
+    };
+
+    this.activeRuns.set(sessionId, { run: initialRun, webContents, cancelled: false });
+    this.deployStore.saveRun(initialRun);
+    this.pushRun(sessionId, webContents, initialRun);
+
+    try {
+      const draft = await this.createDraft(sessionId, input);
+      const active = this.requireActive(sessionId);
+      active.run.projectSpec = draft.projectSpec;
+      active.run.serverSpec = draft.serverSpec;
+      active.run.profile = draft.profile;
+      active.run.projectRoot = draft.profile.projectRoot;
+      active.run.warnings = draft.warnings;
+      active.run.missingInfo = draft.missingInfo;
+      active.run.updatedAt = now();
+      this.log(sessionId, webContents, {
+        level: 'info',
+        message: `Strategy selected: ${draft.strategyId}`,
+      });
+
+      const connection = this.sshMgr.getConnectionConfig(sessionId);
+      const strategy = this.selector.select(
+        draft.projectSpec,
+        draft.serverSpec,
+        draft.strategyId,
+      );
+      const plan = await strategy.buildPlan({
+        profile: draft.profile,
+        project: draft.projectSpec,
+        server: draft.serverSpec,
+        connectionHost: connection?.host || draft.serverSpec.host,
+      });
+
+      active.run.phase = 'planning';
+      active.run.plan = plan;
+      active.run.outputs.releaseId = plan.releaseId;
+      active.run.outputs.strategyId = plan.strategyId;
+      active.run.outputs.remoteRoot = draft.profile.remoteRoot;
+      active.run.steps = plan.steps.map(stepToRuntime);
+      active.run.updatedAt = now();
+      this.updateRun(sessionId, webContents);
+
+      for (const step of active.run.steps) {
+        this.throwIfCancelled(sessionId);
+        await this.executeRuntimeStep(sessionId, webContents, step);
+      }
+
+      active.run.phase = 'completed';
+      active.run.status = 'completed';
+      active.run.updatedAt = now();
+      this.updateRun(sessionId, webContents);
+      this.finish(sessionId, webContents, active.run);
+      return active.run;
+    } catch (error: any) {
+      const active = this.requireActive(sessionId);
+      active.run.error = error?.message || String(error);
+      active.run.status = active.cancelled ? 'cancelled' : 'failed';
+      active.run.phase = active.cancelled ? 'cancelled' : 'failed';
+      active.run.updatedAt = now();
+      this.log(sessionId, webContents, {
+        level: 'error',
+        message: active.run.error || 'Deployment failed',
+      });
+
+      if (!active.cancelled && active.run.plan?.rollbackSteps?.length) {
+        active.run.rollbackStatus = 'running';
+        active.run.phase = 'rolling_back';
+        active.run.updatedAt = now();
+        this.updateRun(sessionId, webContents);
+        try {
+          await this.rollbackRunner.run(active.run.plan.rollbackSteps, async (step) => {
+            await this.executeStep(sessionId, webContents, step);
+          });
+          active.run.rollbackStatus = 'completed';
+          this.log(sessionId, webContents, {
+            level: 'success',
+            message: 'Rollback completed',
+          });
+        } catch (rollbackError: any) {
+          active.run.rollbackStatus = 'failed';
+          this.log(sessionId, webContents, {
+            level: 'error',
+            message: `Rollback failed: ${rollbackError?.message || rollbackError}`,
+          });
+        }
+      }
+
+      this.updateRun(sessionId, webContents);
+      this.finish(sessionId, webContents, active.run);
+      return active.run;
+    } finally {
+      this.activeRuns.delete(sessionId);
+    }
   }
 
   private requireActive(sessionId: string): ActiveRunSession {
@@ -286,7 +308,21 @@ export class DeploymentManager {
     });
 
     try {
-      const result = await this.executeStep(sessionId, webContents, step);
+      let result: string;
+      try {
+        result = await this.executeStep(sessionId, webContents, step);
+      } catch (error: any) {
+        const recovered = await this.tryRecoverStep(sessionId, webContents, step, error);
+        if (!recovered) {
+          throw error;
+        }
+        this.log(sessionId, webContents, {
+          level: 'warn',
+          message: recovered,
+          stepId: step.id,
+        });
+        result = await this.executeStep(sessionId, webContents, step);
+      }
       step.status = 'completed';
       step.finishedAt = now();
       step.result = result;
@@ -304,6 +340,78 @@ export class DeploymentManager {
     }
 
     this.updateRun(sessionId, webContents);
+  }
+
+  private async tryRecoverStep(
+    sessionId: string,
+    webContents: WebContents,
+    step: DeployStepRuntime,
+    error: Error,
+  ): Promise<string | null> {
+    if (step.kind === 'service_verify') {
+      await this.execRemote(
+        sessionId,
+        webContents,
+        `systemctl restart ${shQuote(step.serviceName)} && sleep 3`,
+        { sudo: true },
+      );
+      return `Auto-restarted ${step.serviceName} after verification failure`;
+    }
+
+    if (step.kind !== 'http_verify') {
+      return null;
+    }
+
+    const active = this.requireActive(sessionId);
+    const project = active.run.projectSpec;
+    if (!project) return null;
+
+    let currentUrl: URL;
+    try {
+      currentUrl = new URL(step.url);
+    } catch {
+      return null;
+    }
+
+    const candidateUrls = Array.from(
+      new Set(
+        [
+          step.url,
+          ...(project.healthCheckCandidates || []),
+          ...DEFAULT_HEALTH_CHECK_PATHS,
+        ].map((value) => {
+          if (/^https?:\/\//i.test(value)) return value;
+          const normalizedPath = value.startsWith('/') ? value : `/${value}`;
+          return new URL(normalizedPath, `${currentUrl.protocol}//${currentUrl.host}`).toString();
+        }),
+      ),
+    );
+    const recovered = await this.verifier.findHealthyUrl(
+      sessionId,
+      candidateUrls,
+      step.expectedStatus || 200,
+    );
+    if (!recovered || recovered.url === step.url) {
+      return null;
+    }
+
+    step.url = recovered.url;
+    active.run.outputs.healthCheckUrl = recovered.url;
+    active.run.outputs.url = recovered.url;
+    if (active.run.profile) {
+      active.run.profile.healthCheckPath = new URL(recovered.url).pathname || '/';
+      this.deployStore.saveProfile(active.run.profile);
+    }
+    const outputStep = active.run.steps.find(
+      (item): item is DeployStepRuntime & { kind: 'set_output' } =>
+        item.kind === 'set_output',
+    );
+    if (outputStep) {
+      outputStep.url = recovered.url;
+    }
+    this.updateRun(sessionId, webContents);
+
+    return `Auto-switched health check to ${recovered.url} after ${error.message}`;
   }
 
   private async executeStep(
@@ -333,6 +441,15 @@ export class DeploymentManager {
         });
         return `Archive created at ${step.outFile}`;
 
+      case 'local_exec':
+        active.run.phase = 'packaging';
+        this.updateRun(sessionId, webContents);
+        await this.execLocal(step.command, {
+          cwd: step.cwd,
+          env: step.env,
+        });
+        return `Executed locally: ${step.command}`;
+
       case 'sftp_upload':
         active.run.phase = 'uploading';
         this.updateRun(sessionId, webContents);
@@ -342,16 +459,23 @@ export class DeploymentManager {
       case 'remote_extract':
         active.run.phase = 'executing';
         this.updateRun(sessionId, webContents);
+        {
+          const needsSudo = pathNeedsSudo(step.targetDir);
+          const ownershipFix =
+            needsSudo && server.user && server.user !== 'root'
+              ? ` && chown -R ${shQuote(`${server.user}:${server.user}`)} ${shQuote(step.targetDir)}`
+              : '';
         await this.execRemote(
           sessionId,
           webContents,
           `mkdir -p ${shQuote(step.targetDir)} && tar -xzf ${shQuote(step.archivePath)} -C ${shQuote(
             step.targetDir,
-          )} && rm -f ${shQuote(step.archivePath)}`,
+          )} && rm -f ${shQuote(step.archivePath)}${ownershipFix}`,
           {
-            sudo: pathNeedsSudo(step.targetDir),
+            sudo: needsSudo,
           },
         );
+        }
         return `Extracted archive to ${step.targetDir}`;
 
       case 'ssh_exec':
@@ -397,6 +521,7 @@ export class DeploymentManager {
 
       case 'set_output':
         active.run.outputs.url = step.url;
+        active.run.outputs.healthCheckUrl = step.url;
         this.updateRun(sessionId, webContents);
         return `Final URL: ${step.url}`;
     }
@@ -409,25 +534,31 @@ export class DeploymentManager {
     options?: { cwd?: string; sudo?: boolean },
   ) {
     const active = this.requireActive(sessionId);
-    let finalCommand = command;
-    if (options?.cwd) {
-      finalCommand = `cd ${shQuote(options.cwd)} && ${finalCommand}`;
-    }
-    if (options?.sudo) {
-      finalCommand = this.wrapSudo(sessionId, finalCommand, active.run.serverSpec?.sudoMode || 'unavailable');
-    }
+    const shellScript = [
+      'export PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb',
+      options?.cwd ? `cd ${shQuote(options.cwd)}` : '',
+      command,
+    ]
+      .filter(Boolean)
+      .join('; ');
+    const displayCommand = [
+      options?.sudo ? 'sudo' : '',
+      options?.cwd ? `cd ${shQuote(options.cwd)} &&` : '',
+      command,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const finalCommand = options?.sudo
+      ? this.wrapSudo(sessionId, shellScript, active.run.serverSpec?.sudoMode || 'unavailable')
+      : `sh -lc ${shQuote(shellScript)}`;
 
     if (!webContents.isDestroyed()) {
       webContents.send('terminal-data', {
         id: sessionId,
-        data: `\r\n\x1b[35;2m[Deploy] $ ${finalCommand}\x1b[0m\r\n`,
+        data: `\r\n\x1b[35;2m[Deploy] $ ${displayCommand}\x1b[0m\r\n`,
       });
     }
-    const result = await this.sshMgr.exec(
-      sessionId,
-      `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb ${finalCommand}`,
-      240000,
-    );
+    const result = await this.sshMgr.exec(sessionId, finalCommand, 240000);
     if (!webContents.isDestroyed()) {
       if (result.stdout) {
         webContents.send('terminal-data', {
@@ -447,25 +578,56 @@ export class DeploymentManager {
       });
     }
     if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || result.stdout.trim() || `Command failed: ${command}`);
+      throw new Error(
+        result.stderr.trim() ||
+          result.stdout.trim() ||
+          `Command failed with exit code ${result.exitCode}: ${displayCommand}`,
+      );
     }
   }
 
   private wrapSudo(
     sessionId: string,
-    command: string,
+    shellScript: string,
     sudoMode: 'root' | 'passwordless' | 'unavailable',
   ) {
-    if (sudoMode === 'root') return command;
+    if (sudoMode === 'root') return `sh -lc ${shQuote(shellScript)}`;
     if (sudoMode === 'passwordless') {
-      return `sudo -n bash -lc ${shQuote(command)}`;
+      return `sudo -n sh -lc ${shQuote(shellScript)}`;
     }
 
     const connection = this.sshMgr.getConnectionConfig(sessionId);
     if (connection?.authType === 'password' && connection.password) {
-      return `printf %s ${shQuote(connection.password)} | sudo -S -p '' bash -lc ${shQuote(command)}`;
+      return `printf %s ${shQuote(connection.password)} | sudo -S -p '' sh -lc ${shQuote(shellScript)}`;
     }
     throw new Error('This deployment step needs sudo privileges, but sudo is unavailable for the current SSH account');
+  }
+
+  private async execLocal(
+    command: string,
+    options?: { cwd?: string; env?: Record<string, string> },
+  ) {
+    const shell = process.platform === 'win32' ? 'powershell.exe' : 'sh';
+    const shellArgs = process.platform === 'win32'
+      ? ['-NoProfile', '-NonInteractive', '-Command', command]
+      : ['-lc', command];
+
+    try {
+      await execFile(shell, shellArgs, {
+        cwd: options?.cwd,
+        env: {
+          ...process.env,
+          ...(options?.env || {}),
+        },
+        timeout: 1000 * 60 * 20,
+        maxBuffer: 1024 * 1024 * 8,
+        windowsHide: true,
+      });
+    } catch (error: any) {
+      const stderr = error?.stderr ? String(error.stderr) : '';
+      const stdout = error?.stdout ? String(error.stdout) : '';
+      throw new Error(stderr || stdout || error?.message || String(error));
+    }
   }
 
   private async writeRemoteFile(

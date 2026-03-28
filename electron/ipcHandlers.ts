@@ -1,14 +1,14 @@
 import { ipcMain, BrowserWindow, dialog, clipboard } from 'electron';
 import { SSHManager } from './ssh/sshManager.js';
-import { AgentManager } from './agentManager.js';
 import { DeploymentManager } from './deploy/deploymentManager.js';
+import { AgentV2Manager } from './agent-v2/manager.js';
 import { SSHConnection } from '../src/shared/types.js';
 import Store from 'electron-store';
 
 const store = new Store();
 const sshManager = new SSHManager(store);
-const agentManager = new AgentManager(sshManager);
 const deploymentManager = new DeploymentManager(sshManager, store);
+const agentManager = new AgentV2Manager(sshManager, deploymentManager);
 
 export function setupIpcHandlers() {
   // ── Universal AI fetch proxy (bypasses renderer CORS) ────────────────────────
@@ -303,16 +303,16 @@ export function setupIpcHandlers() {
   });
 
   // ── Agent Plan Mode (main-process brain) ────────────────────────────────────
-  ipcMain.handle('agent-plan-start', (event, { sessionId, goal, profile }) => {
-    agentManager.startPlan(sessionId, goal, profile, event.sender);
+  ipcMain.handle('agent-plan-start', (event, payload) => {
+    agentManager.startPlan(payload.sessionId, payload, event.sender);
   });
 
   ipcMain.on('agent-plan-stop', (_event, { sessionId }) => {
     agentManager.stop(sessionId);
   });
 
-  ipcMain.handle('agent-plan-resume', (event, { sessionId, userInput, profile }) => {
-    agentManager.resume(sessionId, userInput, event.sender, profile);
+  ipcMain.handle('agent-plan-resume', (event, payload) => {
+    agentManager.resume(payload.sessionId, payload, event.sender);
   });
 
   ipcMain.on('agent-session-close', (_event, { sessionId }) => {

@@ -5,8 +5,13 @@ import { renderSystemdService } from '../templates/systemd.js';
 import {
   BuildPlanInput,
   DeployStrategy,
+  buildEnsureNginxCommand,
+  buildEnsureNodeCommand,
+  buildEnsureNodePackageManagerCommand,
+  canProvideNodeRuntime,
   installCommand,
   shQuote,
+  withOptionalEnvFile,
   withContext,
 } from './base.js';
 
@@ -14,7 +19,7 @@ export class NextStandaloneStrategy implements DeployStrategy {
   id = 'next-standalone' as const;
 
   supports(project: ProjectSpec, server: ServerSpec): boolean {
-    return project.framework === 'nextjs' && server.hasNode && server.hasSystemd;
+    return project.framework === 'nextjs' && canProvideNodeRuntime(server) && server.hasSystemd;
   }
 
   async buildPlan(input: BuildPlanInput): Promise<DeployPlan> {
@@ -22,10 +27,14 @@ export class NextStandaloneStrategy implements DeployStrategy {
     const runtimePort = ctx.profile.runtimePort || ctx.project.ports[0] || 3000;
     const install = installCommand(ctx.project.packageManager);
     const envFilePath = `${ctx.sharedDir}/.env`;
+    const runtimeEnvFilePath = Object.keys(ctx.profile.envVars).length > 0 ? envFilePath : undefined;
     const serviceFilePath = `/etc/systemd/system/${ctx.serviceName}`;
     const finalUrl = ctx.profile.domain
       ? `${ctx.profile.enableHttps ? 'https' : 'http'}://${ctx.profile.domain}${ctx.profile.healthCheckPath || ''}`
       : `http://${ctx.connectionHost}:${runtimePort}${ctx.profile.healthCheckPath || ''}`;
+    const runtimeProvisionSteps = buildRuntimeProvisionSteps(ctx.server, Boolean(ctx.profile.domain));
+    const packageManagerProvisionSteps = buildPackageManagerProvisionSteps(ctx.project.packageManager);
+    const migrationSteps = buildMigrationSteps(ctx.project.migrationCommands, runtimeEnvFilePath, ctx.releaseDir);
 
     return {
       id: `deploy-plan-${Date.now()}`,
@@ -48,6 +57,8 @@ export class NextStandaloneStrategy implements DeployStrategy {
           command: `mkdir -p ${shQuote(`${ctx.profile.remoteRoot}/releases`)} ${shQuote(ctx.sharedDir)}`,
           sudo: true,
         },
+        ...runtimeProvisionSteps,
+        ...packageManagerProvisionSteps,
         {
           kind: 'sftp_upload',
           id: 'upload',
@@ -83,9 +94,10 @@ export class NextStandaloneStrategy implements DeployStrategy {
           kind: 'ssh_exec',
           id: 'build',
           label: 'Build Next.js app',
-          command: 'npm run build',
+          command: withOptionalEnvFile('npm run build', runtimeEnvFilePath),
           cwd: ctx.releaseDir,
         },
+        ...migrationSteps,
         {
           kind: 'ssh_exec',
           id: 'snapshot-current',
@@ -181,4 +193,56 @@ export class NextStandaloneStrategy implements DeployStrategy {
       ],
     };
   }
+}
+
+function buildPackageManagerProvisionSteps(packageManager?: ProjectSpec['packageManager']) {
+  const ensurePackageManager = buildEnsureNodePackageManagerCommand(packageManager);
+  if (!ensurePackageManager) return [] as DeployPlan['steps'];
+  return [
+    {
+      kind: 'ssh_exec' as const,
+      id: 'install-package-manager',
+      label: `Install ${packageManager} package manager`,
+      command: ensurePackageManager,
+    },
+  ] as DeployPlan['steps'];
+}
+
+function buildMigrationSteps(commands: string[], envFilePath: string | undefined, cwd: string) {
+  return commands.map((command, index) => ({
+    kind: 'ssh_exec' as const,
+    id: `migrate-${index + 1}`,
+    label: `Run migration: ${command}`,
+    command: withOptionalEnvFile(command, envFilePath),
+    cwd,
+  })) as DeployPlan['steps'];
+}
+
+function buildRuntimeProvisionSteps(server: ServerSpec, needsNginx: boolean) {
+  const steps: DeployPlan['steps'] = [];
+  const ensureNode = !server.hasNode ? buildEnsureNodeCommand(server) : null;
+  if (ensureNode) {
+    steps.push({
+      kind: 'ssh_exec',
+      id: 'install-node',
+      label: 'Install Node.js runtime',
+      command: ensureNode,
+      sudo: true,
+    });
+  }
+
+  if (needsNginx) {
+    const ensureNginx = !server.hasNginx ? buildEnsureNginxCommand(server) : null;
+    if (ensureNginx) {
+      steps.push({
+        kind: 'ssh_exec',
+        id: 'install-nginx',
+        label: 'Install Nginx',
+        command: ensureNginx,
+        sudo: true,
+      });
+    }
+  }
+
+  return steps;
 }

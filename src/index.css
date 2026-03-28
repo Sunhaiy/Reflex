@@ -143,6 +143,61 @@
   background-color: transparent !important;
 }
 
+.agent-terminal-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(8, 12, 17, 0.78), rgba(4, 6, 9, 0.96));
+}
+
+.agent-terminal-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 28px
+    );
+  opacity: 0.5;
+}
+
+.agent-terminal-shell::after {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 0 32px rgba(16, 185, 129, 0.05);
+}
+
+.agent-terminal-shell .xterm {
+  padding: 18px 20px 20px;
+}
+
+.agent-terminal-shell .xterm-cursor-layer .xterm-cursor {
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.3);
+}
+
+.agent-terminal-shell .xterm-rows {
+  font-variant-ligatures: contextual;
+}
+
+.agent-terminal-canvas {
+  position: relative;
+  z-index: 1;
+}
+
 /* Remove focus outlines on buttons globally */
 button:focus,
 button:focus-visible {
