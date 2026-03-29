@@ -109,6 +109,7 @@ function toolCallSummary(name: string, args: Record<string, unknown>): string {
     remote_list_directory: '检查远程目录',
     remote_read_file: '读取远程文件',
     remote_write_file: '写入远程文件',
+    remote_upload_file: '上传文件到远程',
     deploy_project: '自动部署项目',
   };
   const label = mapping[name] || name;
@@ -116,6 +117,8 @@ function toolCallSummary(name: string, args: Record<string, unknown>): string {
     ? args.command
     : typeof args.path === 'string'
       ? args.path
+      : typeof args.remotePath === 'string'
+        ? `${typeof args.localPath === 'string' ? args.localPath : 'local file'} -> ${args.remotePath}`
       : typeof args.projectRoot === 'string'
         ? args.projectRoot
         : '';

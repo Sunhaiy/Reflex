@@ -207,6 +207,22 @@ export function createAgentToolRegistry(
     {
       type: 'function' as const,
       function: {
+        name: 'remote_upload_file',
+        description: 'Upload a local file to the remote server over built-in SFTP. Use this for dist archives, build artifacts, binaries, images, or any non-text transfer. Do not fall back to scp, base64 chunking, python receivers, nc, or temporary upload servers when this tool can handle the transfer.',
+        parameters: {
+          type: 'object',
+          properties: {
+            localPath: { type: 'string', description: 'Absolute local file path.' },
+            remotePath: { type: 'string', description: 'Absolute remote destination file path.' },
+            createParentDirs: { type: 'boolean', description: 'Create remote parent directories first. Defaults to true.' },
+          },
+          required: ['localPath', 'remotePath'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
         name: 'deploy_project',
         description: 'Run the deterministic deployment engine for a local project path against the currently connected remote server.',
         parameters: {
@@ -343,6 +359,31 @@ export function createAgentToolRegistry(
             content: `Wrote ${targetPath}`,
             structured: { path: targetPath },
             scratchpadNote: `写入远程文件 ${targetPath}`,
+          };
+        }
+        case 'remote_upload_file': {
+          const localPath = normalizeLocalPath(requireString(args, 'localPath'));
+          const remotePath = requireString(args, 'remotePath');
+          const createParentDirs = args.createParentDirs !== false;
+          const stat = await fs.stat(localPath).catch(() => null);
+          if (!stat?.isFile()) {
+            throw new Error(`Local file does not exist: ${localPath}`);
+          }
+          if (createParentDirs) {
+            const parentDir = path.posix.dirname(remotePath.replace(/\\/g, '/'));
+            await sshMgr.exec(session.connectionId, `sh -lc ${shQuote(`mkdir -p ${shQuote(parentDir)}`)}`, 30000);
+          }
+          await sshMgr.uploadFile(session.connectionId, localPath, remotePath);
+          return {
+            ok: true,
+            displayCommand: `upload ${localPath} -> ${remotePath}`,
+            content: `Uploaded ${path.basename(localPath)} to ${remotePath}`,
+            structured: {
+              localPath,
+              remotePath,
+              size: stat.size,
+            },
+            scratchpadNote: `Uploaded file ${localPath} -> ${remotePath}`,
           };
         }
         case 'deploy_project': {

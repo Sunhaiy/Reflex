@@ -1,7 +1,7 @@
 {
   "name": "zangqing",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
