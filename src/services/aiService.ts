@@ -5,6 +5,36 @@ import { AIConfig, AICompletionRequest, AICompletionResponse, AI_PROVIDER_CONFIG
 class AIService {
     private config: AIConfig | null = null;
 
+    private async formatHttpError(response: { status: number; text(): Promise<string> }, fallbackPrefix = 'AI request failed'): Promise<Error> {
+        const rawText = await response.text();
+
+        try {
+            const parsed = JSON.parse(rawText);
+            const code = parsed?.error?.code;
+            const message = parsed?.error?.message;
+            const type = parsed?.error?.type;
+            const requestId = parsed?.error?.request_id || parsed?.request_id;
+
+            if (response.status === 429 || code === 'ServerOverloaded' || type === 'TooManyRequests') {
+                const detail = message || 'The AI service is currently overloaded.';
+                const suffix = requestId ? ` Request ID: ${requestId}` : '';
+                return new Error(`AI 服务当前繁忙，请稍后重试或切换模型。${detail}${suffix}`);
+            }
+
+            if (message) {
+                return new Error(`${fallbackPrefix}: ${message}`);
+            }
+        } catch {
+            // Ignore JSON parse errors and fall back to raw text.
+        }
+
+        if (response.status === 429) {
+            return new Error('AI 服务当前繁忙，请稍后重试或切换模型。');
+        }
+
+        return new Error(`${fallbackPrefix}: ${rawText}`);
+    }
+
     setConfig(config: AIConfig) {
         this.config = config;
     }
@@ -155,8 +185,7 @@ class AIService {
         });
 
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`AI request failed: ${error}`);
+            throw await this.formatHttpError(response);
         }
 
         const data = JSON.parse(await response.text());
@@ -231,8 +260,7 @@ class AIService {
         });
 
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`AI request failed: ${error}`);
+            throw await this.formatHttpError(response);
         }
 
         // For streaming, parse the full SSE body returned by proxyFetch
@@ -335,6 +363,31 @@ class AIService {
                     }
                 }
             } catch { }
+
+            try {
+                const parsed = JSON.parse(errorText);
+                const code = parsed?.error?.code;
+                const type = parsed?.error?.type;
+                const message = parsed?.error?.message;
+                const requestId = parsed?.error?.request_id || parsed?.request_id;
+
+                if (response.status === 429 || code === 'ServerOverloaded' || type === 'TooManyRequests') {
+                    const suffix = requestId ? ` Request ID: ${requestId}` : '';
+                    throw new Error(`AI 服务当前繁忙，请稍后重试或切换模型。${message || ''}${suffix}`.trim());
+                }
+
+                if (message) {
+                    throw new Error(`AI request failed: ${message}`);
+                }
+            } catch (parsedError) {
+                if (parsedError instanceof Error && parsedError.message !== errorText) {
+                    throw parsedError;
+                }
+            }
+
+            if (response.status === 429) {
+                throw new Error('AI 服务当前繁忙，请稍后重试或切换模型。');
+            }
 
             throw new Error(`AI request failed: ${errorText}`);
         }

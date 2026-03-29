@@ -76,7 +76,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     language: 'en',
     uiFontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-    terminalFontFamily: "'Inter', monospace",
+    terminalFontFamily: "'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
     fontSize: 14,
     lineHeight: 1.2,
     letterSpacing: 0,
@@ -326,7 +326,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         set({
             language: (savedLang as Language) || 'en',
             uiFontFamily: (savedUiFont as string) || "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-            terminalFontFamily: (savedTerminalFont as string) || (oldFontFamily as string) || "'Inter', monospace",
+            terminalFontFamily: (savedTerminalFont as string) || (oldFontFamily as string) || "'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
             fontSize: (savedFontSize as number) || 14,
             lineHeight: (savedLineHeight as number) || 1.2,
             letterSpacing: (savedLetterSpacing as number) || 0,

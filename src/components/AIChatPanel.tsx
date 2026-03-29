@@ -1,4 +1,4 @@
-// AIChatPanel - Agent mode chat interface
+﻿// AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
 import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Circle, Target, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { aiService } from '../services/aiService';
@@ -30,12 +30,12 @@ export interface AgentMessage {
 
 interface AIChatPanelProps {
     connectionId: string;
-    profileId: string;           // SSHConnection.id — for session binding
+    profileId: string;           // SSH connection id used for session binding
     host: string;                // displayed server hostname
     messages: AgentMessage[];
     onMessagesChange: (messages: AgentMessage[]) => void;
     onExecuteCommand: (command: string) => void;
-    sessionId: string;           // current session ID managed by parent
+    sessionId: string;           // current session id managed by parent
     onSaveComplete?: () => void; // notifies sidebar to refresh
     className?: string;
 }
@@ -65,8 +65,8 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const [agentModel, setAgentModel] = useState('');         // '' = use profile's default model
     const [agentProfileId, setAgentProfileId] = useState(''); // '' = use active profile
     const [modelInput, setModelInput] = useState('');          // text field in picker
-    // ── Plan Mode state ───────────────────────────────────────────────────────
-    const planMode = true; // 计划模式始终开启
+    // Plan mode state
+    const planMode = true; // Plan mode is always enabled in agent workspace
     const [planState, setPlanState] = useState<PlanState | null>(null);
     const [contextWindow, setContextWindow] = useState<{ promptTokens: number; limitTokens: number; percentUsed: number; compressionCount: number; autoCompressed: boolean; summaryChars: number; } | null>(null);
     const [planStatus, setPlanStatus] = useState<'idle' | 'generating' | 'executing' | 'done' | 'stopped' | 'paused' | 'waiting_approval'>('idle');
@@ -158,7 +158,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         isLoadingRef.current = false;
     }, [sessionId]);
 
-    // ── Auto-save session to store (debounced 800ms) ──────────────────────────
+    // 鈹€鈹€ Auto-save session to store (debounced 800ms) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
     useEffect(() => {
         if (messages.length === 0) return;
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -168,7 +168,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             // Auto-generate title from last user message (most recent topic)
             const lastUser = [...messages].reverse().find(m => m.role === 'user');
             const title = lastUser
-                ? lastUser.content.replace(/\s+/g, ' ').slice(0, 40) + (lastUser.content.length > 40 ? '…' : '')
+                ? lastUser.content.replace(/\s+/g, ' ').slice(0, 40) + (lastUser.content.length > 40 ? '...' : '')
                 : t('agent.newSession');
             const session = {
                 id: sid,
@@ -273,7 +273,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 if (attempt === 1) {
-                    // Show command in terminal display (NOT PTY stdin — no pager, no double-exec)
+                    // Show command in terminal display (NOT PTY stdin 鈥?no pager, no double-exec)
                     eWindow.electron.terminalInject?.(connectionId, `\r\n\x1b[36;2m[Agent] $ ${command}\x1b[0m\r\n`);
                 }
                 // Suppress pager programs so output always returns cleanly
@@ -310,7 +310,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             );
                         }
                     } catch (_reconnErr) {
-                        // reconnect threw — continue anyway, sshExec will fail again if truly down
+                        // reconnect threw 鈥?continue anyway, sshExec will fail again if truly down
                     }
                     // Re-show the command indicator for next attempt
                     eWindow.electron.terminalInject?.(connectionId,
@@ -359,7 +359,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         const chatMsgs: any[] = [
             { role: 'system', content: sysPrompt },
         ];
-        // Apply sliding window — take last CONTEXT_WINDOW messages
+        // Apply sliding window 鈥?take last CONTEXT_WINDOW messages
         const windowed = msgs.length > CONTEXT_WINDOW ? msgs.slice(-CONTEXT_WINDOW) : msgs;
         for (const m of windowed) {
             if (m.role === 'user') {
@@ -419,7 +419,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             if (msg.role === 'assistant' && msg.tool_calls) {
                 const hasAllResponses = msg.tool_calls.every((tc: any) => allToolResponseIds.has(tc.id));
                 if (!hasAllResponses) {
-                    // Strip tool_calls — treat as plain text message
+                    // Strip tool_calls 鈥?treat as plain text message
                     const { tool_calls, ...rest } = msg;
                     return { ...rest, content: rest.content || '(command pending)' };
                 }
@@ -432,7 +432,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     const runAgentLoop = async (currentMessages: AgentMessage[]) => {
         let loopMessages = [...currentMessages];
 
-        // 首次运行时探针服务器环境（缓存，不重复请求）
+        // 棣栨杩愯鏃舵帰閽堟湇鍔″櫒鐜锛堢紦瀛橈紝涓嶉噸澶嶈姹傦級
         if (!envContextRef.current) {
             try {
                 const r = await execCommand(
@@ -473,12 +473,12 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 });
 
                 // Remove thinking indicator
-                // Case 1: AI returned text (no tool call) — done
+                // Case 1: AI returned text (no tool call) 鈥?done
                 if (!response.toolCalls || response.toolCalls.length === 0) {
                     const assistantMsg: AgentMessage = {
                         id: `asst-${Date.now()}`,
                         role: 'assistant',
-                        content: response.content || '（无回复）',
+                        content: response.content || '(no response)',
                         reasoning: response.reasoningContent || undefined,
                         timestamp: Date.now(),
                         usage: response.usage,
@@ -535,13 +535,13 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
                 // Check safety mode (only for execute_ssh_command; file tools are always auto)
                 if (toolName === 'execute_ssh_command' && needsApproval(execCmd)) {
-                    // Queue for approval — pause the loop
+                    // Queue for approval 鈥?pause the loop
                     setPendingCommands(prev => [...prev, {
                         cmd: execCmd,
                         msgId: toolCallMsgId,
                         aiMessages: loopMessages, // snapshot for resuming
                     }]);
-                    break; // Loop pauses — will resume when user approves
+                    break; // Loop pauses 鈥?will resume when user approves
                 }
 
                 // Execute immediately
@@ -572,14 +572,14 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 loopMessages = [...loopMessages, toolResultMsg];
                 onMessagesChange(loopMessages);
 
-                // Continue loop — AI will analyze the result
+                // Continue loop 鈥?AI will analyze the result
                 await new Promise(r => setTimeout(r, 200)); // small delay
 
             } catch (err: any) {
                 const errorMsg: AgentMessage = {
                     id: `error-${Date.now()}`,
                     role: 'assistant',
-                    content: `❌ 错误: ${err.message}`,
+                    content: `错误: ${err.message}`,
                     timestamp: Date.now(),
                     isError: true,
                 };
@@ -596,7 +596,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         isLoadingRef.current = true;
 
         try {
-            // Immediately update the current UI messages to show "已执行" status
+            // Immediately update the current UI messages to show executed status
             const updatedCurrentMessages = latestMessagesRef.current.map(m =>
                 m.id === msgId
                     ? { ...m, toolCall: { ...m.toolCall!, status: 'executed' as const } }
@@ -631,12 +631,12 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             await runAgentLoop(loopMessages);
         } catch (err: any) {
             const errorMsg: AgentMessage = {
-                id: `error-${Date.now()}`,
-                role: 'assistant',
-                content: `❌ 执行失败: ${err.message}`,
-                timestamp: Date.now(),
-                isError: true,
-            };
+                    id: `error-${Date.now()}`,
+                    role: 'assistant',
+                    content: `执行失败: ${err.message}`,
+                    timestamp: Date.now(),
+                    isError: true,
+                };
             onMessagesChange([...latestMessagesRef.current, errorMsg]);
         } finally {
             setIsLoading(false);
@@ -644,7 +644,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
         }
     };
 
-    // ── Plan Mode v2: Planner / Executor / Assessor / Replanner ─────────────
+    // 鈹€鈹€ Plan Mode v2: Planner / Executor / Assessor / Replanner 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
     const getSelectedProfile = () => aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
 
     const handleSend = async () => {
@@ -654,7 +654,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             const errorMsg: AgentMessage = {
                 id: Date.now().toString(),
                 role: 'assistant',
-                content: '⚠️ 请先在设置中配置 AI API Key',
+                content: '请先在设置中配置 AI API Key',
                 timestamp: Date.now(),
             };
             onMessagesChange([...messages, errorMsg]);
@@ -752,16 +752,16 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
     const latestGoal = [...messages].reverse().find(message => message.role === 'user')?.content || '';
     const starterPrompts = language === 'zh'
-        ? ['部署我桌面上的项目到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清楚并修复']
+        ? ['把我桌面上的项目部署到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清并修复']
         : ['Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];
-    const workspaceTitle = language === 'zh' ? 'AI 接管对话区' : 'AI Conversation Workspace';
+    const workspaceTitle = language === 'zh' ? 'AI 对话工作区' : 'AI Conversation Workspace';
     const workspaceSubtitle = host
-        ? (language === 'zh' ? `当前目标服务器 ${host}` : `Working against ${host}`)
+        ? (language === 'zh' ? `当前目标服务器：${host}` : `Working against ${host}`)
         : (language === 'zh' ? '直接告诉 AI 目标，它会自己继续执行。' : 'Give the AI a goal and let it continue the workflow.');
     const currentModeLabel = agentControlMode === 'auto'
         ? (language === 'zh' ? '完全 AI 控制' : 'Full AI Control')
         : agentControlMode === 'approval'
-            ? (language === 'zh' ? '审批模式' : 'Approval Mode')
+            ? (language === 'zh' ? '批准模式' : 'Approval Mode')
             : (language === 'zh' ? '白名单模式' : 'Whitelist Mode');
     const currentModelLabel = (() => {
         const profile = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
@@ -777,7 +777,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             : planStatus === 'paused'
                 ? (language === 'zh' ? '等待继续' : 'Paused')
                 : planStatus === 'waiting_approval'
-                    ? (language === 'zh' ? '等待审批' : 'Awaiting Approval')
+                    ? (language === 'zh' ? '等待批准' : 'Awaiting Approval')
                     : planStatus === 'done'
                         ? (language === 'zh' ? '执行完成' : 'Completed')
                         : planStatus === 'stopped'
@@ -785,12 +785,12 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             : (language === 'zh' ? '待命中' : 'Standing By');
 
     return (
-        <div className={cn("flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.05),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_22%)]", className)}>
-            <div className="shrink-0 px-4 pt-4">
-                <div className="mx-auto max-w-4xl overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+        <div className={cn("flex h-full flex-col overflow-hidden bg-background/40", className)}>
+            <div className="shrink-0 px-5 pt-5">
+                <div className="mx-auto max-w-5xl overflow-hidden rounded-[26px] border border-border/60 bg-card/90 shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
                     <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary/90">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 py-1 text-[11px] font-medium text-foreground/75">
                                 <Bot className="h-3.5 w-3.5" />
                                 {workspaceTitle}
                             </div>
@@ -802,24 +802,24 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2 lg:max-w-[44%] lg:justify-end">
-                            <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-muted-foreground/75">
+                            <span className="rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
                                 {currentModeLabel}
                             </span>
-                            <span className="rounded-full border border-white/8 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-muted-foreground/75">
+                            <span className="rounded-full border border-border/70 bg-background/90 px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
                                 {currentModelLabel}
                             </span>
-                            <span className="rounded-full border border-primary/15 bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary/85">
+                            <span className="rounded-full border border-border/70 bg-accent/45 px-2.5 py-1 text-[10px] font-medium text-foreground/80">
                                 {runStatusLabel}
                             </span>
                         </div>
                     </div>
                     {contextWindow && (
-                        <div className="border-t border-white/8 bg-black/10 px-4 py-3">
+                        <div className="border-t border-border/60 bg-muted/30 px-4 py-3">
                             <div className="flex items-center justify-between text-[11px] text-muted-foreground/72">
                                 <span>{contextWindowTitle}</span>
                                 <span>{Math.round(contextWindow.percentUsed)}% {contextWindowUsed}</span>
                             </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/8">
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
                                 <div
                                     className={cn(
                                         "h-full transition-all duration-500",
@@ -839,20 +839,20 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 pt-4">
-                <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-5">
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 pt-4">
+                <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-5">
                 {messages.length === 0 && (
-                    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] px-6 py-8 text-muted-foreground/60 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-primary/18 bg-primary/10">
-                            <Bot className="w-6 h-6 text-primary/60" />
+                    <div className="flex min-h-[340px] flex-col items-center justify-center rounded-[28px] border border-border/60 bg-card px-6 py-8 text-muted-foreground shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-3xl border border-border/70 bg-background/90">
+                            <Bot className="w-6 h-6 text-foreground/55" />
                         </div>
-                        <p className="text-sm">输入指令，AI 将自动操作服务器</p>
+                        <p className="text-sm">{language === 'zh' ? '输入一个目标，AI 会继续接手执行。' : 'Give one goal and the AI will keep driving it.'}</p>
                         <div className="mt-4 flex max-w-2xl flex-wrap justify-center gap-3">
-                            {['查看磁盘空间', '列出运行中的服务', '查看系统负载'].map(hint => (
+                            {starterPrompts.map(hint => (
                                 <button
                                     key={hint}
                                     onClick={() => setInput(hint)}
-                                    className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-left text-sm text-muted-foreground/82 transition-all hover:border-primary/20 hover:bg-primary/8 hover:text-foreground"
+                                    className="rounded-2xl border border-border/60 bg-background/90 px-4 py-3 text-left text-sm text-muted-foreground transition-all hover:border-border hover:bg-accent/55 hover:text-foreground"
                                 >
                                     {hint}
                                 </button>
@@ -866,12 +866,12 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 ))}
 
                 {isLoading && messages[messages.length - 1]?.content === '' && (
-                    <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                    <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
                         {/* Terminal blink cursor */}
                         <span
                             className="text-primary font-mono text-base leading-none"
                             style={{ animation: 'agentCursorBlink 0.8s step-end infinite' }}
-                        >█</span>
+                        >|</span>
                         {/* Shimmer skeleton bar */}
                         <div className="relative flex-1 h-2.5 rounded-full bg-muted/35 overflow-hidden max-w-[160px]">
                             <div
@@ -890,20 +890,20 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                 </div>
             </div>
 
-            {/* ── Plan Card (plan mode v2) ─────────────────────────────────── */}
+            {/* 鈹€鈹€ Plan Card (plan mode v2) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */}
             {planMode && planStatus !== 'idle' && (
-                <div className="mx-auto w-full max-w-4xl px-4 pb-3">
+                <div className="mx-auto w-full max-w-5xl px-5 pb-3">
                     <div
-                        className="overflow-hidden rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
+                        className="overflow-hidden rounded-[22px] border border-border/60 bg-card shadow-[0_14px_32px_rgba(15,23,42,0.06)]"
                         style={{ animation: 'agentSlideInUp 0.22s ease-out' }}
                     >
-                        {/* ── Header bar ── */}
+                        {/* 鈹€鈹€ Header bar 鈹€鈹€ */}
                         <div className={cn(
-                            "flex cursor-pointer select-none items-center gap-2 border-b border-white/8 px-4 py-3",
-                            planStatus === 'paused' ? "bg-yellow-500/8" : planStatus === 'waiting_approval' ? "bg-yellow-500/12" : "bg-white/[0.03]",
+                            "flex cursor-pointer select-none items-center gap-2 border-b border-border/60 px-4 py-3",
+                            planStatus === 'paused' ? "bg-yellow-500/8" : planStatus === 'waiting_approval' ? "bg-yellow-500/12" : "bg-muted/30",
                         )} onClick={() => setPlanCollapsed(v => !v)}>
                             <ListChecks className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
-                            <span className="text-[11px] font-semibold text-foreground/60 tracking-wide">执行计划</span>
+                                    <span className="text-[11px] font-semibold text-foreground/60 tracking-wide">执行计划</span>
                             {planStatus === 'generating' && (
                                 <Loader2 className="w-3 h-3 text-primary/50 animate-spin ml-auto" />
                             )}
@@ -918,21 +918,21 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                 <CheckCircle2 className="w-3.5 h-3.5 text-green-400 ml-auto" />
                             )}
                             {planStatus === 'stopped' && (
-                                <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground/50">
-                                    <Square className="w-2.5 h-2.5" />
-                                    已停止
-                                </span>
+                                            <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                                                <Square className="w-2.5 h-2.5" />
+                                                已停止
+                                            </span>
                             )}
                             {planStatus === 'paused' && (
                                 <span className="ml-auto flex items-center gap-1 text-[10px] text-yellow-500/80">
                                     <span className="w-1.5 h-1.5 rounded-full bg-yellow-500/70 animate-pulse" />
-                                    等待您的回复
+                                            等待你的回复
                                 </span>
                             )}
                             {planStatus === 'waiting_approval' && (
                                 <span className="ml-auto flex items-center gap-1.5 text-[10px] text-yellow-500 font-medium">
                                     <AlertTriangle className="w-3.5 h-3.5 animate-pulse" />
-                                    需要您审批危险操作
+                                    需要你批准高风险操作
                                 </span>
                             )}
                             <span className="shrink-0 ml-1 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors">
@@ -943,9 +943,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </span>
                         </div>
 
-                        {/* ── Body (collapsible) ── */}
+                        {/* 鈹€鈹€ Body (collapsible) 鈹€鈹€ */}
                         {!planCollapsed && (<>
-                        {/* ── Generating skeleton ── */}
+                        {/* 鈹€鈹€ Generating skeleton 鈹€鈹€ */}
                         {planStatus === 'generating' && !planState && (
                             <div className="px-3 py-2.5 space-y-1.5">
                                 {[80, 60, 70].map((w, i) => (
@@ -959,7 +959,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </div>
                         )}
 
-                        {/* ── Goal ── */}
+                        {/* 鈹€鈹€ Goal 鈹€鈹€ */}
                         {contextWindow && (
                             <div className="px-3 py-2 border-b border-border/10 bg-muted/10">
                                 <div className="flex items-center justify-between text-[10px] text-muted-foreground/70">
@@ -995,14 +995,14 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </div>
                         )}
 
-                        {/* ── Steps list ── */}
+                        {/* 鈹€鈹€ Steps list 鈹€鈹€ */}
                         {planState && (
                             <div className="divide-y divide-border/10">
                                 {planState.plan.map((step) => {
                                     const isCompleted = step.status === 'completed';
                                     const isFailed = step.status === 'failed';
                                     const isSkipped = step.status === 'skipped';
-                                    // in_progress but stopped → treat visually as interrupted
+                                    // in_progress but stopped 鈫?treat visually as interrupted
                                     const isStopped = step.status === 'in_progress' && planStatus === 'stopped';
                                     const isPaused = step.status === 'in_progress' && planStatus === 'paused';
                                     const isWaitingApproval = step.status === 'in_progress' && planStatus === 'waiting_approval';
@@ -1065,7 +1065,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </div>
                         )}
 
-                        {/* ── Scratchpad (accumulated knowledge) ── */}
+                        {/* 鈹€鈹€ Scratchpad (accumulated knowledge) 鈹€鈹€ */}
                         {planState?.scratchpad && (
                             <div className="flex items-start gap-1.5 px-3 py-2 border-t border-border/10">
                                 <Brain className="w-2.5 h-2.5 text-muted-foreground/30 flex-shrink-0 mt-0.5" />
@@ -1073,23 +1073,23 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             </div>
                         )}
 
-                        {/* ── Paused: reply hint ── */}
+                        {/* 鈹€鈹€ Paused: reply hint 鈹€鈹€ */}
                         {planStatus === 'paused' && (
                             <div className="flex items-center gap-1.5 px-3 py-2 border-t border-yellow-500/15 bg-yellow-500/5">
                                 <ChevronRight className="w-3 h-3 text-yellow-500/60 flex-shrink-0" />
-                                <span className="text-[10px] text-yellow-500/70">在下方输入框回复，计划将自动继续</span>
+                                    <span className="text-[10px] text-yellow-500/70">在下方输入框回复后，计划会自动继续。</span>
                             </div>
                         )}
 
-                        {/* ── Waiting approval: confirm hint ── */}
+                        {/* 鈹€鈹€ Waiting approval: confirm hint 鈹€鈹€ */}
                         {planStatus === 'waiting_approval' && (
                             <div className="flex items-center gap-1.5 px-3 py-2 border-t border-yellow-500/20 bg-yellow-500/8">
                                 <ShieldAlert className="w-3 h-3 text-yellow-500/70 flex-shrink-0" />
-                                <span className="text-[10px] text-yellow-500/80">回复 "确认执行" 继续，或任意其他内容跳过此步骤</span>
+                                <span className="text-[10px] text-yellow-500/80">回复“确认执行”继续，或输入其他内容跳过这一步。</span>
                             </div>
                         )}
 
-                        {/* ── Progress bar (executing only) ── */}
+                        {/* 鈹€鈹€ Progress bar (executing only) 鈹€鈹€ */}
                         {planState && (planStatus === 'executing' || planStatus === 'stopped') && (
                             <div className="h-0.5 bg-muted/20 overflow-hidden">
                                 <div
@@ -1110,8 +1110,10 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
 
             {/* Pending approval bar */}
             {pendingCommands.length > 0 && (
-                <div className="mx-auto mb-3 w-full max-w-4xl rounded-[20px] border border-yellow-500/20 bg-yellow-500/6 px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.14)]">
-                    <div className="text-[11px] font-medium text-yellow-600 dark:text-yellow-400 mb-1.5">⏳ {pendingCommands.length} 个命令等待批准</div>
+                <div className="mx-auto mb-3 w-full max-w-5xl rounded-[20px] border border-yellow-500/20 bg-card px-4 py-3 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+                    <div className="mb-1.5 text-[11px] font-medium text-yellow-600 dark:text-yellow-400">
+                        {pendingCommands.length} 个命令等待批准
+                    </div>
                     <div className="space-y-1">
                         {pendingCommands.map(({ cmd, msgId, aiMessages }, idx) => (
                             <div key={msgId} className="flex items-center gap-2 text-xs">
@@ -1179,15 +1181,15 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
             )}
 
             {/* Input Area */}
-            <div className="shrink-0 border-t border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.08))] px-4 pb-4 pt-3">
-                <div className="mx-auto max-w-4xl rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-                {/* Mode & Model selector bar — horizontal */}
+            <div className="shrink-0 border-t border-border/60 bg-background/72 px-5 pb-5 pt-4">
+                <div className="mx-auto max-w-5xl rounded-[26px] border border-border/60 bg-card px-4 py-4 shadow-[0_16px_36px_rgba(15,23,42,0.08)]">
+                {/* Mode & Model selector bar 鈥?horizontal */}
                 <div className="mb-3 flex items-center gap-2">
                     {/* Control Mode Selector */}
                     <div className="relative" ref={modeMenuRef}>
                         <button
                             onClick={() => { setShowModeMenu(!showModeMenu); setShowModelMenu(false); }}
-                            className="flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/8"
+                            className="flex items-center gap-1.5 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent/55"
                         >
                             {agentControlMode === 'auto' && <><Zap className="w-3 h-3 text-green-500" />完全 AI 控制</>}
                             {agentControlMode === 'approval' && <><Shield className="w-3 h-3 text-yellow-500" />批准模式</>}
@@ -1198,7 +1200,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                             <div className="absolute bottom-full left-0 mb-1 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 min-w-[200px]">
                                 {[
                                     { id: 'auto' as const, icon: <Zap className="w-3.5 h-3.5 text-green-500" />, label: '完全 AI 控制', desc: '所有命令自动执行' },
-                                    { id: 'approval' as const, icon: <Shield className="w-3.5 h-3.5 text-yellow-500" />, label: '批准模式', desc: '每条命令需要手动批准' },
+                                    { id: 'approval' as const, icon: <Shield className="w-3.5 h-3.5 text-yellow-500" />, label: '批准模式', desc: '每条命令都需要手动批准' },
                                     { id: 'whitelist' as const, icon: <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />, label: '白名单模式', desc: '白名单内命令自动执行' },
                                 ].map(opt => (
                                     <button
@@ -1221,11 +1223,11 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         )}
                     </div>
 
-                    {/* ── Model picker chip ── */}
+                    {/* 鈹€鈹€ Model picker chip 鈹€鈹€ */}
                     <div className="relative" ref={modelMenuRef}>
                         <button
                             onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }}
-                            className="flex max-w-[220px] items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/20 hover:bg-primary/8"
+                            className="flex max-w-[220px] items-center gap-1 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent/55"
                             title={agentModel || 'Default model from settings'}
                         >
                             <Cpu className="w-3 h-3 flex-shrink-0" />
@@ -1254,7 +1256,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                                 e.preventDefault();
                                             }
                                         }}
-                                        placeholder="自定义模型名称… (Enter 确认)"
+                                        placeholder="自定义模型名称（Enter 确认）"
                                         className="w-full px-2 py-1.5 text-[11px] bg-secondary/50 rounded border border-border/40 focus:border-primary/50 outline-none"
                                         autoFocus
                                     />
@@ -1319,16 +1321,16 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="告诉 AI 你想做什么..."
+                        placeholder={language === 'zh' ? '告诉 AI 你想完成什么…' : 'Tell the AI what you want to get done…'}
                         rows={1}
-                        className="w-full resize-none overflow-hidden rounded-[20px] border border-white/8 bg-black/15 px-4 py-3 pr-12 text-sm transition-all placeholder:text-muted-foreground/45 hover:border-primary/15 hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full resize-none overflow-hidden rounded-[22px] border border-border/70 bg-background/92 px-4 py-3 pr-12 text-sm transition-all placeholder:text-muted-foreground/50 hover:border-border hover:bg-card focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isLoading}
                     />
                     {isLoading ? (
                         <button
                             onClick={handleStop}
                             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-2xl border border-destructive/20 bg-destructive/15 p-2 text-destructive transition-all duration-150 hover:bg-destructive/30 hover:scale-105 active:scale-95"
-                            title="停止生成"
+                            title={language === 'zh' ? '停止生成' : 'Stop'}
                             style={{ transformOrigin: 'center' }}
                         >
                             <Square className="w-4 h-4" />
@@ -1341,7 +1343,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                                 "absolute right-2 top-1/2 -translate-y-1/2 rounded-2xl border p-2 transition-all",
                                 input.trim()
                                     ? "border-primary/25 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_10px_24px_rgba(16,185,129,0.18)]"
-                                    : "border-white/8 bg-white/[0.04] text-muted-foreground cursor-not-allowed"
+                                    : "border-border/70 bg-muted/55 text-muted-foreground cursor-not-allowed"
                             )}
                             title={aiSendShortcut === 'ctrlEnter' ? '发送 (Ctrl+Enter)' : '发送 (Enter)'}
                         >
@@ -1350,7 +1352,9 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
                     )}
                 </div>
                 <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-muted-foreground/52">
-                    {aiSendShortcut === 'ctrlEnter' ? 'Ctrl+Enter 发送 · Shift+Enter 换行' : 'Enter 发送 · Shift+Enter 换行'}
+                    {aiSendShortcut === 'ctrlEnter'
+                        ? (language === 'zh' ? 'Ctrl+Enter 发送 · Shift+Enter 换行' : 'Ctrl+Enter to send · Shift+Enter for newline')
+                        : (language === 'zh' ? 'Enter 发送 · Shift+Enter 换行' : 'Enter to send · Shift+Enter for newline')}
                 </div>
                 </div>
             </div>
@@ -1358,7 +1362,7 @@ export function AIChatPanel({ connectionId, profileId, host, messages, onMessage
     );
 }
 
-// Message Bubble Component — memo wrapper added below
+// Message Bubble Component 鈥?memo wrapper added below
 function MessageBubble({ message }: { message: AgentMessage }) {
     const [expanded, setExpanded] = useState(true);
 
@@ -1386,7 +1390,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
             local_exec: { accent: isPending ? '#eab308' : '#22c55e', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(34,197,94,0.06)', label: isPending ? '执行本地命令' : '本地命令完成' },
             remote_exec: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '执行远程命令' : '远程命令完成' },
             deploy_project: { accent: isPending ? '#eab308' : '#8b5cf6', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(139,92,246,0.08)', label: isPending ? '自动部署中' : '部署完成' },
-            execute_ssh_command: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '待批准' : '已执行' },
+            execute_ssh_command: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '等待批准' : '已执行' },
         };
         const colors = colorMap[toolCall.name as keyof typeof colorMap] || colorMap.execute_ssh_command;
         const statusLabel = isFileOp ? (isPending ? '执行中' : '完成') : colors.label;
@@ -1411,17 +1415,17 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 {/* If the assistant included text explanation, show it above */}
                 {content && content.trim() && (
                     <div className="flex gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.04]">
+                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card shadow-sm">
                             <Bot className="w-3.5 h-3.5 text-muted-foreground" />
                         </div>
-                        <div className="max-w-[82%] rounded-[22px] rounded-tl-md border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] px-4 py-3 text-sm leading-relaxed text-foreground shadow-[0_14px_34px_rgba(0,0,0,0.14)]">
+                        <div className="max-w-[82%] rounded-[22px] rounded-tl-md border border-border/60 bg-card px-4 py-3 text-sm leading-relaxed text-foreground shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                             <MessageContent content={content} isUser={false} />
                         </div>
                     </div>
                 )}
-                {/* ── Tool block with accent strip ── */}
+                {/* 鈹€鈹€ Tool block with accent strip 鈹€鈹€ */}
                 <div
-                    className="mx-1 overflow-hidden rounded-[22px] border bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.015))] shadow-[0_14px_34px_rgba(0,0,0,0.12)] transition-all duration-300"
+                    className="mx-1 overflow-hidden rounded-[22px] border border-border/60 bg-card shadow-[0_12px_28px_rgba(15,23,42,0.06)] transition-all duration-300"
                     style={{
                         borderColor: `${colors.accent}20`,
                     }}
@@ -1429,7 +1433,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     {/* Command header with left accent strip */}
                     <button
                         onClick={() => setExpanded(!expanded)}
-                        className="flex w-full items-center gap-2 px-4 py-3 text-xs transition-colors hover:bg-white/[0.03]"
+                        className="flex w-full items-center gap-2 px-4 py-3 text-xs transition-colors hover:bg-accent/45"
                         style={{ background: `linear-gradient(90deg, ${colors.accent}08, transparent)` }}
                     >
                         {/* Left accent strip */}
@@ -1454,7 +1458,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     </button>
                     {/* Output area */}
                     {expanded && message.role === 'tool' && message.content && (
-                        <div className="border-t bg-muted/50" style={{ borderColor: `${colors.accent}15` }}>
+                        <div className="border-t bg-muted/30" style={{ borderColor: `${colors.accent}15` }}>
                             <pre className="px-3 py-2 text-[11px] text-muted-foreground/70 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed scrollbar-hide">
                                 {message.content}
                             </pre>
@@ -1511,7 +1515,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     "mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl border",
                     isUser
                         ? "border-primary/20 bg-gradient-to-br from-primary/30 to-primary/10"
-                        : "border-white/8 bg-gradient-to-br from-white/[0.06] to-white/[0.02]"
+                        : "border-border/60 bg-card shadow-sm"
                 )}>
                     {isUser ? (
                         <User className="w-3.5 h-3.5 text-primary" />
@@ -1523,10 +1527,10 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 {/* Content */}
                 <div
                     className={cn(
-                        "max-w-[82%] rounded-[22px] px-4 py-3 text-sm leading-relaxed shadow-[0_14px_34px_rgba(0,0,0,0.14)]",
+                        "max-w-[82%] rounded-[22px] px-4 py-3 text-sm leading-relaxed shadow-[0_12px_28px_rgba(15,23,42,0.06)]",
                         isUser
                             ? "rounded-tr-md border border-primary/20 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground"
-                            : "rounded-tl-md border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] text-foreground backdrop-blur-sm",
+                            : "rounded-tl-md border border-border/60 bg-card text-foreground",
                         message.isError && "border-red-500/30 bg-red-500/10 shadow-[0_14px_34px_rgba(127,29,29,0.18)]"
                     )}
                     style={message.isError ? {
@@ -1538,9 +1542,9 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                             {/* Shimmer skeleton rows */}
                             <div className="space-y-3">
                                 {[90, 70, 50].map((w, i) => (
-                                    <div key={i} className="relative h-3 rounded-full overflow-hidden" style={{ width: `${w}%`, background: 'rgba(255,255,255,0.1)' }}>
+                                    <div key={i} className="relative h-3 rounded-full overflow-hidden" style={{ width: `${w}%`, background: 'hsl(var(--muted) / 0.65)' }}>
                                         <div className="absolute inset-0 rounded-full" style={{
-                                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.30) 45%, transparent 100%)',
+                                            background: 'linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.22) 45%, transparent 100%)',
                                             animation: `agentShimmer 1.4s ease-in-out ${i * 0.18}s infinite`
                                         }} />
                                     </div>
@@ -1557,8 +1561,8 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     <Cpu className="w-2.5 h-2.5" />
                     {message.modelUsed && <span className="font-mono opacity-70">{message.modelUsed.split('/').pop()}</span>}
                     <span className="opacity-50">·</span>
-                    <span title="Prompt tokens">↑{tokenInfo.promptTokens.toLocaleString()}</span>
-                    <span title="Completion tokens">↓{tokenInfo.completionTokens.toLocaleString()}</span>
+                    <span title="Prompt tokens">↑ {tokenInfo.promptTokens.toLocaleString()}</span>
+                    <span title="Completion tokens">↓ {tokenInfo.completionTokens.toLocaleString()}</span>
                     <span className="opacity-50">=</span>
                     <span title="Total tokens" className="font-medium opacity-60">{tokenInfo.totalTokens.toLocaleString()} tok</span>
                 </div>
@@ -1566,7 +1570,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
         </div>
     );
 }
-// Memoized wrapper — skips re-render when chatWidth changes during drag resize
+// Memoized wrapper 鈥?skips re-render when chatWidth changes during drag resize
 const MessageBubbleMemo = memo(MessageBubble);
 // Simple markdown-ish content renderer
 function MessageContent({ content, isUser, isStreaming }: { content: string; isUser: boolean; isStreaming?: boolean }) {
@@ -1585,10 +1589,10 @@ function MessageContent({ content, isUser, isStreaming }: { content: string; isU
                         const code = match[2].trim();
                         return (
                             <div key={i} className="rounded-lg overflow-hidden my-2">
-                                <div className="flex items-center justify-between px-3 py-1 bg-black/20 text-[10px] text-muted-foreground">
+                                <div className="flex items-center justify-between px-3 py-1 bg-muted/55 text-[10px] text-muted-foreground">
                                     <span>{lang}</span>
                                 </div>
-                                <pre className="px-3 py-2 bg-black/30 text-xs font-mono overflow-x-auto">
+                                <pre className="px-3 py-2 bg-background/80 text-xs font-mono overflow-x-auto">
                                     <code>{code}</code>
                                 </pre>
                             </div>
@@ -1625,7 +1629,7 @@ function renderInlineMarkdown(text: string) {
         return codeParts.map((cp, j) => {
             if (cp.startsWith('`') && cp.endsWith('`')) {
                 return (
-                    <code key={`${i}-${j}`} className="px-1 py-0.5 rounded bg-black/20 text-[12px] font-mono">
+                    <code key={`${i}-${j}`} className="px-1 py-0.5 rounded bg-muted/65 text-[12px] font-mono">
                         {cp.slice(1, -1)}
                     </code>
                 );
@@ -1634,5 +1638,10 @@ function renderInlineMarkdown(text: string) {
         });
     });
 }
+
+
+
+
+
 
 
