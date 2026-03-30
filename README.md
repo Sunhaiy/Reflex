@@ -1,8 +1,8 @@
 <div align="center">
 
-# Zangqing
+# 🚀 Zangqing - All you expect from a modern SSH client
 
-**A modern SSH workspace for terminal access, AI-assisted operations, Docker management, SFTP, and server monitoring.**
+*Everything that makes SSH simple.*
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md)
 
@@ -15,15 +15,25 @@
 
 ## Preview
 
+### Dark Theme
+
 ![Main workspace](./b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
 ![Agent deployment workspace](./58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
 ![Agent conversation and execution flow](./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
-## Overview
+### Light Theme
 
-Zangqing is a desktop SSH client built around a practical operations workflow. It combines terminal access, file transfer, Docker controls, system monitoring, and an AI workspace in one interface so we can move from inspection to deployment without switching tools.
+![Main workspace light theme](./1e403064-c046-4948-b229-202b99ed692a.png)
+
+![Agent deployment workspace light theme](./1e44b065-2b41-4316-8d5f-157bf1323034.png)
+
+![Agent conversation and execution flow light theme](./22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
+
+## Introduction
+
+**Zangqing** is a next-generation, modern, and lightweight SSH client engineered for absolute efficiency. Beyond standard terminal emulation, it acts as your ultimate developer workbench by integrating AI-assisted debugging, a native Docker manager, hardware monitoring, and seamless SFTP file management into one beautiful, cross-platform desktop application.
 
 ## Highlights
 

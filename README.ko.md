@@ -1,8 +1,8 @@
 <div align="center">
 
-# Zangqing
+# 🚀 Zangqing (藏青) - 모던 SSH 클라이언트에서 기대하는 모든 것
 
-**SSH 터미널, AI 작업 공간, Docker 관리, SFTP, 서버 모니터링을 하나로 묶은 현대적인 데스크톱 클라이언트입니다.**
+*SSH 연결을 단순하게 만드는 모든 것.*
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md)
 
@@ -15,15 +15,25 @@
 
 ## 미리보기
 
+### 다크 테마
+
 ![Main workspace](./b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
 ![Agent deployment workspace](./58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
 ![Agent conversation and execution flow](./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
+### 라이트 테마
+
+![Main workspace light theme](./1e403064-c046-4948-b229-202b99ed692a.png)
+
+![Agent deployment workspace light theme](./1e44b065-2b41-4316-8d5f-157bf1323034.png)
+
+![Agent conversation and execution flow light theme](./22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
+
 ## 소개
 
-Zangqing은 실제 운영 흐름에 맞춰 설계한 데스크톱 SSH 클라이언트입니다. 원격 터미널, 파일 전송, Docker 제어, 시스템 모니터링, AI 작업 공간을 한 화면에 통합해서 연결부터 점검, 배포, 검증까지 한 앱 안에서 이어서 처리할 수 있습니다.
+**Zangqing (藏青)** 은 궁극의 개발 효율성을 위해 설계된 차세대 모던 초경량 SSH 클라이언트입니다. 단순한 터미널 에뮬레이터를 넘어서, AI 보조 디버깅, 네이티브 Docker 관리, 실시간 하드웨어 모니터링, 그리고 매끄러운 SFTP 파일 관리를 하나로 통합한 아름다운 크로스 플랫폼 데스크톱 애플리케이션입니다.
 
 ## 주요 기능
 

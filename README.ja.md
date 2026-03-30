@@ -1,8 +1,8 @@
 <div align="center">
 
-# Zangqing
+# 🚀 Zangqing (藏青) - 現代の SSH クライアントに期待するすべて
 
-**SSH ターミナル、AI ワークスペース、Docker 管理、SFTP、サーバー監視をひとつにまとめたモダンなデスクトップクライアントです。**
+*SSH 接続をシンプルにするすべて。*
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md)
 
@@ -15,15 +15,25 @@
 
 ## プレビュー
 
+### ダークテーマ
+
 ![Main workspace](./b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
 ![Agent deployment workspace](./58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
 ![Agent conversation and execution flow](./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
-## 概要
+### ライトテーマ
 
-Zangqing は、実運用に必要な流れを 1 つの画面にまとめたデスクトップ SSH クライアントです。リモートターミナル、ファイル転送、Docker 操作、システム監視、AI ワークスペースを統合し、接続から調査、デプロイ、確認までを切り替えなしで進められます。
+![Main workspace light theme](./1e403064-c046-4948-b229-202b99ed692a.png)
+
+![Agent deployment workspace light theme](./1e44b065-2b41-4316-8d5f-157bf1323034.png)
+
+![Agent conversation and execution flow light theme](./22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
+
+## はじめに
+
+**Zangqing (藏青)** は、究極の開発効率を追求して設計された、次世代のモダンで軽量な SSH クライアントです。単なるターミナルエミュレーターの枠を超え、AI 支援デバッグ、ネイティブの Docker 管理機能、リアルタイムのリソースモニタリング、およびシームレスな SFTP ファイル管理を、一つの美しいクロスプラットフォームなデスクトップアプリに統合しています。
 
 ## 主な機能
 
