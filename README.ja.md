@@ -1,78 +1,113 @@
 <div align="center">
 
-# 🚀 Zangqing (藏青) - 現代のSSHクライアントに期待するすべて
-*SSH接続をシンプルにするすべて。*
+# Zangqing
 
-[🇬🇧 English](./README.md) | [🇨🇳 简体中文](./README.zh-CN.md) | [🇯🇵 日本語](./README.ja.md) | [🇰🇷 한국어](./README.ko.md)
+**SSH ターミナル、AI ワークスペース、Docker 管理、SFTP、サーバー監視をひとつにまとめたモダンなデスクトップクライアントです。**
 
-![React](https://img.shields.io/badge/React-18.2.0-blue?style=for-the-badge&logo=react)
-![Electron](https://img.shields.io/badge/Electron-29.1.0-47848F?style=for-the-badge&logo=electron)
-![Vite](https://img.shields.io/badge/Vite-5.1.0-646CFF?style=for-the-badge&logo=vite)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.3.0-3178C6?style=for-the-badge&logo=typescript)
+[English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md)
+
+![Electron](https://img.shields.io/badge/Electron-29-47848F?style=for-the-badge&logo=electron)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=000)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=fff)
+![Platforms](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-111111?style=for-the-badge)
 
 </div>
 
----
+## プレビュー
 
-### 🌟 はじめに
-**Zangqing (藏青)** は、究極の開発効率を追求して設計された、次世代のモダンで軽量なSSHクライアントです。単なるターミナルエミュレーターの枠を超え、AI支援デバッグ、ネイティブのDocker管理機能、リアルタイムのリソースモニタリング、およびシームレスなSFTPファイル管理を、一つの美しいクロスプラットフォームなデスクトップアプリに統合しています。
+![Main workspace](./b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
-### 🛠️ 技術スタックとライブラリ
-*   **コアフレームワーク**: React 18, Electron 29
-*   **ビルドツール**: Vite 5
-*   **言語**: TypeScript 5.3
-*   **スタイリング＆UI**: Tailwind CSS, `lucide-react` (アイコン)
-*   **ターミナルエンジン**: `xterm.js` (`@xterm/xterm` + WebGL/Fit アドオン)
-*   **SSH プロトコルコア**: `ssh2`
-*   **ステート管理**: `zustand`
-*   **データ可視化**: `recharts` (システム監視ダッシュボード)
-*   **コードエディタ**: `monaco-editor` (`@monaco-editor/react`)
-*   **ローカルストレージ**: `electron-store`
+![Agent deployment workspace](./58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
-### ✨ 主な機能
-*   🤖 **AIアシスタント＆デバッグ機能**: AIチャットパネルとAIコマンド生成機能を内蔵しており、コードのデバッグやコマンド入力を強力にサポート。
-*   🐋 **ネイティブDocker管理**: UI上から直接Dockerコンテナの起動、停止、再起動、監視がワンクリックで可能。
-*   💻 **強力なターミナルエミュレーター**: WebGLレンダリングに対応した、カスタマイズ可能なフル機能のXterm.jsターミナル。
-*   📊 **リアルタイム・システムモニタリング**: リモートサーバーのCPU、メモリ、ディスク、ネットワークのトラフィックを視覚的に表示（Recharts採用）。
-*   📁 **ビジュアルファイル＆プロセス管理**: 内蔵SFTPブラウザ、インラインのファイルエディタ、および視覚的なプロセスリスト管理。
-*   🎨 **モダンで洗練されたUI**: ドラッグ＆ドロップでサイズ変更可能なレスポンシブデザイン。Tailwind CSSを採用。
-*   🌐 **クロスプラットフォーム対応**: Windows、macOS、Linuxでシームレスに動作。
+![Agent conversation and execution flow](./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
-### 📂 フォルダ構成
-```text
-📦 sshtool
- ┣ 📂 electron           # Electronメインプロセス
- ┃ ┣ 📂 ssh              # SSH通信およびターミナルのロジック
- ┃ ┣ 📜 main.ts          # アプリケーションのエントリーポイント
- ┃ ┣ 📜 preload.ts       # IPC通信のブリッジ
- ┃ ┗ 📜 ipcHandlers.ts   # プロセス間通信（IPC）
- ┣ 📂 src                # Reactフロントエンド
- ┃ ┣ 📂 components       # UIコンポーネント（AIチャット、Docker管理など）
- ┃ ┣ 📂 store            # Zustandステート管理
- ┃ ┗ ...                 
- ┣ 📜 package.json       # パッケージとスクリプト
- ┗ 📜 vite.config.ts     # Viteビルド構成
+## 概要
+
+Zangqing は、実運用に必要な流れを 1 つの画面にまとめたデスクトップ SSH クライアントです。リモートターミナル、ファイル転送、Docker 操作、システム監視、AI ワークスペースを統合し、接続から調査、デプロイ、確認までを切り替えなしで進められます。
+
+## 主な機能
+
+- `ssh2` と `xterm.js` を使ったマルチセッション端末
+- デプロイと診断に特化した Agent ワークスペース
+- SFTP ファイルブラウザとインラインエディタ
+- Docker コンテナ管理
+- CPU、メモリ、ネットワーク、ディスクのリモート監視
+- 会話履歴とセッション状態のローカル保存
+- Electron Builder によるクロスプラットフォーム配布
+
+## 機能構成
+
+### ターミナルとファイル操作
+
+- 対話式リモートターミナル
+- SFTP ツリー表示
+- ファイルの直接編集
+- タブ型セッション管理
+
+### Agent ワークスペース
+
+- 自然言語によるタスク実行
+- デプロイ向けワークフロー
+- コンテキスト保持と会話再開
+- チャットと実行結果の並列表示
+
+### サーバー管理
+
+- Docker マネージャー
+- プロセス一覧
+- システムモニター
+- 接続設定の保存と再利用
+
+## はじめに
+
+```bash
+git clone https://github.com/Sunhaiy/sshtool.git
+cd sshtool
+npm install
+npm run dev
 ```
 
-### 🚀 利用方法
+## ビルド
+
 ```bash
-# 1. リポジトリのクローン
-git clone https://github.com/yourusername/sshtool.git
-cd sshtool
-
-# 2. 依存関係のインストール
-npm install
-
-# 3. 開発サーバーの起動
-npm run dev
-
-# 4. プロダクション用ビルド
+npm run build
 npm run dist
 ```
 
----
+プラットフォーム別ビルド:
 
-<div align="center">
-  <p>Built with ❤️ by passionate developers.</p>
-  <p>License: <a href="./LICENSE">Custom (非商用無料、クレジット表記必須)</a></p>
-</div>
+- `npm run dist:win`
+- `npm run dist:mac`
+- `npm run dist:linux`
+
+## ディレクトリ構成
+
+```text
+sshtool
+|- electron/            # Electron メインプロセス、IPC、SSH、デプロイエンジン
+|- src/                 # React レンダラー
+|  |- components/       # Terminal、Agent、Docker、files、monitor UI
+|  |- pages/            # 設定画面と接続管理
+|  |- services/         # フロントエンドサービス
+|  |- shared/           # 共通型とロケール
+|  `- store/            # Zustand ストア
+|- docs/                # 設計メモとドキュメント
+`- .github/workflows/   # ビルドとリリース
+```
+
+## 技術スタック
+
+- Electron
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Zustand
+- xterm.js
+- ssh2
+- Monaco Editor
+- Recharts
+
+## ライセンス
+
+[LICENSE](./LICENSE) を参照してください。

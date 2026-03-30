@@ -1,82 +1,113 @@
 <div align="center">
 
-# 🚀 Zangqing - All you expect from a modern SSH client
-*Everything that makes SSH simple.*
+# Zangqing
 
-[🇬🇧 English](./README.md) | [🇨🇳 简体中文](./README.zh-CN.md) | [🇯🇵 日本語](./README.ja.md) | [🇰🇷 한국어](./README.ko.md)
+**A modern SSH workspace for terminal access, AI-assisted operations, Docker management, SFTP, and server monitoring.**
 
-![React](https://img.shields.io/badge/React-18.2.0-blue?style=for-the-badge&logo=react)
-![Electron](https://img.shields.io/badge/Electron-29.1.0-47848F?style=for-the-badge&logo=electron)
-![Vite](https://img.shields.io/badge/Vite-5.1.0-646CFF?style=for-the-badge&logo=vite)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.3.0-3178C6?style=for-the-badge&logo=typescript)
+[English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md)
+
+![Electron](https://img.shields.io/badge/Electron-29-47848F?style=for-the-badge&logo=electron)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=000)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=fff)
+![Platforms](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-111111?style=for-the-badge)
 
 </div>
 
----
+## Preview
 
-### 🌟 Introduction
-**Zangqing** is a next-generation, modern, and lightweight SSH client engineered for absolute efficiency. Beyond standard terminal emulation, it acts as your ultimate developer workbench by integrating AI-assisted debugging, a native Docker manager, hardware monitoring, and seamless SFTP file management into one beautiful, cross-platform desktop application.
+![Main workspace](./b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
-### 🛠️ Tech Stack & Libraries
-*   **Core Framework**: React 18, Electron 29
-*   **Build Tool**: Vite 5
-*   **Language**: TypeScript 5.3
-*   **Styling & UI**: Tailwind CSS, `lucide-react` (icons)
-*   **Terminal Engine**: `xterm.js` (`@xterm/xterm` + WebGL/Fit addons)
-*   **SSH Protocol Core**: `ssh2`
-*   **State Management**: `zustand`
-*   **Data Visualization**: `recharts` (System monitoring dashobard)
-*   **Code Editor**: `monaco-editor` (`@monaco-editor/react`)
-*   **Local Storage**: `electron-store`
+![Agent deployment workspace](./58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
-### ✨ Features
-*   🤖 **AI Assistant & Debugger**: Built-in AI chat panel and AI command generation to assist with debugging code and writing terminal commands.
-*   🐋 **Native Docker Management**: Start, stop, restart, and monitor your Docker containers directly within the UI without typing commands.
-*   💻 **Powerful Terminal Emulator**: Fully-featured Xterm.js terminal with WebGL rendering, custom colors, sizing, and context menus.
-*   📊 **Real-Time System Monitoring**: Visual dashboard tracking remote CPU use, memory allocation, disk space, and network throughput (powered by Recharts).
-*   📁 **Visual File & Process Manager**: Built-in SFTP file browser, inline file editor, and visual process list management.
-*   🎨 **Modern & Sleek UI**: Responsive, drag-and-drop resizable layouts tailored for productivity using Tailwind CSS.
-*   🌐 **Cross-Platform**: Seamless experience across Windows, macOS, and Linux.
+![Agent conversation and execution flow](./d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
-### 📂 Directory Structure
-```text
-📦 sshtool
- ┣ 📂 electron           # Electron main process & IPC handlers
- ┃ ┣ 📂 ssh              # SSH connection & terminal logic
- ┃ ┣ 📜 main.ts          # Application entry point
- ┃ ┣ 📜 preload.ts       # Context bridge
- ┃ ┗ 📜 ipcHandlers.ts   # Inter-process communication
- ┣ 📂 src                # React frontend source code
- ┃ ┣ 📂 components       # UI Components (DockerManager, AIChatPanel, Terminal, etc.)
- ┃ ┣ 📂 hooks            # Custom React hooks
- ┃ ┣ 📂 pages            # Application pages/views
- ┃ ┣ 📂 services         # Frontend services & API utilities
- ┃ ┣ 📂 shared           # Shared types and config
- ┃ ┣ 📂 store            # Zustand global state management
- ┃ ┗ 📜 App.tsx          # Root React component
- ┣ 📜 package.json       # Project dependencies & scripts
- ┗ 📜 vite.config.ts     # Vite bundler configuration
+## Overview
+
+Zangqing is a desktop SSH client built around a practical operations workflow. It combines terminal access, file transfer, Docker controls, system monitoring, and an AI workspace in one interface so we can move from inspection to deployment without switching tools.
+
+## Highlights
+
+- Multi-session SSH terminal powered by `ssh2` and `xterm.js`
+- Agent workspace for deployment, diagnostics, and command execution
+- Built-in SFTP file browser and file editor
+- Docker container management inside the app
+- Remote CPU, memory, network, and storage monitoring
+- Persistent local chat/session history for continuing work later
+- Cross-platform desktop packaging with Electron Builder
+
+## What The App Includes
+
+### Terminal And File Operations
+
+- Interactive remote terminal
+- File tree browsing over SFTP
+- Inline file editing
+- Session tabs and layout management
+
+### Agent Workspace
+
+- Natural-language task execution
+- Deployment-oriented workflows
+- Context retention and resumable conversations
+- Execution timeline with terminal output beside the chat
+
+### Server Management
+
+- Docker manager
+- Process list
+- System monitor
+- Connection profiles and reusable settings
+
+## Quick Start
+
+```bash
+git clone https://github.com/Sunhaiy/sshtool.git
+cd sshtool
+npm install
+npm run dev
 ```
 
-### 🚀 Getting Started
+## Build
+
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/sshtool.git
-cd sshtool
-
-# 2. Install dependencies
-npm install
-
-# 3. Start development server
-npm run dev
-
-# 4. Build for production (Windows/Linux/Mac)
+npm run build
 npm run dist
 ```
 
----
+Platform-specific packages:
 
-<div align="center">
-  <p>Built with ❤️ by passionate developers.</p>
-  <p>License: <a href="./LICENSE">Custom (Free for non-commercial, attribution required)</a></p>
-</div>
+- `npm run dist:win`
+- `npm run dist:mac`
+- `npm run dist:linux`
+
+## Project Structure
+
+```text
+sshtool
+|- electron/            # Electron main process, IPC, SSH, deploy engine
+|- src/                 # React renderer source
+|  |- components/       # Terminal, Agent, Docker, files, monitor UI
+|  |- pages/            # Settings and connection management
+|  |- services/         # Frontend service layer
+|  |- shared/           # Shared types and locale resources
+|  `- store/            # Zustand stores
+|- docs/                # Architecture and design notes
+`- .github/workflows/   # Build and release workflows
+```
+
+## Tech Stack
+
+- Electron
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Zustand
+- xterm.js
+- ssh2
+- Monaco Editor
+- Recharts
+
+## License
+
+See [LICENSE](./LICENSE).
