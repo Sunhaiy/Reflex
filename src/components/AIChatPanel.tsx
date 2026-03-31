@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
 import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Circle, Target, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS, PlanState } from '../shared/aiTypes';
-import { AgentPlanPhase, AgentSessionRuntime } from '../shared/types';
+import { AgentPlanPhase, AgentSessionRuntime, TaskRunSummary } from '../shared/types';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
@@ -66,6 +66,12 @@ function normalizeRestoredPlanStatus(status?: AgentPlanPhase): AgentPlanPhase {
     return status;
 }
 
+function summarizeLongText(text: string, maxChars = 180) {
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxChars) return normalized;
+    return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
 export function AIChatPanel({
     connectionId,
     profileId,
@@ -97,6 +103,10 @@ export function AIChatPanel({
     const [knownProjectPaths, setKnownProjectPaths] = useState<string[]>([]);
     const [activeDeployRunId, setActiveDeployRunId] = useState<string | undefined>(undefined);
     const [activeDeploySource, setActiveDeploySource] = useState<string | undefined>(undefined);
+    const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
+    const [activeTaskRun, setActiveTaskRun] = useState<TaskRunSummary | null>(null);
+    const [compressedRunMemory, setCompressedRunMemory] = useState('');
+    const [showFailureDetails, setShowFailureDetails] = useState(false);
     const planStateRef = useRef<PlanState | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -126,6 +136,9 @@ export function AIChatPanel({
         agentProfileId,
         activeDeployRunId,
         activeDeploySource,
+        activeRunId,
+        activeTaskRun,
+        compressedRunMemory,
     });
 
     // Inject CSS keyframes for AI chat animations (runs once)
@@ -201,6 +214,9 @@ export function AIChatPanel({
         setAgentProfileId(runtime?.agentProfileId || '');
         setActiveDeployRunId(runtime?.activeDeployRunId);
         setActiveDeploySource(runtime?.activeDeploySource);
+        setActiveRunId(runtime?.activeRunId);
+        setActiveTaskRun(runtime?.activeTaskRun || null);
+        setCompressedRunMemory(runtime?.compressedRunMemory || '');
         setPendingCommands([]);
         setIsLoading(false);
         isLoadingRef.current = false;
@@ -238,12 +254,16 @@ export function AIChatPanel({
         }, 800);
         return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeDeployRunId, activeDeploySource]);
+    }, [messages, planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeDeployRunId, activeDeploySource, activeRunId, activeTaskRun, compressedRunMemory]);
 
     useEffect(() => {
         onRuntimeChange?.(buildRuntimeSnapshot());
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeDeployRunId, activeDeploySource]);
+    }, [planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeDeployRunId, activeDeploySource, activeRunId, activeTaskRun, compressedRunMemory]);
+
+    useEffect(() => {
+        setShowFailureDetails(false);
+    }, [activeTaskRun?.id, activeTaskRun?.failureHistory.length]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -262,7 +282,7 @@ export function AIChatPanel({
     useEffect(() => {
         const eWin = window as any;
         const cleanPlan = eWin.electron?.onAgentPlanUpdate?.(
-            ({ sessionId: eventSessionId, planState: ps, planPhase, contextWindow: ctxWindow, compressedMemory: nextCompressedMemory, knownProjectPaths: nextKnownProjectPaths, activeDeployRunId: nextDeployRunId, activeDeploySource: nextDeploySource }: any) => {
+            ({ sessionId: eventSessionId, planState: ps, planPhase, contextWindow: ctxWindow, compressedMemory: nextCompressedMemory, knownProjectPaths: nextKnownProjectPaths, activeDeployRunId: nextDeployRunId, activeDeploySource: nextDeploySource, activeRunId: nextRunId, activeTaskRun: nextTaskRun }: any) => {
                 if (eventSessionId !== sessionIdRef.current) return;
                 setPlanState(ps);
                 planStateRef.current = ps;
@@ -272,6 +292,9 @@ export function AIChatPanel({
                 setKnownProjectPaths(Array.isArray(nextKnownProjectPaths) ? nextKnownProjectPaths : []);
                 setActiveDeployRunId(typeof nextDeployRunId === 'string' ? nextDeployRunId : undefined);
                 setActiveDeploySource(typeof nextDeploySource === 'string' ? nextDeploySource : undefined);
+                setActiveRunId(typeof nextRunId === 'string' ? nextRunId : undefined);
+                setActiveTaskRun(nextTaskRun || null);
+                setCompressedRunMemory(nextTaskRun?.checkpoint?.knownFacts?.join('\n') || '');
                 if (['done', 'stopped', 'paused', 'waiting_approval'].includes(planPhase)) {
                     setIsLoading(false);
                     isLoadingRef.current = false;
@@ -743,6 +766,11 @@ export function AIChatPanel({
             setPlanState(null);
             planStateRef.current = null;
             setPlanStatus('idle');
+            setActiveRunId(undefined);
+            setActiveTaskRun(null);
+            setCompressedRunMemory('');
+            setActiveDeployRunId(undefined);
+            setActiveDeploySource(undefined);
         }
 
         if (planMode) {
@@ -817,7 +845,7 @@ export function AIChatPanel({
     const contextWindowAutoCompressed = language === 'zh' ? '自动压缩' : 'Auto-compressed';
     const contextWindowTokens = language === 'zh' ? '标记' : 'tokens';
 
-    const latestGoal = planState?.global_goal || [...messages].reverse().find(message => message.role === 'user')?.content || '';
+    const latestGoal = activeTaskRun?.goal || planState?.global_goal || [...messages].reverse().find(message => message.role === 'user')?.content || '';
     const starterPrompts = language === 'zh'
         ? ['把我桌面上的项目部署到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清并修复']
         : ['Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];
@@ -828,7 +856,19 @@ export function AIChatPanel({
         if (profile) return profile.name;
         return language === 'zh' ? '默认模型' : 'Default Model';
     })();
-    const runStatusLabel = planStatus === 'executing'
+    const runStatusLabel = activeTaskRun
+        ? activeTaskRun.status === 'running'
+            ? (language === 'zh' ? '执行中' : 'Running')
+            : activeTaskRun.status === 'repairing'
+                ? (language === 'zh' ? `修复中 ${activeTaskRun.attemptCount}/${5}` : `Repairing ${activeTaskRun.attemptCount}/${5}`)
+                : activeTaskRun.status === 'completed'
+                    ? (language === 'zh' ? '已完成' : 'Completed')
+                    : activeTaskRun.status === 'retryable_paused'
+                        ? (language === 'zh' ? '等待恢复' : 'Retryable Paused')
+                        : activeTaskRun.status === 'paused'
+                            ? (language === 'zh' ? '已暂停' : 'Paused')
+                            : (language === 'zh' ? '已失败' : 'Failed')
+        : planStatus === 'executing'
         ? (language === 'zh' ? '正在执行' : 'Executing')
         : planStatus === 'generating'
             ? (language === 'zh' ? '正在规划' : 'Planning')
@@ -841,6 +881,30 @@ export function AIChatPanel({
                         : planStatus === 'stopped'
                             ? (language === 'zh' ? '已停止' : 'Stopped')
                             : (language === 'zh' ? '待命中' : 'Standing By');
+    const latestFailure = activeTaskRun?.failureHistory?.[activeTaskRun.failureHistory.length - 1];
+    const latestFailureText = latestFailure
+        ? [latestFailure.failureClass, latestFailure.message].filter(Boolean).join(' · ')
+        : '';
+    const latestFailureSummary = latestFailureText ? summarizeLongText(latestFailureText) : '';
+    const hasVerboseFailure = Boolean(latestFailureText) && (latestFailureText.length > latestFailureSummary.length || latestFailureText.includes('\n'));
+    const activeHypothesis = activeTaskRun
+        ? activeTaskRun.hypotheses.find(item => item.id === activeTaskRun.activeHypothesisId) || activeTaskRun.hypotheses[0]
+        : undefined;
+    const repoSummaryNote = activeTaskRun?.repoAnalysis?.readmeSummary
+        ? summarizeLongText(activeTaskRun.repoAnalysis.readmeSummary, 110)
+        : '';
+    const workingNotes = Array.from(new Set([
+        ...(activeHypothesis?.summary ? [summarizeLongText(activeHypothesis.summary, 110)] : []),
+        ...(activeHypothesis?.evidence || []).slice(0, 2).map(item => summarizeLongText(item, 96)),
+        ...(activeTaskRun?.checkpoint.knownFacts || []).slice(0, 2).map(item => summarizeLongText(item, 96)),
+        ...(repoSummaryNote ? [repoSummaryNote] : []),
+    ].filter(Boolean))).slice(0, 4);
+    const nextActionHint = activeTaskRun?.checkpoint.nextAction
+        ? summarizeLongText(activeTaskRun.checkpoint.nextAction, 110)
+        : activeTaskRun?.currentAction
+            ? summarizeLongText(activeTaskRun.currentAction, 110)
+            : '';
+    const showWorkingNotes = workingNotes.length > 0 || Boolean(nextActionHint);
 
     return (
         <div className={cn("flex h-full flex-col overflow-hidden bg-card", className)}>
@@ -1332,6 +1396,108 @@ export function AIChatPanel({
                             <span className="break-words leading-snug">{latestGoal}</span>
                         </div>
                     )}
+                    {activeTaskRun && (
+                        <div className="border-t border-border/45 px-3 py-2 text-[11px] text-foreground/72">
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="rounded-md border border-border/60 bg-background px-2 py-1 text-[10px]">
+                                        <span className="text-muted-foreground/65">{language === 'zh' ? '阶段' : 'Phase'}</span>
+                                        <span className="ml-1 text-foreground/85">{activeTaskRun.phase}</span>
+                                    </span>
+                                    {activeTaskRun.activeHypothesisId && (
+                                        <span className="rounded-md border border-border/60 bg-background px-2 py-1 text-[10px]">
+                                            <span className="text-muted-foreground/65">{language === 'zh' ? '路线' : 'Route'}</span>
+                                            <span className="ml-1 text-foreground/85">
+                                                {activeTaskRun.hypotheses.find(item => item.id === activeTaskRun.activeHypothesisId)?.kind || activeTaskRun.activeHypothesisId}
+                                            </span>
+                                        </span>
+                                    )}
+                                    {activeTaskRun.attemptCount > 0 && (
+                                        <span className="rounded-md border border-border/60 bg-background px-2 py-1 text-[10px]">
+                                            <span className="text-muted-foreground/65">{language === 'zh' ? '修复' : 'Repairs'}</span>
+                                            <span className="ml-1 text-foreground/85">{activeTaskRun.attemptCount}/5</span>
+                                        </span>
+                                    )}
+                                </div>
+                                {activeTaskRun.currentAction && (
+                                    <div className="rounded-md border border-border/50 bg-background/70 px-2.5 py-2">
+                                        <div className="mb-1 text-[10px] text-muted-foreground/65">
+                                            {language === 'zh' ? '当前动作' : 'Action'}
+                                        </div>
+                                        <div
+                                            className="break-words leading-snug text-foreground/80"
+                                            style={{
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden',
+                                            }}
+                                        >
+                                            {activeTaskRun.currentAction}
+                                        </div>
+                                    </div>
+                                )}
+                                {showWorkingNotes && (
+                                    <div className="rounded-md border border-border/50 bg-muted/15 px-2.5 py-2">
+                                        <div className="mb-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/65">
+                                            <Brain className="h-3 w-3" />
+                                            <span>{language === 'zh' ? '当前判断' : 'Working notes'}</span>
+                                        </div>
+                                        {workingNotes.length > 0 && (
+                                            <div className="space-y-1.5">
+                                                {workingNotes.map((note, index) => (
+                                                    <div key={`${note}-${index}`} className="flex items-start gap-1.5 text-[11px] text-foreground/76">
+                                                        <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/55" />
+                                                        <span className="break-words leading-snug">{note}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {nextActionHint && (
+                                            <div className="mt-2 rounded-md border border-border/40 bg-background/70 px-2 py-1.5">
+                                                <div className="mb-1 text-[10px] text-muted-foreground/65">
+                                                    {language === 'zh' ? '下一步' : 'Next step'}
+                                                </div>
+                                                <div className="break-words text-[11px] leading-snug text-foreground/78">
+                                                    {nextActionHint}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {latestFailure && (
+                                    <div className="rounded-md border border-red-500/20 bg-red-500/5 px-2.5 py-2">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="mb-1 text-[10px] text-red-500/80">
+                                                    {language === 'zh' ? '最近失败' : 'Latest failure'}
+                                                </div>
+                                                <div
+                                                    className={cn(
+                                                        'break-words text-red-500/85',
+                                                        showFailureDetails ? 'max-h-24 overflow-y-auto whitespace-pre-wrap pr-1' : 'leading-snug',
+                                                    )}
+                                                >
+                                                    {showFailureDetails ? latestFailureText : latestFailureSummary}
+                                                </div>
+                                            </div>
+                                            {hasVerboseFailure && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowFailureDetails(value => !value)}
+                                                    className="shrink-0 rounded-md border border-red-500/20 bg-background/80 px-2 py-1 text-[10px] text-red-500/80 transition-colors hover:bg-red-500/10"
+                                                >
+                                                    {showFailureDetails
+                                                        ? (language === 'zh' ? '收起' : 'Less')
+                                                        : (language === 'zh' ? '详情' : 'Details')}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="relative overflow-hidden rounded-lg border border-border bg-card transition-colors focus-within:border-primary/40">
@@ -1393,7 +1559,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
         const isWrite = ['write_file', 'local_write_file', 'remote_write_file'].includes(toolCall.name);
         const isList = ['list_directory', 'local_list_directory', 'remote_list_directory'].includes(toolCall.name);
         const isDeploy = toolCall.name === 'deploy_project' || toolCall.name === 'resume_deploy_run';
-        const isFileOp = isRead || isWrite || isList;
+        const isFileOp = isRead || isWrite || isList || ['remote_upload_file', 'remote_download_file'].includes(toolCall.name);
         const ToolIcon = isRead ? FileText : isWrite ? Pencil : isList ? FolderOpen : isDeploy ? Sparkles : Terminal;
         // Color configs per tool type
         const colorMap = {
@@ -1406,6 +1572,13 @@ function MessageBubble({ message }: { message: AgentMessage }) {
             remote_read_file: { accent: '#60a5fa', light: 'rgba(96,165,250,0.12)', label: '读取远程文件' },
             remote_write_file: { accent: '#fbbf24', light: 'rgba(251,191,36,0.12)', label: '写入远程文件' },
             remote_list_directory: { accent: '#22d3ee', light: 'rgba(34,211,238,0.12)', label: '远程目录' },
+            remote_upload_file: { accent: '#8b5cf6', light: 'rgba(139,92,246,0.12)', label: '上传文件' },
+            remote_download_file: { accent: '#a855f7', light: 'rgba(168,85,247,0.12)', label: '下载文件' },
+            http_probe: { accent: isPending ? '#eab308' : '#3b82f6', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(59,130,246,0.06)', label: isPending ? '探测地址中' : 'HTTP 探测完成' },
+            service_inspect: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '检查服务中' : '服务状态已读取' },
+            service_control: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '控制服务中' : '服务命令已执行' },
+            git_clone_remote: { accent: isPending ? '#eab308' : '#06b6d4', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(6,182,212,0.08)', label: isPending ? '远程克隆中' : '远程克隆完成' },
+            git_fetch_remote: { accent: isPending ? '#eab308' : '#06b6d4', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(6,182,212,0.08)', label: isPending ? '远程更新中' : '远程更新完成' },
             local_exec: { accent: isPending ? '#eab308' : '#22c55e', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(34,197,94,0.06)', label: isPending ? '执行本地命令' : '本地命令完成' },
             remote_exec: { accent: isPending ? '#eab308' : '#10b981', light: isPending ? 'rgba(234,179,8,0.08)' : 'rgba(16,185,129,0.06)', label: isPending ? '执行远程命令' : '远程命令完成' },
             deploy_project: { accent: isPending ? '#eab308' : (message.isError ? '#ef4444' : '#8b5cf6'), light: isPending ? 'rgba(234,179,8,0.08)' : (message.isError ? 'rgba(239,68,68,0.08)' : 'rgba(139,92,246,0.08)'), label: isPending ? '自动部署中' : (message.isError ? '部署失败' : '部署步骤已执行') },

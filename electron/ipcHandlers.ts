@@ -1,14 +1,14 @@
 import { ipcMain, BrowserWindow, dialog, clipboard } from 'electron';
 import { SSHManager } from './ssh/sshManager.js';
 import { DeploymentManager } from './deploy/deploymentManager.js';
-import { AgentV2Manager } from './agent-v2/manager.js';
+import { AgentManager } from './agent/manager.js';
 import { SSHConnection } from '../src/shared/types.js';
 import Store from 'electron-store';
 
 const store = new Store();
 const sshManager = new SSHManager(store);
 const deploymentManager = new DeploymentManager(sshManager, store);
-const agentManager = new AgentV2Manager(sshManager, deploymentManager);
+const agentManager = new AgentManager(sshManager);
 
 export function setupIpcHandlers() {
   // ── Universal AI fetch proxy (bypasses renderer CORS) ────────────────────────

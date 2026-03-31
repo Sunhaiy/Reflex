@@ -224,18 +224,24 @@ function detectFramework(input: {
   const scripts = input.packageJson?.scripts || {};
   const evidence: string[] = [];
 
-  if (input.dockerCompose) {
+  if (input.dockerCompose || input.files.includes('docker-compose.yml') || input.files.includes('compose.yml')) {
     evidence.push('docker-compose.yml found');
     return { framework: 'docker-compose', evidence };
   }
 
-  if (input.dockerfile) {
+  if (input.dockerfile || input.files.includes('Dockerfile')) {
     evidence.push('Dockerfile found');
     return { framework: 'dockerfile', evidence };
   }
 
   const javaContent = `${input.pomXml || ''}\n${input.gradleFile || ''}`.toLowerCase();
-  if (input.pomXml || input.gradleFile) {
+  if (
+    input.pomXml ||
+    input.gradleFile ||
+    input.files.includes('pom.xml') ||
+    input.files.includes('build.gradle') ||
+    input.files.includes('build.gradle.kts')
+  ) {
     if (javaContent.includes('spring-boot')) {
       evidence.push('Spring Boot build file found');
       return { framework: 'java-spring-boot', evidence };
@@ -281,7 +287,7 @@ function detectFramework(input: {
     evidence.push('flask dependency found');
     return { framework: 'python-flask', evidence };
   }
-  if (input.requirements || input.pyproject) {
+  if (input.requirements || input.pyproject || input.files.includes('requirements.txt') || input.files.includes('pyproject.toml')) {
     evidence.push('Python dependency file found');
     return { framework: 'python-service', evidence };
   }

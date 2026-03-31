@@ -1,6 +1,7 @@
 import { WebContents } from 'electron';
 import { LLMMessage, LLMProfile, LLMToolDefinition } from '../llm.js';
 import { PlanState } from '../../src/shared/aiTypes.js';
+import { TaskRunSummary } from '../../src/shared/types.js';
 
 export interface AgentToolCallArgs {
   [key: string]: unknown;
@@ -93,5 +94,17 @@ export interface AgentThreadSession {
   knownProjectPaths: string[];
   activeDeployRunId?: string;
   activeDeploySource?: string;
+  activeRunId?: string;
+  activeTaskRun?: TaskRunSummary | null;
   resumeRequested?: boolean;
+  recentHttpProbes: Array<{
+    url: string;
+    status: number;
+    timestamp: number;
+  }>;
+  lastToolFailure?: {
+    name: string;
+    message: string;
+    timestamp: number;
+  };
 }

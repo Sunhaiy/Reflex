@@ -3,7 +3,6 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import { execFile as execFileCallback } from 'child_process';
 import { promisify } from 'util';
-import { DeploymentManager } from '../deploy/deploymentManager.js';
 import { shQuote } from '../deploy/strategies/base.js';
 import { SSHManager } from '../ssh/sshManager.js';
 import { AgentThreadSession, AgentToolCallArgs, AgentToolDefinition } from './types.js';
@@ -20,50 +19,6 @@ function normalizeLocalPath(targetPath: string): string {
   return path.resolve(targetPath);
 }
 
-interface GitHubDeploySource {
-  cloneUrl: string;
-  displayUrl: string;
-  branch?: string;
-  subdir?: string;
-}
-
-function parseGitHubProjectUrl(rawUrl: string): GitHubDeploySource | null {
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(rawUrl.trim());
-  } catch {
-    return null;
-  }
-
-  const hostname = parsedUrl.hostname.toLowerCase();
-  if (hostname !== 'github.com' && hostname !== 'www.github.com') {
-    return null;
-  }
-
-  const parts = parsedUrl.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
-  if (parts.length < 2) {
-    return null;
-  }
-
-  const owner = parts[0];
-  const repo = parts[1]?.replace(/\.git$/i, '');
-  if (!owner || !repo) {
-    return null;
-  }
-
-  const source: GitHubDeploySource = {
-    cloneUrl: `https://github.com/${owner}/${repo}.git`,
-    displayUrl: `https://github.com/${owner}/${repo}`,
-  };
-
-  if (parts[2] === 'tree' && parts[3]) {
-    source.branch = decodeURIComponent(parts[3]);
-    source.subdir = parts.slice(4).map((segment) => decodeURIComponent(segment)).join(path.sep);
-  }
-
-  return source;
-}
-
 function truncate(text: string, maxChars = 4000): string {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n...[truncated]`;
@@ -78,6 +33,10 @@ function requireString(args: AgentToolCallArgs, field: string): string {
 }
 
 async function runLocalCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return runLocalCommandWithTimeout(command, 300000);
+}
+
+async function runLocalCommandWithTimeout(command: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const shell = process.platform === 'win32' ? 'powershell.exe' : 'sh';
   const shellArgs = process.platform === 'win32'
     ? ['-NoProfile', '-NonInteractive', '-Command', command]
@@ -85,7 +44,7 @@ async function runLocalCommand(command: string): Promise<{ stdout: string; stder
 
   try {
     const { stdout, stderr } = await execFile(shell, shellArgs, {
-      timeout: 120000,
+      timeout: timeoutMs,
       maxBuffer: 1024 * 1024 * 4,
       windowsHide: true,
     });
@@ -131,7 +90,6 @@ function describeList(entries: Array<{ name: string; type?: string; size?: numbe
 
 export function createAgentToolRegistry(
   sshMgr: SSHManager,
-  deploymentManager: DeploymentManager,
 ): AgentToolDefinition {
   const definitions = [
     {
@@ -186,6 +144,7 @@ export function createAgentToolRegistry(
           type: 'object',
           properties: {
             command: { type: 'string', description: 'Shell command to execute locally.' },
+            timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds. Defaults to 300000.' },
           },
           required: ['command'],
         },
@@ -200,6 +159,7 @@ export function createAgentToolRegistry(
           type: 'object',
           properties: {
             command: { type: 'string', description: 'Shell command to execute remotely.' },
+            timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds. Defaults to 600000.' },
           },
           required: ['command'],
         },
@@ -267,28 +227,89 @@ export function createAgentToolRegistry(
     {
       type: 'function' as const,
       function: {
-        name: 'deploy_project',
-        description: 'Run the deterministic deployment engine for a local project directory or a GitHub repository URL against the currently connected remote server.',
+        name: 'remote_download_file',
+        description: 'Download a remote file to the local machine using built-in SFTP.',
         parameters: {
           type: 'object',
           properties: {
-            projectRoot: { type: 'string', description: 'Absolute local project directory path, or a GitHub repository URL.' },
+            remotePath: { type: 'string', description: 'Absolute remote file path.' },
+            localPath: { type: 'string', description: 'Absolute local destination file path.' },
           },
-          required: ['projectRoot'],
+          required: ['remotePath', 'localPath'],
         },
       },
     },
     {
       type: 'function' as const,
       function: {
-        name: 'resume_deploy_run',
-        description: 'Resume an existing deterministic deployment run from its saved checkpoint.',
+        name: 'http_probe',
+        description: 'Probe an HTTP URL from the connected server and return the observed status code.',
         parameters: {
           type: 'object',
           properties: {
-            runId: { type: 'string', description: 'Existing deployment run id.' },
+            url: { type: 'string', description: 'HTTP or HTTPS URL to probe.' },
           },
-          required: ['runId'],
+          required: ['url'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'service_inspect',
+        description: 'Inspect a systemd service on the remote server and return current status plus recent logs.',
+        parameters: {
+          type: 'object',
+          properties: {
+            serviceName: { type: 'string', description: 'Systemd service name, for example nginx or myapp.service.' },
+          },
+          required: ['serviceName'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'service_control',
+        description: 'Control a systemd service on the remote server.',
+        parameters: {
+          type: 'object',
+          properties: {
+            serviceName: { type: 'string', description: 'Systemd service name.' },
+            action: { type: 'string', enum: ['start', 'stop', 'restart', 'reload', 'enable', 'disable'], description: 'Action to perform.' },
+          },
+          required: ['serviceName', 'action'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'git_clone_remote',
+        description: 'Clone a Git repository directly on the remote server.',
+        parameters: {
+          type: 'object',
+          properties: {
+            repoUrl: { type: 'string', description: 'Clone URL.' },
+            targetDir: { type: 'string', description: 'Absolute remote destination directory.' },
+            ref: { type: 'string', description: 'Optional branch, tag, or commit-ish.' },
+          },
+          required: ['repoUrl', 'targetDir'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'git_fetch_remote',
+        description: 'Fetch updates for an existing remote Git checkout and optionally switch to a ref.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetDir: { type: 'string', description: 'Absolute remote repository directory.' },
+            ref: { type: 'string', description: 'Optional branch, tag, or commit-ish.' },
+          },
+          required: ['targetDir'],
         },
       },
     },
@@ -344,7 +365,10 @@ export function createAgentToolRegistry(
         }
         case 'local_exec': {
           const command = requireString(args, 'command');
-          const result = await runLocalCommand(command);
+          const timeoutMs = typeof args.timeoutMs === 'number' && Number.isFinite(args.timeoutMs)
+            ? Math.max(1000, Math.min(args.timeoutMs, 20 * 60 * 1000))
+            : 300000;
+          const result = await runLocalCommandWithTimeout(command, timeoutMs);
           return {
             ok: result.exitCode === 0,
             displayCommand: command,
@@ -355,12 +379,15 @@ export function createAgentToolRegistry(
         }
         case 'remote_exec': {
           const command = requireString(args, 'command');
+          const timeoutMs = typeof args.timeoutMs === 'number' && Number.isFinite(args.timeoutMs)
+            ? Math.max(1000, Math.min(args.timeoutMs, 20 * 60 * 1000))
+            : 600000;
           const wrapped = `PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb sh -lc ${shQuote(command)}`;
           session.webContents.send('terminal-data', {
             id: session.connectionId,
             data: `\r\n\x1b[36;2m[Agent] $ ${command}\x1b[0m\r\n`,
           });
-          const result = await sshMgr.exec(session.connectionId, wrapped, 120000);
+          const result = await sshMgr.exec(session.connectionId, wrapped, timeoutMs);
           if (result.stdout) {
             session.webContents.send('terminal-data', {
               id: session.connectionId,
@@ -398,7 +425,17 @@ export function createAgentToolRegistry(
         }
         case 'remote_read_file': {
           const targetPath = requireString(args, 'path');
-          const content = await sshMgr.readFile(session.connectionId, targetPath);
+          let content: string;
+          try {
+            content = await sshMgr.readFile(session.connectionId, targetPath);
+          } catch {
+            const fallback = await sshMgr.exec(
+              session.connectionId,
+              `sh -lc ${shQuote(`if [ -f ${shQuote(targetPath)} ]; then cat ${shQuote(targetPath)}; fi`)}`,
+              30000,
+            );
+            content = fallback.stdout || '';
+          }
           return {
             ok: true,
             displayCommand: `remote cat ${targetPath}`,
@@ -444,62 +481,102 @@ export function createAgentToolRegistry(
             scratchpadNote: `Uploaded file ${localPath} -> ${remotePath}`,
           };
         }
-        case 'deploy_project': {
-          const projectInput = requireString(args, 'projectRoot');
-          if (!parseGitHubProjectUrl(projectInput)) {
-            const projectRoot = normalizeLocalPath(projectInput);
-            const stats = await fs.stat(projectRoot).catch(() => null);
-            if (!stats?.isDirectory()) {
-              throw new Error(`Local project path does not exist: ${projectRoot}`);
-            }
-          }
-          const connection = sshMgr.getConnectionConfig(session.connectionId);
-          const run = await deploymentManager.runBlocking(session.connectionId, session.webContents, {
-            sessionId: session.connectionId,
-            serverProfileId: connection?.id || session.connectionId,
-            projectRoot: projectInput,
-          });
-          const summary = {
-            runId: run.id,
-            status: run.status,
-            url: run.outputs.url || run.outputs.healthCheckUrl || '',
-            strategyId: run.outputs.strategyId || '',
-            error: run.error || '',
-            warnings: run.warnings,
-            attemptCount: run.attemptCount,
-            failureHistory: run.failureHistory,
-            source: projectInput,
-          };
+        case 'remote_download_file': {
+          const remotePath = requireString(args, 'remotePath');
+          const localPath = normalizeLocalPath(requireString(args, 'localPath'));
+          await fs.mkdir(path.dirname(localPath), { recursive: true });
+          await sshMgr.downloadFile(session.connectionId, remotePath, localPath);
           return {
-            ok: run.status === 'completed',
-            displayCommand: `deploy ${projectInput}`,
-            content: stringify(summary),
-            structured: summary,
-            scratchpadNote: run.status === 'completed'
-              ? `Deployment completed: ${projectInput} -> ${summary.url || session.sshHost}`
-              : `Deployment failed: ${projectInput} -> ${summary.error || 'unknown error'}`,
+            ok: true,
+            displayCommand: `download ${remotePath} -> ${localPath}`,
+            content: `Downloaded ${remotePath} to ${localPath}`,
+            structured: { remotePath, localPath },
+            scratchpadNote: `Downloaded file ${remotePath} -> ${localPath}`,
           };
         }
-        case 'resume_deploy_run': {
-          const runId = requireString(args, 'runId');
-          const run = await deploymentManager.resumeBlocking(session.connectionId, session.webContents, runId);
-          const summary = {
-            runId: run.id,
-            status: run.status,
-            url: run.outputs.url || run.outputs.healthCheckUrl || '',
-            strategyId: run.outputs.strategyId || '',
-            error: run.error || '',
-            attemptCount: run.attemptCount,
-            failureHistory: run.failureHistory,
-          };
+        case 'http_probe': {
+          const url = requireString(args, 'url');
+          const result = await sshMgr.exec(
+            session.connectionId,
+            `sh -lc ${shQuote(`STATUS=$(curl -k -L -s -o /dev/null -w "%{http_code}" ${JSON.stringify(url)}); printf "%s" "$STATUS"`)}`,
+            20000,
+          );
+          const status = Number(result.stdout.trim().split(/\s+/).pop() || 0);
           return {
-            ok: run.status === 'completed',
-            displayCommand: `resume deploy ${runId}`,
-            content: stringify(summary),
-            structured: summary,
-            scratchpadNote: run.status === 'completed'
-              ? `Deployment resumed and completed: ${runId}`
-              : `Deployment resume failed: ${runId}`,
+            ok: status > 0 && status < 600,
+            displayCommand: `http probe ${url}`,
+            content: `HTTP ${status || 'no-response'} from ${url}`,
+            structured: { url, status },
+            scratchpadNote: `HTTP probe ${url} -> ${status || 'no-response'}`,
+          };
+        }
+        case 'service_inspect': {
+          const serviceName = requireString(args, 'serviceName');
+          const command = [
+            `systemctl status ${JSON.stringify(serviceName)} --no-pager || true`,
+            `echo`,
+            `journalctl -u ${JSON.stringify(serviceName)} -n 80 --no-pager || true`,
+          ].join('; ');
+          const result = await sshMgr.exec(session.connectionId, `sh -lc ${shQuote(command)}`, 30000);
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: `inspect service ${serviceName}`,
+            content: truncate([result.stdout, result.stderr].filter(Boolean).join('\n') || '(no output)'),
+            structured: { serviceName, ...result },
+            scratchpadNote: `Inspected service ${serviceName}`,
+          };
+        }
+        case 'service_control': {
+          const serviceName = requireString(args, 'serviceName');
+          const action = requireString(args, 'action');
+          const result = await sshMgr.exec(
+            session.connectionId,
+            `PAGER=cat SYSTEMD_PAGER=cat sh -lc ${shQuote(`sudo systemctl ${action} ${JSON.stringify(serviceName)}`)}`,
+            30000,
+          );
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: `systemctl ${action} ${serviceName}`,
+            content: truncate([result.stdout, result.stderr].filter(Boolean).join('\n') || '(no output)'),
+            structured: { serviceName, action, ...result },
+            scratchpadNote: result.exitCode === 0 ? `Service ${serviceName} ${action} succeeded` : `Service ${serviceName} ${action} failed`,
+          };
+        }
+        case 'git_clone_remote': {
+          const repoUrl = requireString(args, 'repoUrl');
+          const targetDir = requireString(args, 'targetDir');
+          const ref = typeof args.ref === 'string' ? args.ref.trim() : '';
+          const cloneCommand = ref
+            ? `rm -rf ${shQuote(targetDir)} && git clone --depth 1 --branch ${shQuote(ref)} ${shQuote(repoUrl)} ${shQuote(targetDir)}`
+            : `rm -rf ${shQuote(targetDir)} && git clone --depth 1 ${shQuote(repoUrl)} ${shQuote(targetDir)}`;
+          const result = await sshMgr.exec(
+            session.connectionId,
+            `sh -lc ${shQuote(`mkdir -p ${shQuote(path.posix.dirname(targetDir))} && ${cloneCommand}`)}`,
+            240000,
+          );
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: `git clone ${repoUrl} ${targetDir}`,
+            content: truncate([result.stdout, result.stderr].filter(Boolean).join('\n') || '(no output)'),
+            structured: { repoUrl, targetDir, ref, ...result },
+            scratchpadNote: result.exitCode === 0 ? `Remote git clone ready: ${repoUrl}` : `Remote git clone failed: ${repoUrl}`,
+          };
+        }
+        case 'git_fetch_remote': {
+          const targetDir = requireString(args, 'targetDir');
+          const ref = typeof args.ref === 'string' ? args.ref.trim() : '';
+          const command = [
+            `git -C ${shQuote(targetDir)} fetch --depth 1 origin`,
+            ref ? `git -C ${shQuote(targetDir)} checkout ${shQuote(ref)}` : '',
+            ref ? `git -C ${shQuote(targetDir)} reset --hard ${shQuote(`origin/${ref}`)}` : '',
+          ].filter(Boolean).join(' && ');
+          const result = await sshMgr.exec(session.connectionId, `sh -lc ${shQuote(command)}`, 120000);
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: `git fetch ${targetDir}${ref ? ` @ ${ref}` : ''}`,
+            content: truncate([result.stdout, result.stderr].filter(Boolean).join('\n') || '(no output)'),
+            structured: { targetDir, ref, ...result },
+            scratchpadNote: result.exitCode === 0 ? `Remote git fetch ready: ${targetDir}` : `Remote git fetch failed: ${targetDir}`,
           };
         }
         default:

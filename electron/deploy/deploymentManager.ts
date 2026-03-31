@@ -36,6 +36,15 @@ interface ActiveRunSession {
   cancelled: boolean;
 }
 
+export interface DeployAnalysisResult {
+  source: ResolvedDeploySource['source'];
+  resolvedCheckout?: ResolvedDeploySource['resolvedCheckout'];
+  projectRoot: string;
+  sourceKey: string;
+  projectSpec: Awaited<ReturnType<ProjectScanner['scan']>>;
+  serverSpec: Awaited<ReturnType<ServerInspector['inspect']>>;
+}
+
 function now() {
   return Date.now();
 }
@@ -79,6 +88,24 @@ export class DeploymentManager {
   async createDraft(sessionId: string, input: CreateDeployDraftInput): Promise<DeployDraft> {
     const resolvedSource = await this.resolveSource(input);
     return this.createDraftFromResolved(sessionId, input, resolvedSource);
+  }
+
+  async analyzeSource(
+    sessionId: string,
+    input: Pick<CreateDeployDraftInput, 'projectRoot' | 'source'>,
+  ): Promise<DeployAnalysisResult> {
+    const resolvedSource = await this.resolveSource(input);
+    const connection = this.sshMgr.getConnectionConfig(sessionId);
+    const serverSpec = await this.inspector.inspect(sessionId, connection?.host || 'server');
+    const projectSpec = await this.scanResolvedSource(sessionId, resolvedSource, serverSpec);
+    return {
+      source: resolvedSource.source,
+      resolvedCheckout: resolvedSource.resolvedCheckout,
+      projectRoot: resolvedSource.projectRoot,
+      sourceKey: resolvedSource.sourceKey,
+      projectSpec,
+      serverSpec,
+    };
   }
 
   listRuns(serverProfileId?: string) {
@@ -341,13 +368,13 @@ export class DeploymentManager {
       cloneCommand,
       `git -C ${shQuote(analysisRoot)} rev-parse HEAD`,
     ].join(' && ');
-    const active = this.requireActive(sessionId);
     const shellScript = [
       'export PAGER=cat SYSTEMD_PAGER=cat GIT_PAGER=cat TERM=dumb',
       command,
     ].join('; ');
+    const sudoMode = this.activeRuns.get(sessionId)?.run.serverSpec?.sudoMode || server.sudoMode;
     const finalCommand = pathNeedsSudo(analysisRoot)
-      ? this.wrapSudo(sessionId, shellScript, active.run.serverSpec?.sudoMode || server.sudoMode)
+      ? this.wrapSudo(sessionId, shellScript, sudoMode)
       : `sh -lc ${shQuote(shellScript)}`;
     const result = await this.sshMgr.exec(sessionId, finalCommand, 240000);
     const commit = result.stdout.trim().split(/\r?\n/).pop()?.trim();
@@ -370,7 +397,16 @@ export class DeploymentManager {
     try {
       return await this.sshMgr.readFile(sessionId, remotePath);
     } catch {
-      return null;
+      try {
+        const result = await this.sshMgr.exec(
+          sessionId,
+          `sh -lc ${shQuote(`if [ -f ${shQuote(remotePath)} ]; then cat ${shQuote(remotePath)}; fi`)}`,
+          30000,
+        );
+        return result.stdout || null;
+      } catch {
+        return null;
+      }
     }
   }
 
