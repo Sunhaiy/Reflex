@@ -817,7 +817,7 @@ export function AIChatPanel({
     const contextWindowAutoCompressed = language === 'zh' ? '自动压缩' : 'Auto-compressed';
     const contextWindowTokens = language === 'zh' ? '标记' : 'tokens';
 
-    const latestGoal = [...messages].reverse().find(message => message.role === 'user')?.content || '';
+    const latestGoal = planState?.global_goal || [...messages].reverse().find(message => message.role === 'user')?.content || '';
     const starterPrompts = language === 'zh'
         ? ['把我桌面上的项目部署到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清并修复']
         : ['Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];

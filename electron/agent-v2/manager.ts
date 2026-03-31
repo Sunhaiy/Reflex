@@ -152,6 +152,29 @@ function isContinueIntent(input: string): boolean {
   return CONTINUE_INTENT_RE.test(input.trim());
 }
 
+function summarizeDeployFailure(summary: Record<string, unknown>): string {
+  const attempts = typeof summary.attemptCount === 'number' ? summary.attemptCount : 0;
+  const failureHistory = Array.isArray(summary.failureHistory) ? summary.failureHistory : [];
+  const lastFailure = failureHistory.length > 0 ? failureHistory[failureHistory.length - 1] as Record<string, unknown> : null;
+  const failureClass = typeof lastFailure?.failureClass === 'string' ? lastFailure.failureClass : '';
+  const failureMessage = typeof lastFailure?.message === 'string' ? lastFailure.message : '';
+  const runError = typeof summary.error === 'string' ? summary.error : '';
+
+  const details = [failureClass, failureMessage || runError]
+    .filter(Boolean)
+    .join('：');
+
+  if (details) {
+    return attempts > 0
+      ? `部署还没完成，已自动修复 ${attempts}/5 轮。当前失败原因：${details}。可以继续发送“继续”恢复同一个部署 run。`
+      : `部署还没完成。当前失败原因：${details}。可以继续发送“继续”恢复同一个部署 run。`;
+  }
+
+  return attempts > 0
+    ? `部署还没完成，已自动修复 ${attempts}/5 轮。当前运行状态已保留，可以继续发送“继续”恢复同一个部署 run。`
+    : '部署主线未完成，当前运行状态已保留，可以继续发送“继续”恢复同一个部署 run。';
+}
+
 export class AgentV2Manager {
   private sessions = new Map<string, AgentThreadSession>();
   private toolRegistry;
@@ -315,7 +338,8 @@ export class AgentV2Manager {
     const autoDeployHandled = await this.tryDirectDeployRoute(session, effectiveGoal);
     if (autoDeployHandled) {
       session.running = false;
-      this.emitPlanUpdate(session, session.aborted ? 'stopped' : 'done');
+      const hasPendingDeployRun = Boolean(session.activeDeployRunId);
+      this.emitPlanUpdate(session, session.aborted ? 'stopped' : hasPendingDeployRun ? 'stopped' : 'done');
       return;
     }
     this.emitPlanUpdate(session, 'generating');
@@ -631,9 +655,7 @@ export class AgentV2Manager {
           timestamp: Date.now(),
         });
       } else {
-        const failureText = continueDeploy
-          ? '部署恢复仍未完成，当前运行状态已保留，可以继续发送“继续”恢复同一个部署 run。'
-          : '部署主线未完成，当前运行状态已保留，可以继续发送“继续”恢复同一个部署 run。';
+        const failureText = summarizeDeployFailure(summary);
         this.historyPush(session, { role: 'assistant', content: failureText });
         this.emitAssistantMessage(session, {
           id: `deploy-failed-${Date.now()}`,
@@ -655,7 +677,7 @@ export class AgentV2Manager {
       this.emitAssistantMessage(session, {
         id: `deploy-failed-${Date.now()}`,
         role: 'assistant',
-        content: '部署运行失败，当前上下文已保留，可以继续发送“继续”恢复同一个部署 run。',
+        content: `部署运行失败：${error?.message || String(error)}。当前上下文已保留，可以继续发送“继续”恢复同一个部署 run。`,
         timestamp: Date.now(),
         isError: true,
       });
