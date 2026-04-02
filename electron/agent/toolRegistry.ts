@@ -3,6 +3,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import { execFile as execFileCallback } from 'child_process';
 import { promisify } from 'util';
+import { ChildTaskSummary, TaskTodoItem } from '../../src/shared/types.js';
 import { shQuote } from '../deploy/strategies/base.js';
 import { SSHManager } from '../ssh/sshManager.js';
 import { AgentThreadSession, AgentToolCallArgs, AgentToolDefinition } from './types.js';
@@ -32,11 +33,10 @@ function requireString(args: AgentToolCallArgs, field: string): string {
   return value.trim();
 }
 
-async function runLocalCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  return runLocalCommandWithTimeout(command, 300000);
-}
-
-async function runLocalCommandWithTimeout(command: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function runLocalCommandWithTimeout(
+  command: string,
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const shell = process.platform === 'win32' ? 'powershell.exe' : 'sh';
   const shellArgs = process.platform === 'win32'
     ? ['-NoProfile', '-NonInteractive', '-Command', command]
@@ -88,8 +88,20 @@ function describeList(entries: Array<{ name: string; type?: string; size?: numbe
     .join('\n');
 }
 
+interface AgentToolRegistryOptions {
+  createTask?: (
+    session: AgentThreadSession,
+    input: { title: string; goal: string },
+  ) => Promise<ChildTaskSummary> | ChildTaskSummary;
+  runForkedAgent?: (
+    session: AgentThreadSession,
+    input: { title: string; goal: string; readOnly: boolean; maxTurns: number },
+  ) => Promise<{ childRun: ChildTaskSummary; summary: string }>;
+}
+
 export function createAgentToolRegistry(
   sshMgr: SSHManager,
+  options: AgentToolRegistryOptions = {},
 ): AgentToolDefinition {
   const definitions = [
     {
@@ -139,7 +151,7 @@ export function createAgentToolRegistry(
       type: 'function' as const,
       function: {
         name: 'local_exec',
-        description: 'Execute a command on the local machine. Prefer for project inspection or build checks.',
+        description: 'Execute a command on the local machine. Prefer this for project inspection or build checks.',
         parameters: {
           type: 'object',
           properties: {
@@ -212,7 +224,7 @@ export function createAgentToolRegistry(
       type: 'function' as const,
       function: {
         name: 'remote_upload_file',
-        description: 'Upload a local file to the remote server over built-in SFTP. Use this for dist archives, build artifacts, binaries, images, or any non-text transfer. Do not fall back to scp, base64 chunking, python receivers, nc, or temporary upload servers when this tool can handle the transfer.',
+        description: 'Upload a local file to the remote server over built-in SFTP. Use this for archives, build artifacts, binaries, images, or any non-text transfer.',
         parameters: {
           type: 'object',
           properties: {
@@ -285,6 +297,74 @@ export function createAgentToolRegistry(
     {
       type: 'function' as const,
       function: {
+        name: 'task_create',
+        description: 'Create a tracked child task for a meaningful subproblem before delegating or investigating it further.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Short subtask title.' },
+            goal: { type: 'string', description: 'Concrete subtask goal.' },
+          },
+          required: ['title', 'goal'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'agent_fork',
+        description: 'Run a scoped subagent on a child task. Prefer read-only investigation unless mutating work is necessary.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Short child task title.' },
+            goal: { type: 'string', description: 'Concrete subtask goal.' },
+            readOnly: { type: 'boolean', description: 'Whether the child agent should use read-only tools only. Defaults to true.' },
+            maxTurns: { type: 'number', description: 'Maximum child-agent turns. Defaults to 4.' },
+          },
+          required: ['title', 'goal'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'todo_write',
+        description: 'Create or replace the current todo list for this task. Keep exactly one item in_progress.',
+        parameters: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  content: { type: 'string' },
+                  status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+                },
+                required: ['id', 'content', 'status'],
+              },
+            },
+          },
+          required: ['items'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'todo_read',
+        description: 'Read the current todo list for this task.',
+        parameters: {
+          type: 'object',
+          properties: {},
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
         name: 'git_clone_remote',
         description: 'Clone a Git repository directly on the remote server.',
         parameters: {
@@ -336,7 +416,7 @@ export function createAgentToolRegistry(
             displayCommand: `local ls ${targetPath}`,
             content: describeList(serialized),
             structured: { path: targetPath, entries: serialized },
-            scratchpadNote: `发现本地目录 ${targetPath}`,
+            scratchpadNote: `Discovered local directory ${targetPath}`,
           };
         }
         case 'local_read_file': {
@@ -347,7 +427,7 @@ export function createAgentToolRegistry(
             displayCommand: `local cat ${targetPath}`,
             content: truncate(content),
             structured: { path: targetPath, content },
-            scratchpadNote: `读取本地文件 ${targetPath}`,
+            scratchpadNote: `Read local file ${targetPath}`,
           };
         }
         case 'local_write_file': {
@@ -360,7 +440,7 @@ export function createAgentToolRegistry(
             displayCommand: `local write ${targetPath}`,
             content: `Wrote ${targetPath}`,
             structured: { path: targetPath },
-            scratchpadNote: `写入本地文件 ${targetPath}`,
+            scratchpadNote: `Wrote local file ${targetPath}`,
           };
         }
         case 'local_exec': {
@@ -374,7 +454,7 @@ export function createAgentToolRegistry(
             displayCommand: command,
             content: truncate([result.stdout, result.stderr ? `[stderr]\n${result.stderr}` : ''].filter(Boolean).join('\n') || '(no output)'),
             structured: result,
-            scratchpadNote: result.exitCode === 0 ? `本地命令成功: ${command}` : `本地命令失败: ${command}`,
+            scratchpadNote: result.exitCode === 0 ? `Local command succeeded: ${command}` : `Local command failed: ${command}`,
           };
         }
         case 'remote_exec': {
@@ -409,7 +489,7 @@ export function createAgentToolRegistry(
             displayCommand: command,
             content: truncate([result.stdout, result.stderr ? `[stderr]\n${result.stderr}` : ''].filter(Boolean).join('\n') || '(no output)'),
             structured: result,
-            scratchpadNote: result.exitCode === 0 ? `远程命令成功: ${command}` : `远程命令失败: ${command}`,
+            scratchpadNote: result.exitCode === 0 ? `Remote command succeeded: ${command}` : `Remote command failed: ${command}`,
           };
         }
         case 'remote_list_directory': {
@@ -420,7 +500,7 @@ export function createAgentToolRegistry(
             displayCommand: `remote ls ${targetPath}`,
             content: describeList(entries),
             structured: { path: targetPath, entries },
-            scratchpadNote: `查看远程目录 ${targetPath}`,
+            scratchpadNote: `Listed remote directory ${targetPath}`,
           };
         }
         case 'remote_read_file': {
@@ -441,7 +521,7 @@ export function createAgentToolRegistry(
             displayCommand: `remote cat ${targetPath}`,
             content: truncate(content),
             structured: { path: targetPath, content },
-            scratchpadNote: `读取远程文件 ${targetPath}`,
+            scratchpadNote: `Read remote file ${targetPath}`,
           };
         }
         case 'remote_write_file': {
@@ -453,7 +533,7 @@ export function createAgentToolRegistry(
             displayCommand: `remote write ${targetPath}`,
             content: `Wrote ${targetPath}`,
             structured: { path: targetPath },
-            scratchpadNote: `写入远程文件 ${targetPath}`,
+            scratchpadNote: `Wrote remote file ${targetPath}`,
           };
         }
         case 'remote_upload_file': {
@@ -473,11 +553,7 @@ export function createAgentToolRegistry(
             ok: true,
             displayCommand: `upload ${localPath} -> ${remotePath}`,
             content: `Uploaded ${path.basename(localPath)} to ${remotePath}`,
-            structured: {
-              localPath,
-              remotePath,
-              size: stat.size,
-            },
+            structured: { localPath, remotePath, size: stat.size },
             scratchpadNote: `Uploaded file ${localPath} -> ${remotePath}`,
           };
         }
@@ -514,7 +590,7 @@ export function createAgentToolRegistry(
           const serviceName = requireString(args, 'serviceName');
           const command = [
             `systemctl status ${JSON.stringify(serviceName)} --no-pager || true`,
-            `echo`,
+            'echo',
             `journalctl -u ${JSON.stringify(serviceName)} -n 80 --no-pager || true`,
           ].join('; ');
           const result = await sshMgr.exec(session.connectionId, `sh -lc ${shQuote(command)}`, 30000);
@@ -540,6 +616,94 @@ export function createAgentToolRegistry(
             content: truncate([result.stdout, result.stderr].filter(Boolean).join('\n') || '(no output)'),
             structured: { serviceName, action, ...result },
             scratchpadNote: result.exitCode === 0 ? `Service ${serviceName} ${action} succeeded` : `Service ${serviceName} ${action} failed`,
+          };
+        }
+        case 'task_create': {
+          const title = requireString(args, 'title');
+          const goal = requireString(args, 'goal');
+          if (!options.createTask) {
+            throw new Error('task_create is unavailable in this runtime');
+          }
+          const childRun = await options.createTask(session, { title, goal });
+          return {
+            ok: true,
+            displayCommand: `task_create ${title}`,
+            content: `Created child task ${childRun.id}: ${childRun.title}`,
+            structured: { childRun },
+            scratchpadNote: `Created child task ${childRun.title}`,
+          };
+        }
+        case 'agent_fork': {
+          const title = requireString(args, 'title');
+          const goal = requireString(args, 'goal');
+          const readOnly = args.readOnly !== false;
+          const maxTurns = typeof args.maxTurns === 'number' && Number.isFinite(args.maxTurns)
+            ? Math.max(1, Math.min(8, Math.floor(args.maxTurns)))
+            : 4;
+          if (!options.runForkedAgent) {
+            throw new Error('agent_fork is unavailable in this runtime');
+          }
+          const result = await options.runForkedAgent(session, {
+            title,
+            goal,
+            readOnly,
+            maxTurns,
+          });
+          return {
+            ok: result.childRun.status !== 'failed',
+            displayCommand: `agent_fork ${title}`,
+            content: result.summary,
+            structured: {
+              childRun: result.childRun,
+              summary: result.summary,
+            },
+            scratchpadNote: `Forked subagent finished ${result.childRun.title} with status ${result.childRun.status}`,
+          };
+        }
+        case 'todo_write': {
+          const items = Array.isArray(args.items) ? args.items : [];
+          if (!items.length) {
+            throw new Error('todo_write requires at least one todo item');
+          }
+          const normalized: TaskTodoItem[] = items.map((item, index) => {
+            const record = typeof item === 'object' && item ? item as Record<string, unknown> : {};
+            const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : `todo-${index + 1}`;
+            const content = typeof record.content === 'string' ? record.content.trim() : '';
+            const status: TaskTodoItem['status'] =
+              record.status === 'completed' || record.status === 'in_progress'
+                ? record.status
+                : 'pending';
+            if (!content) {
+              throw new Error(`todo_write item ${index + 1} is missing content`);
+            }
+            return { id, content, status };
+          });
+          const inProgress = normalized.filter((item) => item.status === 'in_progress').length;
+          if (inProgress > 1) {
+            throw new Error('todo_write allows only one in_progress item');
+          }
+          session.taskTodos = normalized;
+          if (session.activeTaskRun) {
+            session.activeTaskRun.taskTodos = normalized;
+          }
+          return {
+            ok: true,
+            displayCommand: 'todo_write',
+            content: normalized.map((item) => `- [${item.status}] ${item.content}`).join('\n'),
+            structured: { items: normalized },
+            scratchpadNote: `Updated todo list with ${normalized.length} items`,
+          };
+        }
+        case 'todo_read': {
+          const items = session.activeTaskRun?.taskTodos?.length
+            ? session.activeTaskRun.taskTodos
+            : session.taskTodos;
+          return {
+            ok: true,
+            displayCommand: 'todo_read',
+            content: items.length ? items.map((item) => `- [${item.status}] ${item.content}`).join('\n') : '(no todos)',
+            structured: { items },
+            scratchpadNote: 'Read current todo list',
           };
         }
         case 'git_clone_remote': {

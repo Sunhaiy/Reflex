@@ -54,6 +54,40 @@ export interface AgentSessionContextWindow {
   summaryChars: number;
 }
 
+export type TaskTodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface TaskTodoItem {
+  id: string;
+  content: string;
+  status: TaskTodoStatus;
+}
+
+export type ChildTaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface ChildTaskSummary {
+  id: string;
+  title: string;
+  goal: string;
+  mode: 'task' | 'fork';
+  parentRunId?: string;
+  parentChildRunId?: string;
+  lineageKey?: string;
+  parentRoute?: string;
+  inheritedMemoryChars?: number;
+  status: ChildTaskStatus;
+  summary?: string;
+  error?: string;
+  lastAction?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AgentMemoryFileSummary {
+  scope: 'user' | 'workspace' | 'project';
+  path: string;
+  title: string;
+}
+
 export type TaskSourceType = 'local' | 'github';
 
 export type RouteHypothesisKind =
@@ -127,7 +161,6 @@ export interface RunCheckpoint {
   knownFacts: string[];
   attemptCount: number;
   nextAction?: string;
-  deployRunId?: string;
 }
 
 export interface TaskRunSummary {
@@ -147,8 +180,17 @@ export interface TaskRunSummary {
   checkpoint: RunCheckpoint;
   finalUrl?: string;
   currentAction?: string;
+  taskTodos: TaskTodoItem[];
+  childRuns: ChildTaskSummary[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface AgentCompactState {
+  lastCompactedAt?: number;
+  lastBoundaryMessageCount: number;
+  consecutiveFailures: number;
+  paused: boolean;
 }
 
 export interface AgentSessionRuntime {
@@ -158,10 +200,11 @@ export interface AgentSessionRuntime {
   compressedMemory?: string;
   compressedRunMemory?: string;
   knownProjectPaths?: string[];
+  taskTodos?: TaskTodoItem[];
+  memoryFiles?: AgentMemoryFileSummary[];
+  compactState?: AgentCompactState | null;
   agentModel?: string;
   agentProfileId?: string;
-  activeDeployRunId?: string;
-  activeDeploySource?: string;
   activeRunId?: string;
   activeTaskRun?: TaskRunSummary | null;
 }

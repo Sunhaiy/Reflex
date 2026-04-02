@@ -1,7 +1,7 @@
 import { WebContents } from 'electron';
 import { LLMMessage, LLMProfile, LLMToolDefinition } from '../llm.js';
 import { PlanState } from '../../src/shared/aiTypes.js';
-import { TaskRunSummary } from '../../src/shared/types.js';
+import { AgentCompactState, AgentMemoryFileSummary, TaskRunSummary, TaskTodoItem } from '../../src/shared/types.js';
 
 export interface AgentToolCallArgs {
   [key: string]: unknown;
@@ -74,6 +74,8 @@ export interface AgentThreadSession {
   abortController: AbortController | null;
   history: LLMMessage[];
   compressedMemory: string;
+  compressedRunMemory: string;
+  memoryPrompt: string;
   artifacts: Map<string, AgentArtifact>;
   contextWindow: AgentContextWindow;
   planState: PlanState;
@@ -92,8 +94,9 @@ export interface AgentThreadSession {
     docker: string;
   };
   knownProjectPaths: string[];
-  activeDeployRunId?: string;
-  activeDeploySource?: string;
+  memoryFiles: AgentMemoryFileSummary[];
+  taskTodos: TaskTodoItem[];
+  compactState: AgentCompactState;
   activeRunId?: string;
   activeTaskRun?: TaskRunSummary | null;
   resumeRequested?: boolean;

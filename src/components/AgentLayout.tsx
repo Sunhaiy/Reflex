@@ -1,8 +1,9 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+﻿import { useRef, useState, useCallback, useEffect } from 'react';
 import {
     Activity,
     Bot,
     ChevronLeft,
+    ChevronDown,
     Container,
     FolderOpen,
     History,
@@ -53,6 +54,16 @@ function restoreRuntime(runtime?: AgentSessionRuntime | null): AgentSessionRunti
     };
 }
 
+function looksLikeMojibake(text?: string | null) {
+    if (!text) return false;
+    return /(妫€|鏌|鍐|鎵ц|杩滅|绋|缁|閮|鍙|鐢诲竷|瀵硅瘽)/.test(text);
+}
+
+function sanitizeRuntimeText(text?: string | null, fallback = '') {
+    if (!text) return fallback;
+    return looksLikeMojibake(text) ? fallback : text;
+}
+
 export function AgentLayout({
     connectionId,
     profileId,
@@ -66,10 +77,12 @@ export function AgentLayout({
     const [leftPaneWidth, setLeftPaneWidth] = useState(0.38);
     const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>('chat');
     const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
+    const [progressPopoverOpen, setProgressPopoverOpen] = useState(false);
     const [currentSessionId, setCurrentSessionId] = useState<string>(() => generateSessionId());
     const [currentRuntime, setCurrentRuntime] = useState<AgentSessionRuntime | null>(null);
     const [sidebarRefresh, setSidebarRefresh] = useState(0);
     const layoutRef = useRef<HTMLDivElement>(null);
+    const progressPopoverRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef(false);
     const restoredProfileIdRef = useRef<string | null>(null);
     const currentSessionIdRef = useRef(currentSessionId);
@@ -185,6 +198,17 @@ export function AgentLayout({
         }
     }, [sidebarPanel]);
 
+    useEffect(() => {
+        if (!progressPopoverOpen) return;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!progressPopoverRef.current?.contains(event.target as Node)) {
+                setProgressPopoverOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [progressPopoverOpen]);
+
     const navItems: { id: SidebarPanel; icon: any; label: string }[] = [
         { id: 'chat', icon: MessageSquare, label: language === 'zh' ? '对话' : 'Chat' },
         { id: 'monitor', icon: Activity, label: t('processList.title') },
@@ -217,15 +241,37 @@ export function AgentLayout({
             : currentRuntime?.planStatus === 'paused'
                 ? (language === 'zh' ? '等待继续' : 'Waiting to continue')
                 : currentRuntime?.planStatus === 'waiting_approval'
-                    ? (language === 'zh' ? '等待批准高风险步骤' : 'Waiting for approval')
+                    ? (language === 'zh' ? '等待批准高风险操作' : 'Waiting for approval')
                     : currentRuntime?.planStatus === 'done'
                         ? (language === 'zh' ? '任务已完成' : 'Task completed')
+                        : currentRuntime?.planStatus === 'stopped'
+                            ? (language === 'zh' ? '已停止，可继续接着做' : 'Stopped, ready to continue')
+                            : (language === 'zh' ? '等待新目标' : 'Waiting for next goal');
+    const statusLabelShort = currentRuntime?.planStatus === 'executing'
+        ? (language === 'zh' ? '执行中' : 'Running')
+        : currentRuntime?.planStatus === 'generating'
+            ? (language === 'zh' ? '规划中' : 'Planning')
+            : currentRuntime?.planStatus === 'paused'
+                ? (language === 'zh' ? '等待继续' : 'Waiting to continue')
+                : currentRuntime?.planStatus === 'waiting_approval'
+                    ? (language === 'zh' ? '等待批准' : 'Waiting for approval')
+                    : currentRuntime?.planStatus === 'done'
+                        ? (language === 'zh' ? '任务已完成' : 'Completed')
                         : currentRuntime?.planStatus === 'stopped'
                             ? (language === 'zh' ? '已停止，可继续接着做' : 'Stopped, ready to continue')
                             : (language === 'zh' ? '等待新目标' : 'Waiting for next goal');
     const progressLabel = planSteps.length > 0
         ? (language === 'zh' ? `当前进度 ${completedSteps}/${planSteps.length}` : `Progress ${completedSteps}/${planSteps.length}`)
         : (language === 'zh' ? '等待创建计划' : 'Plan not started');
+    const runtimeTask = currentRuntime?.activeTaskRun || null;
+    const runtimeRoute = runtimeTask?.activeHypothesisId
+        ? runtimeTask.hypotheses.find((item) => item.id === runtimeTask.activeHypothesisId)?.kind || runtimeTask.activeHypothesisId
+        : null;
+    const runtimeFailure = runtimeTask?.failureHistory?.[runtimeTask.failureHistory.length - 1];
+    const runtimeContextWindow = currentRuntime?.contextWindow || null;
+    const runtimeTodos = runtimeTask?.taskTodos || currentRuntime?.taskTodos || [];
+    const memoryFiles = currentRuntime?.memoryFiles || [];
+    const progressHint = language === 'zh' ? '点击查看任务详情' : 'Click for task details';
     return (
         <div
             ref={layoutRef}
@@ -385,16 +431,154 @@ export function AgentLayout({
                                 <div className="min-w-0">
                                     <div className="text-sm font-semibold text-foreground">{stageTitle}</div>
                                     <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                        <span className="inline-flex items-center gap-1.5">
-                                            <span
-                                                className={cn(
-                                                    'h-2 w-2 rounded-full',
-                                                    connected ? 'bg-emerald-500' : connecting ? 'bg-amber-400 animate-pulse' : 'bg-rose-500'
-                                                )}
-                                            />
-                                            {progressLabel}
-                                        </span>
-                                        <span className="truncate">{phaseLabel}</span>
+                                        <div className="relative" ref={progressPopoverRef}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setProgressPopoverOpen((value) => !value)}
+                                                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+                                                title={progressHint}
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        'h-2 w-2 rounded-full',
+                                                        connected ? 'bg-emerald-500' : connecting ? 'bg-amber-400 animate-pulse' : 'bg-rose-500'
+                                                    )}
+                                                />
+                                                <span>{progressLabel}</span>
+                                                <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', progressPopoverOpen && 'rotate-180')} />
+                                            </button>
+                                            {progressPopoverOpen && (
+                                                <div className="absolute left-0 top-full z-30 mt-2 w-[340px] max-w-[min(340px,calc(100vw-120px))] rounded-lg border border-border bg-card p-3 shadow-lg">
+                                                    <div className="space-y-3 text-xs">
+                                                        {runtimeContextWindow && (
+                                                            <div className="rounded-md border border-border bg-background px-2.5 py-2">
+                                                                <div className="mb-1 text-[10px] text-muted-foreground">
+                                                                    {language === 'zh' ? '背景信息窗口' : 'Context window'}
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1.5 text-foreground/82">
+                                                                    <span>{language === 'zh' ? `已用 ${runtimeContextWindow.promptTokens}/${runtimeContextWindow.limitTokens}` : `Used ${runtimeContextWindow.promptTokens}/${runtimeContextWindow.limitTokens}`}</span>
+                                                                    <span>{language === 'zh' ? `${runtimeContextWindow.percentUsed}% 已用` : `${runtimeContextWindow.percentUsed}% used`}</span>
+                                                                    <span>{language === 'zh' ? `自动压缩 x${runtimeContextWindow.compressionCount}` : `Auto-compressed x${runtimeContextWindow.compressionCount}`}</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <div className="space-y-1">
+                                                            <div className="font-medium text-foreground">{language === 'zh' ? '任务详情' : 'Task details'}</div>
+                                                            <div className="text-muted-foreground">
+                                                                {sanitizeRuntimeText(
+                                                                    phaseLabel,
+                                                                    language === 'zh' ? '任务正在运行' : 'Task is running',
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {runtimeTask ? (
+                                                            <>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    <span className="rounded-md border border-border bg-background px-2 py-1">
+                                                                        {language === 'zh' ? `阶段 ${runtimeTask.phase}` : `Phase ${runtimeTask.phase}`}
+                                                                    </span>
+                                                                    {runtimeRoute && (
+                                                                        <span className="rounded-md border border-border bg-background px-2 py-1">
+                                                                            {language === 'zh' ? `路线 ${runtimeRoute}` : `Route ${runtimeRoute}`}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="rounded-md border border-border bg-background px-2 py-1">
+                                                                        {language === 'zh' ? `修复 ${runtimeTask.attemptCount}/5` : `Repairs ${runtimeTask.attemptCount}/5`}
+                                                                    </span>
+                                                                    {memoryFiles.length > 0 && (
+                                                                        <span className="rounded-md border border-border bg-background px-2 py-1">
+                                                                            {language === 'zh' ? `记忆文件 ${memoryFiles.length}` : `Memory ${memoryFiles.length}`}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {runtimeTodos.length > 0 && (
+                                                                    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+                                                                        <div className="mb-1 text-[10px] text-muted-foreground">{language === 'zh' ? '任务清单' : 'Task list'}</div>
+                                                                        <div className="space-y-1">
+                                                                            {runtimeTodos.map((todo) => (
+                                                                                <div key={todo.id} className="flex items-start gap-2 text-foreground/82">
+                                                                                    <span className="mt-0.5 text-[10px] text-muted-foreground">
+                                                                                        {todo.status === 'completed' ? '●' : todo.status === 'in_progress' ? '◉' : '○'}
+                                                                                    </span>
+                                                                                    <span className="leading-relaxed">{todo.content}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {runtimeTask.childRuns?.length > 0 && (
+                                                                    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+                                                                        <div className="mb-1 text-[10px] text-muted-foreground">{language === 'zh' ? '子任务' : 'Child tasks'}</div>
+                                                                        <div className="space-y-1">
+                                                                            {runtimeTask.childRuns.slice(-4).map((child) => (
+                                                                                <div key={child.id} className="space-y-0.5 text-foreground/82">
+                                                                                    <div className="flex items-center justify-between gap-2">
+                                                                                        <span className="font-medium text-foreground">{child.title}</span>
+                                                                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{child.status}</span>
+                                                                                    </div>
+                                                                                    <div className="leading-relaxed text-muted-foreground">
+                                                                                        {sanitizeRuntimeText(child.summary || child.lastAction || child.goal)}
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {runtimeTask.currentAction && (
+                                                                    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+                                                                        <div className="mb-1 text-[10px] text-muted-foreground">{language === 'zh' ? '当前动作' : 'Action'}</div>
+                                                                        <div className="leading-relaxed text-foreground/85">
+                                                                            {sanitizeRuntimeText(
+                                                                                runtimeTask.currentAction,
+                                                                                language === 'zh' ? '正在执行当前动作' : 'Executing the current action',
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {runtimeTask.checkpoint.knownFacts.length > 0 && (
+                                                                    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+                                                                        <div className="mb-1 text-[10px] text-muted-foreground">{language === 'zh' ? '当前判断' : 'Working notes'}</div>
+                                                                        <div className="space-y-1">
+                                                                            {runtimeTask.checkpoint.knownFacts
+                                                                                .map((fact) => sanitizeRuntimeText(fact))
+                                                                                .filter(Boolean)
+                                                                                .slice(-4)
+                                                                                .map((fact) => (
+                                                                                <div key={fact} className="leading-relaxed text-foreground/82">{fact}</div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {runtimeTask.checkpoint.nextAction && (
+                                                                    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+                                                                        <div className="mb-1 text-[10px] text-muted-foreground">{language === 'zh' ? '下一步' : 'Next step'}</div>
+                                                                        <div className="leading-relaxed text-foreground/82">
+                                                                            {sanitizeRuntimeText(
+                                                                                runtimeTask.checkpoint.nextAction,
+                                                                                language === 'zh' ? '继续执行当前路线' : 'Continue with the current route',
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {runtimeFailure && (
+                                                                    <div className="rounded-md border border-red-500/20 bg-red-500/5 px-2.5 py-2 text-red-500/85">
+                                                                        <div className="mb-1 text-[10px] text-red-500/70">{language === 'zh' ? '最近失败' : 'Latest failure'}</div>
+                                                                        <div className="leading-relaxed">
+                                                                            {runtimeFailure.failureClass}: {sanitizeRuntimeText(runtimeFailure.message, language === 'zh' ? '失败原因暂不可读' : 'Failure reason is unavailable')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <div className="rounded-md border border-border bg-background px-2.5 py-2 text-muted-foreground">
+                                                                {language === 'zh' ? '当前还没有活跃任务。' : 'No active task yet.'}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <span className="truncate">{statusLabelShort}</span>
                                     </div>
                                 </div>
                             </div>

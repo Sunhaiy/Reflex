@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
 import { Bot, User, Send, Loader2, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Circle, Target, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS, PlanState } from '../shared/aiTypes';
-import { AgentPlanPhase, AgentSessionRuntime, TaskRunSummary } from '../shared/types';
+import { AgentCompactState, AgentMemoryFileSummary, AgentPlanPhase, AgentSessionRuntime, TaskRunSummary, TaskTodoItem } from '../shared/types';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
@@ -66,12 +66,6 @@ function normalizeRestoredPlanStatus(status?: AgentPlanPhase): AgentPlanPhase {
     return status;
 }
 
-function summarizeLongText(text: string, maxChars = 180) {
-    const normalized = text.replace(/\s+/g, ' ').trim();
-    if (normalized.length <= maxChars) return normalized;
-    return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
-}
-
 export function AIChatPanel({
     connectionId,
     profileId,
@@ -101,12 +95,12 @@ export function AIChatPanel({
     const [planCollapsed, setPlanCollapsed] = useState(true);
     const [compressedMemory, setCompressedMemory] = useState('');
     const [knownProjectPaths, setKnownProjectPaths] = useState<string[]>([]);
-    const [activeDeployRunId, setActiveDeployRunId] = useState<string | undefined>(undefined);
-    const [activeDeploySource, setActiveDeploySource] = useState<string | undefined>(undefined);
     const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
     const [activeTaskRun, setActiveTaskRun] = useState<TaskRunSummary | null>(null);
     const [compressedRunMemory, setCompressedRunMemory] = useState('');
-    const [showFailureDetails, setShowFailureDetails] = useState(false);
+    const [taskTodos, setTaskTodos] = useState<TaskTodoItem[]>([]);
+    const [memoryFiles, setMemoryFiles] = useState<AgentMemoryFileSummary[]>([]);
+    const [compactState, setCompactState] = useState<AgentCompactState | null>(null);
     const planStateRef = useRef<PlanState | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -134,11 +128,12 @@ export function AIChatPanel({
         knownProjectPaths,
         agentModel,
         agentProfileId,
-        activeDeployRunId,
-        activeDeploySource,
         activeRunId,
         activeTaskRun,
         compressedRunMemory,
+        taskTodos,
+        memoryFiles,
+        compactState: compactState || undefined,
     });
 
     // Inject CSS keyframes for AI chat animations (runs once)
@@ -212,11 +207,12 @@ export function AIChatPanel({
         setKnownProjectPaths(runtime?.knownProjectPaths || []);
         setAgentModel(runtime?.agentModel || '');
         setAgentProfileId(runtime?.agentProfileId || '');
-        setActiveDeployRunId(runtime?.activeDeployRunId);
-        setActiveDeploySource(runtime?.activeDeploySource);
         setActiveRunId(runtime?.activeRunId);
         setActiveTaskRun(runtime?.activeTaskRun || null);
         setCompressedRunMemory(runtime?.compressedRunMemory || '');
+        setTaskTodos(runtime?.taskTodos || []);
+        setMemoryFiles(runtime?.memoryFiles || []);
+        setCompactState(runtime?.compactState || null);
         setPendingCommands([]);
         setIsLoading(false);
         isLoadingRef.current = false;
@@ -254,16 +250,12 @@ export function AIChatPanel({
         }, 800);
         return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [messages, planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeDeployRunId, activeDeploySource, activeRunId, activeTaskRun, compressedRunMemory]);
+    }, [messages, planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeRunId, activeTaskRun, compressedRunMemory, taskTodos, memoryFiles, compactState]);
 
     useEffect(() => {
         onRuntimeChange?.(buildRuntimeSnapshot());
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeDeployRunId, activeDeploySource, activeRunId, activeTaskRun, compressedRunMemory]);
-
-    useEffect(() => {
-        setShowFailureDetails(false);
-    }, [activeTaskRun?.id, activeTaskRun?.failureHistory.length]);
+    }, [planState, planStatus, contextWindow, compressedMemory, knownProjectPaths, agentModel, agentProfileId, activeRunId, activeTaskRun, compressedRunMemory, taskTodos, memoryFiles, compactState]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -282,7 +274,7 @@ export function AIChatPanel({
     useEffect(() => {
         const eWin = window as any;
         const cleanPlan = eWin.electron?.onAgentPlanUpdate?.(
-            ({ sessionId: eventSessionId, planState: ps, planPhase, contextWindow: ctxWindow, compressedMemory: nextCompressedMemory, knownProjectPaths: nextKnownProjectPaths, activeDeployRunId: nextDeployRunId, activeDeploySource: nextDeploySource, activeRunId: nextRunId, activeTaskRun: nextTaskRun }: any) => {
+            ({ sessionId: eventSessionId, planState: ps, planPhase, contextWindow: ctxWindow, compressedMemory: nextCompressedMemory, compressedRunMemory: nextCompressedRunMemory, knownProjectPaths: nextKnownProjectPaths, activeRunId: nextRunId, activeTaskRun: nextTaskRun, taskTodos: nextTaskTodos, memoryFiles: nextMemoryFiles, compactState: nextCompactState }: any) => {
                 if (eventSessionId !== sessionIdRef.current) return;
                 setPlanState(ps);
                 planStateRef.current = ps;
@@ -290,11 +282,12 @@ export function AIChatPanel({
                 setPlanStatus(planPhase);
                 setCompressedMemory(nextCompressedMemory || '');
                 setKnownProjectPaths(Array.isArray(nextKnownProjectPaths) ? nextKnownProjectPaths : []);
-                setActiveDeployRunId(typeof nextDeployRunId === 'string' ? nextDeployRunId : undefined);
-                setActiveDeploySource(typeof nextDeploySource === 'string' ? nextDeploySource : undefined);
                 setActiveRunId(typeof nextRunId === 'string' ? nextRunId : undefined);
                 setActiveTaskRun(nextTaskRun || null);
-                setCompressedRunMemory(nextTaskRun?.checkpoint?.knownFacts?.join('\n') || '');
+                setCompressedRunMemory(nextCompressedRunMemory || '');
+                setTaskTodos(Array.isArray(nextTaskTodos) ? nextTaskTodos : []);
+                setMemoryFiles(Array.isArray(nextMemoryFiles) ? nextMemoryFiles : []);
+                setCompactState(nextCompactState || null);
                 if (['done', 'stopped', 'paused', 'waiting_approval'].includes(planPhase)) {
                     setIsLoading(false);
                     isLoadingRef.current = false;
@@ -769,8 +762,9 @@ export function AIChatPanel({
             setActiveRunId(undefined);
             setActiveTaskRun(null);
             setCompressedRunMemory('');
-            setActiveDeployRunId(undefined);
-            setActiveDeploySource(undefined);
+            setTaskTodos([]);
+            setMemoryFiles([]);
+            setCompactState(null);
         }
 
         if (planMode) {
@@ -779,30 +773,42 @@ export function AIChatPanel({
             const profile = getSelectedProfile();
             setIsLoading(true);
             isLoadingRef.current = true;
-
-            if (isResuming) {
-                (window as any).electron?.agentPlanResume?.({
-                    sessionId,
-                    connectionId,
-                    userInput: userMsg.content,
-                    profile,
-                    sshHost: host,
-                    threadMessages: updatedMessages,
-                    restoredRuntime: buildRuntimeSnapshot(),
-                });
-            } else {
-                setPlanState(null);
-                planStateRef.current = null;
-                setPlanStatus('generating');
-                (window as any).electron?.agentPlanStart?.({
-                    sessionId,
-                    connectionId,
-                    goal: userMsg.content,
-                    profile,
-                    sshHost: host,
-                    threadMessages: updatedMessages,
-                    restoredRuntime: buildRuntimeSnapshot(),
-                });
+            try {
+                if (isResuming) {
+                    await (window as any).electron?.agentPlanResume?.({
+                        sessionId,
+                        connectionId,
+                        userInput: userMsg.content,
+                        profile,
+                        sshHost: host,
+                        threadMessages: updatedMessages,
+                        restoredRuntime: buildRuntimeSnapshot(),
+                    });
+                } else {
+                    setPlanState(null);
+                    planStateRef.current = null;
+                    setPlanStatus('generating');
+                    await (window as any).electron?.agentPlanStart?.({
+                        sessionId,
+                        connectionId,
+                        goal: userMsg.content,
+                        profile,
+                        sshHost: host,
+                        threadMessages: updatedMessages,
+                        restoredRuntime: buildRuntimeSnapshot(),
+                    });
+                }
+            } catch (err: any) {
+                setIsLoading(false);
+                isLoadingRef.current = false;
+                const errorMsg: AgentMessage = {
+                    id: `error-${Date.now()}`,
+                    role: 'assistant',
+                    content: `执行失败: ${err?.message || String(err)}`,
+                    timestamp: Date.now(),
+                    isError: true,
+                };
+                onMessagesChange([...updatedMessages, errorMsg]);
             }
         } else {
             setIsLoading(true);
@@ -835,76 +841,9 @@ export function AIChatPanel({
         }
     };
 
-    const formatTokenCount = (count: number) => {
-        if (count >= 1000) return `${Math.round(count / 1000)}k`;
-        return `${count}`;
-    };
-
-    const contextWindowTitle = language === 'zh' ? '背景信息窗口' : 'Context Window';
-    const contextWindowUsed = language === 'zh' ? '已用' : 'used';
-    const contextWindowAutoCompressed = language === 'zh' ? '自动压缩' : 'Auto-compressed';
-    const contextWindowTokens = language === 'zh' ? '标记' : 'tokens';
-
-    const latestGoal = activeTaskRun?.goal || planState?.global_goal || [...messages].reverse().find(message => message.role === 'user')?.content || '';
     const starterPrompts = language === 'zh'
         ? ['把我桌面上的项目部署到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清并修复']
         : ['Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];
-    const currentModelLabel = (() => {
-        const profile = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
-        if (agentModel) return agentModel;
-        if (profile?.model) return profile.model;
-        if (profile) return profile.name;
-        return language === 'zh' ? '默认模型' : 'Default Model';
-    })();
-    const runStatusLabel = activeTaskRun
-        ? activeTaskRun.status === 'running'
-            ? (language === 'zh' ? '执行中' : 'Running')
-            : activeTaskRun.status === 'repairing'
-                ? (language === 'zh' ? `修复中 ${activeTaskRun.attemptCount}/${5}` : `Repairing ${activeTaskRun.attemptCount}/${5}`)
-                : activeTaskRun.status === 'completed'
-                    ? (language === 'zh' ? '已完成' : 'Completed')
-                    : activeTaskRun.status === 'retryable_paused'
-                        ? (language === 'zh' ? '等待恢复' : 'Retryable Paused')
-                        : activeTaskRun.status === 'paused'
-                            ? (language === 'zh' ? '已暂停' : 'Paused')
-                            : (language === 'zh' ? '已失败' : 'Failed')
-        : planStatus === 'executing'
-        ? (language === 'zh' ? '正在执行' : 'Executing')
-        : planStatus === 'generating'
-            ? (language === 'zh' ? '正在规划' : 'Planning')
-            : planStatus === 'paused'
-                ? (language === 'zh' ? '等待继续' : 'Paused')
-                : planStatus === 'waiting_approval'
-                    ? (language === 'zh' ? '等待批准' : 'Awaiting Approval')
-                    : planStatus === 'done'
-                        ? (language === 'zh' ? '执行完成' : 'Completed')
-                        : planStatus === 'stopped'
-                            ? (language === 'zh' ? '已停止' : 'Stopped')
-                            : (language === 'zh' ? '待命中' : 'Standing By');
-    const latestFailure = activeTaskRun?.failureHistory?.[activeTaskRun.failureHistory.length - 1];
-    const latestFailureText = latestFailure
-        ? [latestFailure.failureClass, latestFailure.message].filter(Boolean).join(' · ')
-        : '';
-    const latestFailureSummary = latestFailureText ? summarizeLongText(latestFailureText) : '';
-    const hasVerboseFailure = Boolean(latestFailureText) && (latestFailureText.length > latestFailureSummary.length || latestFailureText.includes('\n'));
-    const activeHypothesis = activeTaskRun
-        ? activeTaskRun.hypotheses.find(item => item.id === activeTaskRun.activeHypothesisId) || activeTaskRun.hypotheses[0]
-        : undefined;
-    const repoSummaryNote = activeTaskRun?.repoAnalysis?.readmeSummary
-        ? summarizeLongText(activeTaskRun.repoAnalysis.readmeSummary, 110)
-        : '';
-    const workingNotes = Array.from(new Set([
-        ...(activeHypothesis?.summary ? [summarizeLongText(activeHypothesis.summary, 110)] : []),
-        ...(activeHypothesis?.evidence || []).slice(0, 2).map(item => summarizeLongText(item, 96)),
-        ...(activeTaskRun?.checkpoint.knownFacts || []).slice(0, 2).map(item => summarizeLongText(item, 96)),
-        ...(repoSummaryNote ? [repoSummaryNote] : []),
-    ].filter(Boolean))).slice(0, 4);
-    const nextActionHint = activeTaskRun?.checkpoint.nextAction
-        ? summarizeLongText(activeTaskRun.checkpoint.nextAction, 110)
-        : activeTaskRun?.currentAction
-            ? summarizeLongText(activeTaskRun.currentAction, 110)
-            : '';
-    const showWorkingNotes = workingNotes.length > 0 || Boolean(nextActionHint);
 
     return (
         <div className={cn("flex h-full flex-col overflow-hidden bg-card", className)}>
@@ -1354,150 +1293,6 @@ export function AIChatPanel({
                             </div>
                         )}
                     </div>
-                </div>
-
-                <div className="mb-3 overflow-hidden rounded-lg border border-border bg-card">
-                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[10px] text-muted-foreground/75">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span className="font-medium text-foreground/75">{contextWindowTitle}</span>
-                            {contextWindow ? (
-                                <>
-                                    <span>{Math.round(contextWindow.percentUsed)}% {contextWindowUsed}</span>
-                                    <span>{contextWindowUsed} {formatTokenCount(contextWindow.promptTokens)} {contextWindowTokens} / {formatTokenCount(contextWindow.limitTokens)}</span>
-                                    {contextWindow.compressionCount > 0 && (
-                                        <span className="text-emerald-400/80">{contextWindowAutoCompressed} ×{contextWindow.compressionCount}</span>
-                                    )}
-                                </>
-                            ) : (
-                                <span>{language === 'zh' ? '当前上下文已就绪' : 'Context ready'}</span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground">{currentModelLabel}</span>
-                            <span className="rounded-md border border-border bg-background px-2 py-1 text-[10px] text-foreground/75">{runStatusLabel}</span>
-                        </div>
-                    </div>
-                    {contextWindow && (
-                        <div className="px-3 pb-2">
-                            <div className="h-1.5 overflow-hidden rounded-full bg-muted/50">
-                                <div
-                                    className={cn(
-                                        "h-full transition-all duration-500",
-                                        contextWindow.percentUsed >= 85 ? "bg-red-400/85" : contextWindow.percentUsed >= 70 ? "bg-yellow-400/85" : "bg-emerald-400/85",
-                                    )}
-                                    style={{ width: `${Math.min(100, Math.max(2, contextWindow.percentUsed))}%` }}
-                                />
-                            </div>
-                        </div>
-                    )}
-                    {latestGoal && (
-                        <div className="border-t border-border/45 px-3 py-2 text-[11px] text-foreground/72">
-                            <span className="text-muted-foreground/65">{language === 'zh' ? '当前目标：' : 'Current goal: '}</span>
-                            <span className="break-words leading-snug">{latestGoal}</span>
-                        </div>
-                    )}
-                    {activeTaskRun && (
-                        <div className="border-t border-border/45 px-3 py-2 text-[11px] text-foreground/72">
-                            <div className="space-y-2">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="rounded-md border border-border/60 bg-background px-2 py-1 text-[10px]">
-                                        <span className="text-muted-foreground/65">{language === 'zh' ? '阶段' : 'Phase'}</span>
-                                        <span className="ml-1 text-foreground/85">{activeTaskRun.phase}</span>
-                                    </span>
-                                    {activeTaskRun.activeHypothesisId && (
-                                        <span className="rounded-md border border-border/60 bg-background px-2 py-1 text-[10px]">
-                                            <span className="text-muted-foreground/65">{language === 'zh' ? '路线' : 'Route'}</span>
-                                            <span className="ml-1 text-foreground/85">
-                                                {activeTaskRun.hypotheses.find(item => item.id === activeTaskRun.activeHypothesisId)?.kind || activeTaskRun.activeHypothesisId}
-                                            </span>
-                                        </span>
-                                    )}
-                                    {activeTaskRun.attemptCount > 0 && (
-                                        <span className="rounded-md border border-border/60 bg-background px-2 py-1 text-[10px]">
-                                            <span className="text-muted-foreground/65">{language === 'zh' ? '修复' : 'Repairs'}</span>
-                                            <span className="ml-1 text-foreground/85">{activeTaskRun.attemptCount}/5</span>
-                                        </span>
-                                    )}
-                                </div>
-                                {activeTaskRun.currentAction && (
-                                    <div className="rounded-md border border-border/50 bg-background/70 px-2.5 py-2">
-                                        <div className="mb-1 text-[10px] text-muted-foreground/65">
-                                            {language === 'zh' ? '当前动作' : 'Action'}
-                                        </div>
-                                        <div
-                                            className="break-words leading-snug text-foreground/80"
-                                            style={{
-                                                display: '-webkit-box',
-                                                WebkitLineClamp: 2,
-                                                WebkitBoxOrient: 'vertical',
-                                                overflow: 'hidden',
-                                            }}
-                                        >
-                                            {activeTaskRun.currentAction}
-                                        </div>
-                                    </div>
-                                )}
-                                {showWorkingNotes && (
-                                    <div className="rounded-md border border-border/50 bg-muted/15 px-2.5 py-2">
-                                        <div className="mb-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/65">
-                                            <Brain className="h-3 w-3" />
-                                            <span>{language === 'zh' ? '当前判断' : 'Working notes'}</span>
-                                        </div>
-                                        {workingNotes.length > 0 && (
-                                            <div className="space-y-1.5">
-                                                {workingNotes.map((note, index) => (
-                                                    <div key={`${note}-${index}`} className="flex items-start gap-1.5 text-[11px] text-foreground/76">
-                                                        <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/55" />
-                                                        <span className="break-words leading-snug">{note}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        {nextActionHint && (
-                                            <div className="mt-2 rounded-md border border-border/40 bg-background/70 px-2 py-1.5">
-                                                <div className="mb-1 text-[10px] text-muted-foreground/65">
-                                                    {language === 'zh' ? '下一步' : 'Next step'}
-                                                </div>
-                                                <div className="break-words text-[11px] leading-snug text-foreground/78">
-                                                    {nextActionHint}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                {latestFailure && (
-                                    <div className="rounded-md border border-red-500/20 bg-red-500/5 px-2.5 py-2">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0 flex-1">
-                                                <div className="mb-1 text-[10px] text-red-500/80">
-                                                    {language === 'zh' ? '最近失败' : 'Latest failure'}
-                                                </div>
-                                                <div
-                                                    className={cn(
-                                                        'break-words text-red-500/85',
-                                                        showFailureDetails ? 'max-h-24 overflow-y-auto whitespace-pre-wrap pr-1' : 'leading-snug',
-                                                    )}
-                                                >
-                                                    {showFailureDetails ? latestFailureText : latestFailureSummary}
-                                                </div>
-                                            </div>
-                                            {hasVerboseFailure && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowFailureDetails(value => !value)}
-                                                    className="shrink-0 rounded-md border border-red-500/20 bg-background/80 px-2 py-1 text-[10px] text-red-500/80 transition-colors hover:bg-red-500/10"
-                                                >
-                                                    {showFailureDetails
-                                                        ? (language === 'zh' ? '收起' : 'Less')
-                                                        : (language === 'zh' ? '详情' : 'Details')}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 <div className="relative overflow-hidden rounded-lg border border-border bg-card transition-colors focus-within:border-primary/40">
