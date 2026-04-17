@@ -1399,13 +1399,13 @@ export class AgentSessionStore {
     const framework = run.repoAnalysis?.framework || 'application';
     switch (route?.kind) {
       case 'static-nginx':
-        return 'Prepare the frontend runtime, build static assets, publish dist/build output, and wire nginx to the public endpoint';
+        return 'Prepare the frontend runtime, build static assets, pack the dist/build output into one release archive, upload and extract it remotely, then wire nginx to the public endpoint';
       case 'node-runtime':
-        return 'Install Node dependencies, build if needed, boot the service with a supervisor, and connect nginx or the public port';
+        return 'Prepare one release archive, upload and extract it remotely, install Node dependencies, build if needed, boot the service with a supervisor, and connect nginx or the public port';
       case 'python-runtime':
-        return 'Install Python dependencies, create the runtime environment, boot the service, and expose it through nginx or the public port';
+        return 'Prepare one release archive, upload and extract it remotely, install Python dependencies, create the runtime environment, boot the service, and expose it through nginx or the public port';
       case 'java-runtime':
-        return 'Build the Java artifact, run it under systemd, and connect nginx or the public port';
+        return 'Build the Java artifact or package one release archive, upload and extract it remotely, run it under systemd, and connect nginx or the public port';
       case 'compose-native':
         return 'Use the repository compose stack, validate service health, and expose the correct public entrypoint';
       case 'dockerfile-native':

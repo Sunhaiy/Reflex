@@ -15,6 +15,7 @@ export function buildRepoAnalysis(
     framework: project.framework,
     language: project.language,
     packaging: project.packaging,
+    outputDir: project.outputDir,
     runtimeRequirements: project.runtimeRequirements.map((item) => ({
       name: item.name,
       version: item.version,

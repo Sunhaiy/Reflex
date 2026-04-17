@@ -45,6 +45,42 @@ function formatStrategyHistory(session: AgentThreadSession) {
   ].join('\n');
 }
 
+function formatExecutionGuidance(session: AgentThreadSession) {
+  const run = session.activeTaskRun;
+  if (!run?.repoAnalysis) return '';
+
+  const route = run.activeHypothesisId
+    ? run.hypotheses.find((item) => item.id === run.activeHypothesisId)
+    : run.hypotheses[0];
+  if (!route) return '';
+
+  const outputDir = run.repoAnalysis.outputDir || (route.kind === 'static-nginx' ? 'dist or build output' : undefined);
+  const buildCommand = run.repoAnalysis.buildCommands[0];
+  const startCommand = run.repoAnalysis.startCommands[0];
+  const lines = ['Route execution guidance:'];
+
+  if (run.source?.type === 'local') {
+    lines.push('This source is local. Prefer one release archive over many per-file uploads whenever possible.');
+
+    if (route.kind === 'static-nginx') {
+      lines.push('For this local static-site route, install dependencies locally, run the local production build, pack only the built output directory into one archive, upload that single archive, extract it remotely, configure nginx, then verify with http_probe.');
+      lines.push('Do not upload many dist/assets files one by one unless there is a strong reason.');
+      lines.push('Preferred tools for this route: local_exec, local_pack_archive, remote_upload_file, remote_extract_archive, remote_write_file or remote_apply_patch, remote_exec, http_probe.');
+    } else {
+      lines.push('For this local deployment route, prefer packing the project or release artifact into one archive, uploading it once, and extracting it remotely before runtime wiring and verification.');
+      lines.push('Avoid repetitive file-by-file transfer when a single archive would work.');
+    }
+  } else if (run.source?.type === 'github') {
+    lines.push('This source is GitHub-based. Prefer remote checkout/fetch plus remote build/install steps instead of local packing.');
+  }
+
+  if (buildCommand) lines.push(`Known build command: ${buildCommand}`);
+  if (startCommand) lines.push(`Known start command: ${startCommand}`);
+  if (outputDir) lines.push(`Likely output directory: ${outputDir}`);
+
+  return lines.join('\n');
+}
+
 export function appendScratchpad(existing: string, note?: string) {
   const next = (note || '').trim();
   if (!next) return existing;
@@ -85,9 +121,12 @@ function buildToolDisciplinePrompt() {
     'Never invent ad-hoc transfer protocols, temporary HTTP upload servers, base64 chunking, or shell tricks when a tool already exists.',
     'Prefer local_replace_in_file or remote_replace_in_file for targeted text edits before rewriting an entire file.',
     'Prefer local_apply_patch or remote_apply_patch for multi-line code edits that need context-aware patching.',
+    'Prefer local_pack_archive and remote_extract_archive when you need to transfer a local build or project release to the server.',
     'Prefer taking another concrete action over narrating what you might do next.',
     'For repository deployment tasks, inspect README, Docker/Compose files, runtime manifests, env examples, and remote environment signals before deciding a route.',
     'Prefer repository-native routes first: docker compose, Dockerfile, then language-native runtime routes.',
+    'For local-source deployments, do not upload dozens of files one by one when one archive would transfer the same release more safely and clearly.',
+    'For local frontend or static-site deployments, inspect the build command, run the local build first, archive the built output directory, upload one archive, extract it remotely, then configure nginx and verify externally.',
     'When a route fails, decide whether the route is wrong or the environment is incomplete. Repair the current route when possible; switch routes only when evidence disproves the current one.',
     'Run explicit self-checks during long tasks: verify the current assumptions, confirm the next milestone, and change strategy when failures repeat.',
     'For GitHub deployment tasks, work directly on the remote server: clone or fetch the repository remotely, inspect it there, and deploy from that remote checkout.',
@@ -131,6 +170,9 @@ function buildDynamicContext(session: AgentThreadSession) {
           run.repoAnalysis
             ? `Repo analysis: ${run.repoAnalysis.framework}/${run.repoAnalysis.language}, packaging=${run.repoAnalysis.packaging}, confidence=${Math.round(run.repoAnalysis.confidence * 100)}%`
             : '',
+          run.repoAnalysis?.outputDir ? `Likely output directory: ${run.repoAnalysis.outputDir}` : '',
+          run.repoAnalysis?.buildCommands?.length ? `Build commands: ${run.repoAnalysis.buildCommands.join(' | ')}` : '',
+          run.repoAnalysis?.startCommands?.length ? `Start commands: ${run.repoAnalysis.startCommands.join(' | ')}` : '',
           run.currentAction ? `Current action: ${run.currentAction}` : '',
           run.selfCheckCount ? `Self-check rounds: ${run.selfCheckCount}` : '',
           run.watchdogState ? `Watchdog: ${run.watchdogState}, alerts=${run.watchdogAlerts || 0}, replays=${run.checkpointReplayCount || run.checkpoint.replayCount || 0}` : '',
@@ -140,6 +182,7 @@ function buildDynamicContext(session: AgentThreadSession) {
             : '',
         ].filter(Boolean).join('\n')
       : '',
+    formatExecutionGuidance(session),
     formatLongRangePlan(session),
     formatStrategyHistory(session),
     formatTodos(session),

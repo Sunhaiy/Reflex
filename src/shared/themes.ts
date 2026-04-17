@@ -30,6 +30,7 @@ export interface BaseTheme {
   id: BaseThemeId;
   name: string;
   type: 'light' | 'dark';
+  allowAccentOverride?: boolean;
   colors: {
     background: string;
     foreground: string;
@@ -125,6 +126,7 @@ export const baseThemes: Record<BaseThemeId, BaseTheme> = {
     id: 'coolBlack',
     name: '炫酷黑',
     type: 'dark',
+    allowAccentOverride: true,
     colors: {
       background: "0 0% 0%",
       foreground: "0 0% 100%",
@@ -153,6 +155,7 @@ export const baseThemes: Record<BaseThemeId, BaseTheme> = {
     id: 'coolWhite',
     name: '炫酷白',
     type: 'light',
+    allowAccentOverride: true,
     colors: {
       background: "0 0% 100%",
       foreground: "0 0% 5%",
@@ -466,7 +469,7 @@ export const accentColors: Record<AccentColorId, AccentColor> = {
   indigo: { id: 'indigo', name: 'Indigo', color: "244 55% 41%", foreground: "0 0% 100%" }, // #6366f1 (Default-ish) -- Hoppscotch default is usually Indigo or Purple
   purple: { id: 'purple', name: 'Purple', color: "262 83% 58%", foreground: "0 0% 100%" }, // #a855f7 (Hoppscotch primary is often purple)
   yellow: { id: 'yellow', name: 'Yellow', color: "48 96% 53%", foreground: "0 0% 0%" },    // #eab308
-  orange: { id: 'orange', name: 'Orange', color: "24 94% 50%", foreground: "0 0% 100%" },  // #f97316
+  orange: { id: 'orange', name: 'Orange', color: "24 94% 50%", foreground: "24 30% 8%" },   // #f97316
   red: { id: 'red', name: 'Red', color: "0 84% 60%", foreground: "0 0% 100%" },            // #ef4444
   pink: { id: 'pink', name: 'Pink', color: "330 81% 60%", foreground: "0 0% 100%" },       // #ec4899
 };

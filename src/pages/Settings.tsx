@@ -24,7 +24,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useThemeStore } from '../store/themeStore';
 import { AI_PROVIDER_CONFIGS, AIProvider, AIProviderProfile } from '../shared/aiTypes';
 import { Language } from '../shared/locales';
-import { baseThemes, BaseThemeId, terminalThemes, TerminalThemeId } from '../shared/themes';
+import { accentColors, baseThemes, BaseThemeId, terminalThemes, TerminalThemeId } from '../shared/themes';
 
 interface SettingsProps {
   onBack: () => void;
@@ -59,7 +59,9 @@ export function Settings({ onBack }: SettingsProps) {
 
   const {
     baseThemeId,
+    accentColorId,
     setBaseTheme,
+    setAccentColor,
     currentTerminalThemeId,
     setTerminalTheme,
   } = useThemeStore();
@@ -133,13 +135,18 @@ export function Settings({ onBack }: SettingsProps) {
     { id: 'coolBlack', label: '炫酷黑', description: '深色高对比，聚焦内容和终端。' },
     { id: 'coolWhite', label: '炫酷白', description: '清爽纯白，适合白天和演示。' },
     { id: 'blossom', label: '落樱', description: '柔和樱粉，保留一点轻盈氛围。' },
+    { id: 'cyberpunk', label: '赛博朋克 2077', description: '高对比霓虹夜景，保留专属黄青配色。' },
   ];
 
   const curatedTerminalThemes: Array<{ id: TerminalThemeId; label: string; description: string }> = [
     { id: 'default', label: '黑域终端', description: '适配炫酷黑的深色终端。' },
     { id: 'githubLight', label: '白域终端', description: '适配炫酷白的浅色终端。' },
     { id: 'taxuexunmei', label: '落樱终端', description: '适配落樱的柔和浅色终端。' },
+    { id: 'cyberpunk', label: '赛博终端', description: '适配赛博朋克 2077 的黄青终端。' },
   ];
+
+  const accentOptions = Object.values(accentColors);
+  const accentSelectionEnabled = Boolean(baseThemes[baseThemeId].allowAccentOverride);
 
   const languageOptions = [
     { label: 'English', value: 'en' },
@@ -169,6 +176,9 @@ export function Settings({ onBack }: SettingsProps) {
   }) => {
     const theme = baseThemes[id];
     const isActive = baseThemeId === id;
+    const previewPrimary = theme.allowAccentOverride
+      ? accentColors[accentColorId].color
+      : (theme.colorOverrides?.primary ?? theme.colors.foreground);
 
     return (
       <button
@@ -178,7 +188,7 @@ export function Settings({ onBack }: SettingsProps) {
         className={cn(
           'rounded-2xl border p-2.5 text-left transition-all',
           isActive
-            ? 'border-primary bg-primary/8 shadow-[0_16px_40px_-24px_rgba(59,130,246,0.65)]'
+            ? 'border-primary/55 bg-primary/[0.06]'
             : 'border-border/70 bg-background/40 hover:border-primary/40 hover:bg-accent/40'
         )}
       >
@@ -203,7 +213,7 @@ export function Settings({ onBack }: SettingsProps) {
           <div className="absolute inset-x-3 bottom-3 flex items-center gap-2">
             <div
               className="h-2.5 w-2.5 rounded-full border border-black/10"
-              style={{ background: `hsl(${theme.colorOverrides?.primary ?? theme.colors.foreground})` }}
+              style={{ background: `hsl(${previewPrimary})` }}
             />
             <div className="h-2.5 flex-1 rounded-full" style={{ background: `hsl(${theme.colors.secondary})` }} />
             <div className="h-2.5 w-8 rounded-full" style={{ background: `hsl(${theme.colors.card})` }} />
@@ -237,7 +247,7 @@ export function Settings({ onBack }: SettingsProps) {
         className={cn(
           'rounded-2xl border p-3 text-left transition-all',
           isActive
-            ? 'border-primary bg-primary/8 shadow-[0_16px_40px_-24px_rgba(59,130,246,0.65)]'
+            ? 'border-primary/55 bg-primary/[0.06]'
             : 'border-border/70 bg-background/40 hover:border-primary/40 hover:bg-accent/40'
         )}
       >
@@ -324,7 +334,56 @@ export function Settings({ onBack }: SettingsProps) {
                     {t('settings.appearance.backgroundThemeDesc')}
                   </span>
                 </div>
-                <div className="grid gap-3 md:grid-cols-3">{curatedThemes.map(renderAppearanceThemeCard)}</div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{curatedThemes.map(renderAppearanceThemeCard)}</div>
+              </div>
+
+              <div className={sectionClass}>
+                <div className="mb-3">
+                  <span className="text-sm font-medium">主题主色</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    夜间主题不再固定蓝色。炫酷黑和炫酷白支持自定义主色，赛博朋克主题保留自己的专属配色。
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {accentOptions.map((accent) => {
+                    const isActive = accentColorId === accent.id;
+
+                    return (
+                      <button
+                        key={accent.id}
+                        type="button"
+                        onClick={() => setAccentColor(accent.id)}
+                        className={cn(
+                          'flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors',
+                          isActive
+                            ? 'border-primary/50 bg-primary/[0.06]'
+                            : 'border-border/70 bg-background/35 hover:border-primary/35 hover:bg-accent/35'
+                        )}
+                      >
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full border border-black/10"
+                          style={{ backgroundColor: `hsl(${accent.color})` }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium">{accent.name}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {accent.id === 'teal' ? '默认推荐' : '可用于强调按钮、状态和进度'}
+                          </span>
+                        </span>
+                        {isActive && (
+                          <span className="rounded-full bg-primary/12 p-1 text-primary">
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!accentSelectionEnabled && (
+                  <div className="mt-3 rounded-lg border border-border/60 bg-background/35 px-3 py-2 text-xs text-muted-foreground">
+                    当前主题使用固定主色。你选中的颜色会保留，在切回炫酷黑或炫酷白时自动生效。
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -345,7 +404,7 @@ export function Settings({ onBack }: SettingsProps) {
                   <span className="text-sm font-medium">{t('settings.appearance.theme')}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">{t('settings.appearance.themeDesc')}</span>
                 </div>
-                <div className="grid gap-3 md:grid-cols-3">{curatedTerminalThemes.map(renderTerminalThemeCard)}</div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{curatedTerminalThemes.map(renderTerminalThemeCard)}</div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">

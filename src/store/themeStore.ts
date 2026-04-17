@@ -32,8 +32,8 @@ interface ThemeState {
   initTheme: () => Promise<void>;
 }
 
-const curatedBaseThemes = ['coolBlack', 'coolWhite', 'blossom'] as const;
-const curatedTerminalThemes = ['default', 'githubLight', 'taxuexunmei'] as const;
+const curatedBaseThemes = ['coolBlack', 'coolWhite', 'blossom', 'cyberpunk'] as const;
+const curatedTerminalThemes = ['default', 'githubLight', 'taxuexunmei', 'cyberpunk'] as const;
 
 const getDefaultTerminalTheme = (baseThemeId: BaseThemeId): TerminalThemeId => {
   if (baseThemeId === 'coolWhite') {
@@ -42,6 +42,10 @@ const getDefaultTerminalTheme = (baseThemeId: BaseThemeId): TerminalThemeId => {
 
   if (baseThemeId === 'blossom') {
     return 'taxuexunmei';
+  }
+
+  if (baseThemeId === 'cyberpunk') {
+    return 'cyberpunk';
   }
 
   return 'default';
@@ -85,12 +89,13 @@ const normalizeTerminalThemeId = (themeId: unknown, baseThemeId: BaseThemeId): T
 const generateThemeColors = (baseId: BaseThemeId, accentId: AccentColorId): ThemeColors => {
   const base = baseThemes[baseId];
   const accent = accentColors[accentId];
+  const useAccentOverride = Boolean(base.allowAccentOverride);
 
   return {
     ...base.colors,
-    primary: base.colorOverrides?.primary ?? accent.color,
-    primaryForeground: base.colorOverrides?.primaryForeground ?? accent.foreground,
-    ring: base.colorOverrides?.ring ?? accent.color,
+    primary: useAccentOverride ? accent.color : (base.colorOverrides?.primary ?? accent.color),
+    primaryForeground: useAccentOverride ? accent.foreground : (base.colorOverrides?.primaryForeground ?? accent.foreground),
+    ring: useAccentOverride ? accent.color : (base.colorOverrides?.ring ?? accent.color),
     // Use accent color for accent tokens as well for consistency in this design
     accent: base.colorOverrides?.accent ?? base.colors.secondary, // Keep secondary as accent background usually
     accentForeground: base.colorOverrides?.accentForeground ?? base.colors.secondaryForeground,
@@ -125,12 +130,12 @@ const applyTheme = (baseId: BaseThemeId, accentId: AccentColorId) => {
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   baseThemeId: 'coolBlack',
-  accentColorId: 'indigo',
+  accentColorId: 'teal',
   currentTerminalThemeId: 'default',
 
   theme: {
     type: 'dark',
-    colors: generateThemeColors('coolBlack', 'indigo')
+    colors: generateThemeColors('coolBlack', 'teal')
   },
 
   terminalTheme: terminalThemes['default'],
@@ -146,8 +151,9 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       const currentTerminalThemeId = normalizeTerminalThemeId(state.currentTerminalThemeId, id);
       const currentTermCat = terminalThemes[currentTerminalThemeId]?.category;
       const preferredTerminalThemeId = getDefaultTerminalTheme(id);
+      const isCuratedTerminalTheme = curatedTerminalThemes.includes(currentTerminalThemeId as typeof curatedTerminalThemes[number]);
       const shouldSyncTerminalTheme =
-        !curatedTerminalThemes.includes(currentTerminalThemeId as typeof curatedTerminalThemes[number]) ||
+        isCuratedTerminalTheme ||
         currentTermCat !== baseThemes[id].type;
 
       if (shouldSyncTerminalTheme) {
@@ -202,7 +208,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
 
     // Default values
     let baseTheme: BaseThemeId = 'coolBlack';
-    let accentColor: AccentColorId = 'indigo';
+    let accentColor: AccentColorId = 'teal';
 
     // Legacy migration or load
     baseTheme = normalizeBaseThemeId(savedBaseTheme);

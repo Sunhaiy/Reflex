@@ -732,7 +732,7 @@ export class AgentQueryEngine {
         this.store.recordStrategyDecision(session, {
           action: 'self_check',
           summary: `Preflight-checking route ${route.kind}`,
-          reason: this.buildRoutePreflightReason(route),
+          reason: this.buildRoutePreflightReason(session, route),
           routeId: route.id,
           countAsSelfCheck: true,
           nextAction: `Execute ${route.kind}, but switch quickly if verification disproves it`,
@@ -994,10 +994,19 @@ export class AgentQueryEngine {
     return `Framework ${repoAnalysis.framework}/${repoAnalysis.language}, packaging ${repoAnalysis.packaging}, confidence ${Math.round(repoAnalysis.confidence * 100)}%, runtimes ${runtimeSummary}, hints ${hintSummary}, candidate routes ${routeSummary}.`;
   }
 
-  private buildRoutePreflightReason(route: RouteHypothesis) {
+  private buildRoutePreflightReason(session: AgentThreadSession, route: RouteHypothesis) {
+    const run = session.activeTaskRun;
     const evidence = route.evidence.slice(0, 3).join('; ') || route.summary;
     const capabilities = route.requiredCapabilities.join(', ') || 'no explicit capabilities';
-    return `Evidence: ${evidence}. Required capabilities: ${capabilities}. Disproof signals: ${route.disproofSignals.slice(0, 2).join('; ') || 'none recorded yet'}.`;
+    const buildCommand = run?.repoAnalysis?.buildCommands?.[0];
+    const outputDir = run?.repoAnalysis?.outputDir;
+    const sourceType = run?.source?.type || run?.repoAnalysis?.sourceType;
+    const executionHint = sourceType === 'local'
+      ? route.kind === 'static-nginx'
+        ? `Use a local build plus one archived release upload. Prefer local_exec -> local_pack_archive -> remote_upload_file -> remote_extract_archive before nginx verification.`
+        : `Prefer one archived release upload and remote extraction instead of many single-file uploads.`
+      : `Prefer remote checkout/build steps because the source is remote.`;
+    return `Evidence: ${evidence}. Required capabilities: ${capabilities}. ${buildCommand ? `Build command: ${buildCommand}. ` : ''}${outputDir ? `Output directory: ${outputDir}. ` : ''}${executionHint} Disproof signals: ${route.disproofSignals.slice(0, 2).join('; ') || 'none recorded yet'}.`;
   }
 
   private planRouteRecovery(

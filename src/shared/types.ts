@@ -143,6 +143,7 @@ export interface RepoAnalysisSummary {
   framework: string;
   language: string;
   packaging: string;
+  outputDir?: string;
   runtimeRequirements: Array<{ name: string; version?: string }>;
   serviceDependencies: string[];
   buildCommands: string[];

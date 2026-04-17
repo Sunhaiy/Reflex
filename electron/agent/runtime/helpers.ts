@@ -29,6 +29,7 @@ const TOOL_LABELS: Record<string, string> = {
   local_write_file: 'Write local file',
   local_replace_in_file: 'Patch local file',
   local_apply_patch: 'Apply local patch',
+  local_pack_archive: 'Pack local archive',
   local_exec: 'Run local command',
   remote_exec: 'Run remote command',
   remote_list_directory: 'Inspect remote directory',
@@ -37,6 +38,7 @@ const TOOL_LABELS: Record<string, string> = {
   remote_replace_in_file: 'Patch remote file',
   remote_apply_patch: 'Apply remote patch',
   remote_upload_file: 'Upload file',
+  remote_extract_archive: 'Extract remote archive',
   remote_download_file: 'Download file',
   http_probe: 'Probe HTTP endpoint',
   service_inspect: 'Inspect service',
@@ -139,6 +141,12 @@ export function extractDeploySource(input: string, knownPaths: string[]): string
 function summarizePrimaryArgument(args: Record<string, unknown>) {
   if (typeof args.command === 'string') return args.command;
   if (typeof args.goal === 'string') return args.goal;
+  if (typeof args.sourceDir === 'string' && typeof args.outFile === 'string') {
+    return `${args.sourceDir} -> ${args.outFile}`;
+  }
+  if (typeof args.archivePath === 'string' && typeof args.targetDir === 'string') {
+    return `${args.archivePath} -> ${args.targetDir}`;
+  }
   if (typeof args.path === 'string') return args.path;
   if (typeof args.remotePath === 'string') {
     const localPath = typeof args.localPath === 'string' ? args.localPath : 'local';

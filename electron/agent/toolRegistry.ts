@@ -4,6 +4,7 @@ import { promises as fs } from 'fs';
 import { execFile as execFileCallback } from 'child_process';
 import { promisify } from 'util';
 import { ChildTaskSummary, TaskTodoItem } from '../../src/shared/types.js';
+import { createArchive } from '../deploy/packager/archivePackager.js';
 import { shQuote } from '../deploy/strategies/base.js';
 import { SSHManager } from '../ssh/sshManager.js';
 import { AgentThreadSession, AgentToolCallArgs, AgentToolDefinition } from './types.js';
@@ -411,6 +412,26 @@ export function createAgentToolRegistry(
     {
       type: 'function' as const,
       function: {
+        name: 'local_pack_archive',
+        description: 'Create a compressed tar.gz archive from a local directory. Prefer this for deployment transfers instead of uploading many files one by one.',
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceDir: { type: 'string', description: 'Absolute or relative local directory to pack.' },
+            outFile: { type: 'string', description: 'Absolute or relative local .tar.gz archive path to create.' },
+            extraIgnorePatterns: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional extra ignore globs to exclude from the archive.',
+            },
+          },
+          required: ['sourceDir', 'outFile'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
         name: 'local_exec',
         description: 'Execute a command on the local machine. Prefer this for project inspection or build checks.',
         parameters: {
@@ -527,6 +548,22 @@ export function createAgentToolRegistry(
             createParentDirs: { type: 'boolean', description: 'Create remote parent directories first. Defaults to true.' },
           },
           required: ['localPath', 'remotePath'],
+        },
+      },
+    },
+    {
+      type: 'function' as const,
+      function: {
+        name: 'remote_extract_archive',
+        description: 'Extract a previously uploaded release archive on the remote server. Prefer this after uploading a .tar.gz release bundle.',
+        parameters: {
+          type: 'object',
+          properties: {
+            archivePath: { type: 'string', description: 'Absolute remote .tar.gz or .tgz archive path.' },
+            targetDir: { type: 'string', description: 'Absolute remote target directory where files should be extracted.' },
+            removeArchive: { type: 'boolean', description: 'Delete the archive after successful extraction. Defaults to true.' },
+          },
+          required: ['archivePath', 'targetDir'],
         },
       },
     },
@@ -770,6 +807,37 @@ export function createAgentToolRegistry(
             scratchpadNote: `Applied unified local patch in ${targetPath}`,
           };
         }
+        case 'local_pack_archive': {
+          const sourceDir = normalizeLocalPath(requireString(args, 'sourceDir'));
+          const outFile = normalizeLocalPath(requireString(args, 'outFile'));
+          const stat = await fs.stat(sourceDir).catch(() => null);
+          if (!stat?.isDirectory()) {
+            throw new Error(`Local directory does not exist: ${sourceDir}`);
+          }
+          const extraIgnorePatterns = Array.isArray(args.extraIgnorePatterns)
+            ? args.extraIgnorePatterns
+              .filter((item): item is string => typeof item === 'string')
+              .map((item) => item.trim())
+              .filter(Boolean)
+            : undefined;
+          await createArchive({
+            rootPath: sourceDir,
+            outFile,
+            extraIgnorePatterns,
+          });
+          const archiveStat = await fs.stat(outFile);
+          return {
+            ok: true,
+            displayCommand: `archive ${sourceDir} -> ${outFile}`,
+            content: `Packed ${sourceDir} into ${outFile} (${archiveStat.size} bytes)`,
+            structured: {
+              sourceDir,
+              outFile,
+              size: archiveStat.size,
+            },
+            scratchpadNote: `Packed local archive ${outFile} from ${sourceDir}`,
+          };
+        }
         case 'local_exec': {
           const command = requireString(args, 'command');
           const timeoutMs = typeof args.timeoutMs === 'number' && Number.isFinite(args.timeoutMs)
@@ -970,6 +1038,45 @@ export function createAgentToolRegistry(
             content: `Uploaded ${path.basename(localPath)} to ${remotePath}`,
             structured: { localPath, remotePath, size: stat.size },
             scratchpadNote: `Uploaded file ${localPath} -> ${remotePath}`,
+          };
+        }
+        case 'remote_extract_archive': {
+          const archivePath = requireString(args, 'archivePath');
+          const targetDir = requireString(args, 'targetDir');
+          const removeArchive = args.removeArchive !== false;
+          if (!/\.(?:tar\.gz|tgz)$/i.test(archivePath)) {
+            throw new Error(`Unsupported archive format for extraction: ${archivePath}`);
+          }
+          const script = [
+            `mkdir -p ${shQuote(targetDir)}`,
+            `tar -xzf ${shQuote(archivePath)} -C ${shQuote(targetDir)}`,
+            removeArchive ? `rm -f ${shQuote(archivePath)}` : '',
+          ].filter(Boolean).join(' && ');
+          const result = await withRemoteReconnect(
+            sshMgr,
+            session.connectionId,
+            () => sshMgr.exec(
+              session.connectionId,
+              `sh -lc ${shQuote(script)}`,
+              180000,
+            ),
+            () => emitReconnectNote(session),
+          );
+          return {
+            ok: result.exitCode === 0,
+            displayCommand: `extract ${archivePath} -> ${targetDir}`,
+            content: result.exitCode === 0
+              ? `Extracted ${archivePath} into ${targetDir}`
+              : truncate([result.stdout, result.stderr].filter(Boolean).join('\n') || '(no output)'),
+            structured: {
+              archivePath,
+              targetDir,
+              removeArchive,
+              ...result,
+            },
+            scratchpadNote: result.exitCode === 0
+              ? `Extracted remote archive ${archivePath} into ${targetDir}`
+              : `Remote archive extraction failed: ${archivePath}`,
           };
         }
         case 'remote_download_file': {
