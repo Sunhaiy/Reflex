@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import {
     Activity,
+    Bot,
     ChevronLeft,
     ChevronDown,
     Container,
@@ -20,7 +21,6 @@ import { TerminalConnecting } from './ConnectingOverlay';
 import { PanelSlotConsumer, PanelName } from './PanelSlot';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
-import logoUrl from '../assets/logo.png';
 
 interface AgentLayoutProps {
     connectionId: string;
@@ -320,8 +320,8 @@ export function AgentLayout({
         >
             <div className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-card py-3">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-foreground">
-                        <img src={logoUrl} alt="Reflex" className="h-6 w-6 rounded-md object-cover" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground">
+                        <Bot className="h-5 w-5" />
                     </div>
                     <div className="h-8 w-px bg-border" />
                     <div className="flex flex-col items-center gap-1.5">
@@ -355,7 +355,7 @@ export function AgentLayout({
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                             <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground">
-                                <img src={logoUrl} alt="Reflex" className="h-3.5 w-3.5 rounded-sm object-cover" />
+                                <Bot className="h-3.5 w-3.5" />
                                 {workspaceTitle}
                             </div>
                         </div>

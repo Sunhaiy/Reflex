@@ -1,4 +1,4 @@
-import { Minus, Square, X, Settings, Terminal, Home, Plus } from "lucide-react";
+import { Bot, Minus, Square, X, Settings, Terminal, Home, Plus } from "lucide-react";
 import { cn } from '../lib/utils';
 import { SSHConnection } from '../shared/types';
 import logoUrl from '../assets/logo.png';
@@ -116,7 +116,7 @@ export function TitleBar({
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <img src={logoUrl} alt="Reflex" className="h-3.5 w-3.5 rounded-sm object-cover" />
+                <Bot className="h-3.5 w-3.5" />
                 Agent
               </button>
             </div>
