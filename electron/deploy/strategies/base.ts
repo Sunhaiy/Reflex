@@ -85,7 +85,7 @@ export function resolveReleasePaths(
   const currentDir = `${remoteRoot}/current`;
   const sharedDir = `${remoteRoot}/shared`;
   const archiveName = `${appName}-${releaseId}.tar.gz`;
-  const archiveLocalPath = path.join(profile.projectRoot, '.zangqing', archiveName);
+  const archiveLocalPath = path.join(profile.projectRoot, '.reflex', archiveName);
   const archiveRemotePath = `/tmp/${archiveName}`;
   const serviceName = `${appName}.service`;
   const nginxConfigPath = `/etc/nginx/conf.d/${appName}.conf`;

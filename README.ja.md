@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 Zangqing (藏青) - 現代の SSH クライアントに期待するすべて
+# 🚀 Reflex - 現代の SSH クライアントに期待するすべて
 
 *SSH 接続をシンプルにするすべて。*
 
@@ -17,23 +17,23 @@
 
 ### ダークテーマ
 
-![Main workspace](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
+![Main workspace](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
-![Agent deployment workspace](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
+![Agent deployment workspace](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
-![Agent conversation and execution flow](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
+![Agent conversation and execution flow](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
 ### ライトテーマ
 
-![Main workspace light theme](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/1e403064-c046-4948-b229-202b99ed692a.png)
+![Main workspace light theme](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/1e403064-c046-4948-b229-202b99ed692a.png)
 
-![Agent deployment workspace light theme](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/1e44b065-2b41-4316-8d5f-157bf1323034.png)
+![Agent deployment workspace light theme](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/1e44b065-2b41-4316-8d5f-157bf1323034.png)
 
-![Agent conversation and execution flow light theme](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
+![Agent conversation and execution flow light theme](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
 
 ## はじめに
 
-**Zangqing (藏青)** は、究極の開発効率を追求して設計された、次世代のモダンで軽量な SSH クライアントです。単なるターミナルエミュレーターの枠を超え、AI 支援デバッグ、ネイティブの Docker 管理機能、リアルタイムのリソースモニタリング、およびシームレスな SFTP ファイル管理を、一つの美しいクロスプラットフォームなデスクトップアプリに統合しています。
+**Reflex** は、究極の開発効率を追求して設計された、次世代のモダンで軽量な SSH クライアントです。単なるターミナルエミュレーターの枠を超え、AI 支援デバッグ、ネイティブの Docker 管理機能、リアルタイムのリソースモニタリング、およびシームレスな SFTP ファイル管理を、一つの美しいクロスプラットフォームなデスクトップアプリに統合しています。
 
 ## 主な機能
 
@@ -71,8 +71,8 @@
 ## はじめに
 
 ```bash
-git clone https://github.com/Sunhaiy/zangqing.git
-cd zangqing
+git clone https://github.com/Sunhaiy/Reflex.git
+cd reflex
 npm install
 npm run dev
 ```
@@ -93,7 +93,7 @@ npm run dist
 ## ディレクトリ構成
 
 ```text
-zangqing
+reflex
 |- electron/            # Electron メインプロセス、IPC、SSH、デプロイエンジン
 |- src/                 # React レンダラー
 |  |- components/       # Terminal、Agent、Docker、files、monitor UI

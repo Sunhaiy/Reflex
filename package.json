@@ -1,5 +1,5 @@
 {
-  "name": "zangqing",
+  "name": "reflex",
   "private": true,
   "version": "1.0.7",
   "main": "dist-electron/electron/main.js",
@@ -16,8 +16,8 @@
   },
   "build": {
     "asar": false,
-    "appId": "com.zangqing.app",
-    "productName": "藏青",
+    "appId": "com.reflex.app",
+    "productName": "Reflex",
     "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release-new"
@@ -60,7 +60,7 @@
       {
         "provider": "github",
         "owner": "Sunhaiy",
-        "repo": "zangqing"
+        "repo": "Reflex"
       }
     ]
   },

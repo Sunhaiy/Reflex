@@ -45,7 +45,7 @@ export function TerminalContextMenu({
             />
 
             <div
-                className="fixed z-[9999] w-[200px] rounded-lg border border-border bg-card py-1 shadow-xl animate-in fade-in zoom-in-95 duration-100"
+                className="fixed z-[9999] w-[200px] rounded-xl border border-border bg-popover py-1 text-popover-foreground shadow-none animate-in fade-in zoom-in-95 duration-100"
                 style={{ left: adjustedX, top: adjustedY }}
             >
                 <button

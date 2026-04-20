@@ -77,7 +77,7 @@ function getBaseDir() {
   try {
     return app.getPath('userData');
   } catch {
-    return path.join(os.homedir(), '.zangqing');
+    return path.join(os.homedir(), '.reflex');
   }
 }
 

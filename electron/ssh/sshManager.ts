@@ -27,6 +27,7 @@ export class SSHManager {
         // Store for auto-reconnect
         this.connectionConfigs.set(sessionId, connection);
         this.webContentsBySession.set(sessionId, webContents);
+        this.emitStatus(sessionId, 'connecting', webContents);
 
         if (connection.jumpHost) {
             return this._connectViaJump(connection, webContents, sessionId, profileId);
@@ -59,6 +60,12 @@ export class SSHManager {
         }
     }
 
+    private emitStatus(sessionId: string, status: 'connecting' | 'connected' | 'disconnected', webContents?: WebContents) {
+        const target = webContents || this.webContentsBySession.get(sessionId);
+        if (!target || target.isDestroyed()) return;
+        target.send('ssh-status', { id: sessionId, status });
+    }
+
     private _buildConfig(connection: SSHConnection): any {
         const config: any = {
             host: connection.host,
@@ -86,6 +93,7 @@ export class SSHManager {
         conn.shell((err, stream) => {
             if (err) { this.cleanup(sessionId); return reject(err); }
             this.streams.set(sessionId, stream);
+            this.emitStatus(sessionId, 'connected', webContents);
 
             // 16ms batch buffer (~60 fps) to prevent IPC floods from high-frequency output
             let buf = '';
@@ -100,11 +108,14 @@ export class SSHManager {
             };
 
             stream.on('close', () => {
+                const isCurrentStream = this.streams.get(sessionId) === stream;
                 // Flush any remaining buffered output before disconnecting
                 if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
                 flushBuf();
-                this.cleanup(sessionId);
-                webContents.send('ssh-status', { id: sessionId, status: 'disconnected' });
+                if (isCurrentStream) {
+                    this.cleanup(sessionId);
+                    this.emitStatus(sessionId, 'disconnected', webContents);
+                }
             });
             stream.on('data', (data: Buffer) => {
                 buf += data.toString('utf-8');
@@ -125,16 +136,25 @@ export class SSHManager {
             });
             conn.on('error', (err) => {
                 console.error(`[SSH] Connection error for ${connection.host}:${connection.port} (auth=${connection.authType}): ${err.message}`);
+                const currentConn = this.connections.get(sessionId);
+                if (currentConn && currentConn !== conn) return;
                 this.cleanup(sessionId);
+                this.emitStatus(sessionId, 'disconnected', webContents);
                 reject(err);
             });
             conn.on('keyboard-interactive', (_name, _instructions, _instructionsLang, prompts, finish) => {
                 console.log(`[SSH] keyboard-interactive triggered for ${connection.host}, prompts=${JSON.stringify(prompts)}`);
                 finish([connection.password || '']);
             });
-            conn.on('close', () => this.cleanup(sessionId));
+            conn.on('close', () => {
+                if (this.connections.get(sessionId) === conn) {
+                    this.cleanup(sessionId);
+                    this.emitStatus(sessionId, 'disconnected', webContents);
+                }
+            });
             try { conn.connect(this._buildConfig(connection)); } catch (err: any) {
                 console.error(`[SSH] Connect threw:`, err);
+                this.emitStatus(sessionId, 'disconnected', webContents);
                 reject(err);
             }
         });
@@ -158,7 +178,11 @@ export class SSHManager {
             jump.on('ready', () => {
                 console.log(`[SSH] Jump host ready, forwarding to ${connection.host}`);
                 jump.forwardOut('127.0.0.1', 0, connection.host, connection.port, (err, channel) => {
-                    if (err) { jump.end(); return reject(err); }
+                    if (err) {
+                        jump.end();
+                        this.emitStatus(sessionId, 'disconnected', webContents);
+                        return reject(err);
+                    }
 
                     const conn = new Client();
                     const directConfig = this._buildConfig(connection);
@@ -169,12 +193,27 @@ export class SSHManager {
                         console.log(`[SSH] Tunneled connection ready: session=${sessionId}`);
                         this._attachShell(conn, webContents, sessionId, profileId, resolve, reject);
                     });
-                    conn.on('error', (e) => { jump.end(); reject(e); });
-                    conn.on('close', () => { jump.end(); this.cleanup(sessionId); });
+                    conn.on('error', (e) => {
+                        jump.end();
+                        const currentConn = this.connections.get(sessionId);
+                        if (currentConn && currentConn !== conn) return;
+                        this.emitStatus(sessionId, 'disconnected', webContents);
+                        reject(e);
+                    });
+                    conn.on('close', () => {
+                        jump.end();
+                        if (this.connections.get(sessionId) === conn) {
+                            this.cleanup(sessionId);
+                            this.emitStatus(sessionId, 'disconnected', webContents);
+                        }
+                    });
                     conn.connect(directConfig);
                 });
             });
-            jump.on('error', (err) => reject(err));
+            jump.on('error', (err) => {
+                this.emitStatus(sessionId, 'disconnected', webContents);
+                reject(err);
+            });
             jump.connect(jumpConfig);
         });
     }

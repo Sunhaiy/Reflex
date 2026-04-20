@@ -1,6 +1,7 @@
-import { Minus, Square, X, Settings, Terminal, Bot, Home, Plus } from "lucide-react";
+import { Minus, Square, X, Settings, Terminal, Home, Plus } from "lucide-react";
 import { cn } from '../lib/utils';
 import { SSHConnection } from '../shared/types';
+import logoUrl from '../assets/logo.png';
 
 export type WorkspaceMode = 'normal' | 'agent';
 
@@ -17,12 +18,32 @@ interface TitleBarProps {
   onModeChange?: (mode: WorkspaceMode) => void;
   showModeSwitch?: boolean;
   showHome?: boolean;
-  // Session tab props (integrated)
   sessions?: SessionInfo[];
   activeSessionId?: string | null;
   onSwitchSession?: (id: string) => void;
   onCloseSession?: (id: string, e: React.MouseEvent) => void;
   onNewSession?: () => void;
+}
+
+function getStatusMeta(status: SessionInfo['status']) {
+  if (status === 'connected') {
+    return {
+      label: '在线',
+      dot: 'bg-emerald-400',
+    };
+  }
+
+  if (status === 'connecting') {
+    return {
+      label: '连接中',
+      dot: 'bg-amber-400 animate-pulse',
+    };
+  }
+
+  return {
+    label: '离线',
+    dot: 'bg-rose-400',
+  };
 }
 
 export function TitleBar({
@@ -42,143 +63,147 @@ export function TitleBar({
 
   return (
     <div
-      className="h-9 bg-background/80 border-b border-border/50 flex items-center select-none shrink-0"
+      className="h-10 shrink-0 select-none border-b border-border bg-background/95"
       style={{ WebkitAppRegion: "drag" } as any}
     >
-      {/* Left: Branding + Home */}
-      <div
-        className="flex items-center gap-1 px-3 shrink-0 h-full"
-        style={{ WebkitAppRegion: "no-drag" } as any}
-      >
+      <div className="flex h-full items-center">
         <div
-          className="flex items-center gap-2 text-xs font-medium text-muted-foreground cursor-default pr-1"
-          style={{ WebkitAppRegion: "drag" } as any}
+          className="flex h-full shrink-0 items-center gap-2 border-r border-border px-2.5"
+          style={{ WebkitAppRegion: "no-drag" } as any}
         >
-          <div className="w-2.5 h-2.5 rounded-full bg-primary/30"></div>
-          藏青
+          <button
+            onClick={showHome ? onHome : undefined}
+            className={cn(
+              "flex h-7 items-center gap-2 rounded-lg border border-border bg-card px-2 text-foreground transition-colors",
+              showHome ? "hover:bg-accent" : "cursor-default"
+            )}
+            title="Reflex"
+          >
+            <img src={logoUrl} alt="Reflex" className="h-[18px] w-[18px] rounded-md object-cover" />
+            <span className="text-xs font-semibold tracking-wide">Reflex</span>
+          </button>
+
+          {showHome && (
+            <button
+              onClick={onHome}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="连接管理"
+            >
+              <Home className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {showModeSwitch && (
+            <div className="flex h-7 items-center rounded-lg border border-border bg-card p-0.5">
+              <button
+                onClick={() => onModeChange?.('normal')}
+                className={cn(
+                  "flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors",
+                  mode === 'normal'
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Terminal className="h-3.5 w-3.5" />
+                终端
+              </button>
+              <button
+                onClick={() => onModeChange?.('agent')}
+                className={cn(
+                  "flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors",
+                  mode === 'agent'
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <img src={logoUrl} alt="Reflex" className="h-3.5 w-3.5 rounded-sm object-cover" />
+                Agent
+              </button>
+            </div>
+          )}
         </div>
 
-        {showHome && (
-          <button
-            onClick={onHome}
-            className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-            title="连接管理"
+        {hasSessions && (
+          <div
+            className="flex h-full min-w-0 shrink items-center gap-1 overflow-x-auto px-2 no-scrollbar"
+            style={{ WebkitAppRegion: "no-drag" } as any}
           >
-            <Home className="w-3 h-3" />
-          </button>
-        )}
+            {sessions.map((session) => {
+              const status = getStatusMeta(session.status);
+              const active = activeSessionId === session.uniqueId;
 
-        {/* Mode Switch — compact pills */}
-        {showModeSwitch && (
-          <div className="flex items-center bg-secondary/50 rounded-full p-0.5 border border-border/40 ml-1">
+              return (
+                <div
+                  key={session.uniqueId}
+                  onClick={() => onSwitchSession?.(session.uniqueId)}
+                  className={cn(
+                    "group relative flex h-7 min-w-[122px] max-w-[190px] cursor-pointer items-center gap-2 rounded-lg border px-2.5 text-xs transition-colors",
+                    active
+                      ? "border-primary/35 bg-primary/10 text-foreground"
+                      : "border-transparent text-muted-foreground hover:border-border hover:bg-card hover:text-foreground",
+                    session.status === 'disconnected' && "opacity-70"
+                  )}
+                  title={`${session.connection.name} · ${status.label}`}
+                >
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", status.dot)} />
+                  <span className="truncate font-medium">{session.connection.name}</span>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCloseSession?.(session.uniqueId, event);
+                    }}
+                    className={cn(
+                      "ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100",
+                      active && "opacity-60"
+                    )}
+                    title="关闭连接"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+
             <button
-              onClick={() => onModeChange?.('normal')}
-              className={cn(
-                "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-200",
-                mode === 'normal'
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
+              onClick={onNewSession}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+              title="新建连接"
             >
-              <Terminal className="w-3 h-3" />
-              终端
-            </button>
-            <button
-              onClick={() => onModeChange?.('agent')}
-              className={cn(
-                "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-200",
-                mode === 'agent'
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Bot className="w-3 h-3" />
-              Agent
+              <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
-      </div>
 
-      {/* Center: Session Tabs */}
-      {hasSessions && (
-        <div
-          className="flex items-center overflow-x-auto no-scrollbar h-full gap-0.5 px-1 shrink min-w-0"
-          style={{ WebkitAppRegion: "no-drag" } as any}
-        >
-          {sessions.map((session) => (
-            <div
-              key={session.uniqueId}
-              onClick={() => onSwitchSession?.(session.uniqueId)}
-              className={cn(
-                "group relative flex items-center h-6 px-2.5 min-w-[100px] max-w-[160px] rounded-md cursor-pointer transition-all duration-150 text-[11px]",
-                activeSessionId === session.uniqueId
-                  ? "bg-accent text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
-                session.status === 'disconnected' && "opacity-50"
-              )}
-            >
-              <div className={cn(
-                "w-1.5 h-1.5 rounded-full mr-1.5 shrink-0",
-                session.status === 'connected' ? "bg-emerald-500" :
-                  session.status === 'connecting' ? "bg-yellow-500 animate-pulse" : "bg-red-400/80"
-              )} />
-              <span className="truncate flex-1" title={session.connection.name}>
-                {session.connection.name}
-              </span>
-              <button
-                onClick={(e) => { e.stopPropagation(); onCloseSession?.(session.uniqueId, e); }}
-                className={cn(
-                  "ml-1 p-0.5 rounded-sm opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-all",
-                  activeSessionId === session.uniqueId && "opacity-50"
-                )}
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          ))}
+        <div className="h-full flex-1" style={{ WebkitAppRegion: "drag" } as any} />
 
-          {/* New tab button */}
+        <div className="flex h-full shrink-0 items-center" style={{ WebkitAppRegion: "no-drag" } as any}>
           <button
-            onClick={onNewSession}
-            className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
-            title="新建连接"
+            onClick={onSettings}
+            className="flex h-full w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title="设置"
           >
-            <Plus className="w-3 h-3" />
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+          <div className="mx-0.5 h-4 w-px bg-border" />
+          <button
+            onClick={() => (window as any).electron.minimize()}
+            className="flex h-full w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => (window as any).electron.maximize()}
+            className="flex h-full w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent"
+          >
+            <Square className="h-2.5 w-2.5" />
+          </button>
+          <button
+            onClick={() => (window as any).electron.close()}
+            className="flex h-full w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
-      )}
-
-      {/* Draggable spacer — fills remaining space between tabs and right controls */}
-      <div className="flex-1 h-full" style={{ WebkitAppRegion: "drag" } as any} />
-
-      {/* Right: Settings + Window Controls */}
-      <div className="flex items-center h-full shrink-0" style={{ WebkitAppRegion: "no-drag" } as any}>
-        <button
-          onClick={onSettings}
-          className="h-full w-9 flex items-center justify-center hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
-          title="设置"
-        >
-          <Settings className="w-3.5 h-3.5" />
-        </button>
-        <div className="w-px h-3.5 bg-border/50 mx-0.5"></div>
-        <button
-          onClick={() => (window as any).electron.minimize()}
-          className="h-full w-9 flex items-center justify-center hover:bg-accent/60 text-muted-foreground transition-colors"
-        >
-          <Minus className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => (window as any).electron.maximize()}
-          className="h-full w-9 flex items-center justify-center hover:bg-accent/60 text-muted-foreground transition-colors"
-        >
-          <Square className="w-2.5 h-2.5" />
-        </button>
-        <button
-          onClick={() => (window as any).electron.close()}
-          className="h-full w-9 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground text-muted-foreground transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
   );

@@ -341,7 +341,7 @@ export class DeploymentManager {
 
   private buildRemoteAnalysisRoot(sourceKey: string) {
     const digest = Buffer.from(sourceKey).toString('base64').replace(/[^a-z0-9]/gi, '').slice(0, 24).toLowerCase();
-    return `/tmp/zangqing-source-cache/${digest}`;
+    return `/tmp/reflex-source-cache/${digest}`;
   }
 
   private async ensureRemoteGitAnalysisCheckout(
@@ -665,9 +665,9 @@ export class DeploymentManager {
   private findArchiveLocalPath(run: DeployRun) {
     const archiveName = `${run.profile?.appName || 'app'}-${run.outputs.releaseId || run.plan?.releaseId || 'current'}.tar.gz`;
     if (run.source?.type === 'github' || /^https?:\/\//i.test(run.projectRoot)) {
-      return path.join(process.cwd(), '.zangqing', 'tmp', archiveName);
+      return path.join(process.cwd(), '.reflex', 'tmp', archiveName);
     }
-    return path.join(run.projectRoot, '.zangqing', archiveName);
+    return path.join(run.projectRoot, '.reflex', archiveName);
   }
 
   private findArchiveRemotePath(run: DeployRun) {

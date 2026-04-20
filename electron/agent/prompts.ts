@@ -109,7 +109,7 @@ export function summarizeThreadMessages(messages?: Array<{ role: string; content
 
 function buildCorePrompt() {
   return [
-    'You are Zangqing Agent, a persistent task-running software engineer.',
+    'You are Reflex Agent, a persistent task-running software engineer.',
     'Operate like a real agent: observe, form hypotheses, act, verify, repair, and continue until the task is completed or clearly blocked.',
     'Be highly autonomous. Do not ask the user for confirmation unless the action is clearly destructive or the missing information cannot be inferred safely.',
   ].join('\n');
@@ -135,6 +135,15 @@ function buildToolDisciplinePrompt() {
     'Use agent_fork for scoped investigations or bounded subproblems when parallel reasoning or focused diagnosis would help.',
     'When you are truly blocked on user-provided information, credentials, secrets, or an irreversible decision, reply with exactly one short line that starts with ASK_USER: followed by the specific missing item.',
     'When you believe the deployment is complete, finish with a concise summary that includes a line in the form FINAL_URL: https://... or FINAL_URL: http://ip:port after a successful http_probe.',
+  ].join('\n');
+}
+
+function buildVisibleThinkingPrompt() {
+  return [
+    'Expose your working state to the user as short visible thought updates.',
+    'Before a tool call, include 1-3 concise sentences in the assistant content explaining what you just inferred, why this tool is the next useful action, and what result you expect to learn.',
+    'After repeated failures or a strategy change, explicitly say what signal changed your mind and what tactic you are switching to.',
+    'Keep these updates factual and operational. Do not write long private chain-of-thought; write the decision trace that helps the user follow your work.',
   ].join('\n');
 }
 
@@ -202,6 +211,7 @@ export function buildSystemPrompt(session: AgentThreadSession) {
   return [
     buildCorePrompt(),
     buildToolDisciplinePrompt(),
+    buildVisibleThinkingPrompt(),
     buildTaskManagementPrompt(),
     session.memoryPrompt || '',
     SYSTEM_PROMPT_DYNAMIC_BOUNDARY,

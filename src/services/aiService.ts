@@ -11,6 +11,7 @@ import {
 
 class AIService {
     private config: AIConfig | null = null;
+    private readonly maxRequestAttempts = 3;
 
     setConfig(config: AIConfig) {
         this.config = config;
@@ -87,6 +88,51 @@ class AIService {
         return fetch(url, options);
     }
 
+    private shouldRetryError(error: unknown): boolean {
+        const message = error instanceof Error ? error.message : String(error || '');
+        return /AI service is busy|temporarily|overloaded|timeout|network|fetch failed|failed to fetch|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|429|5\d{2}|not available in your region|model is not available|no endpoints found|rate limit/i.test(message);
+    }
+
+    private async waitBeforeRetry(attempt: number) {
+        const delayMs = Math.min(4000, 700 * (2 ** (attempt - 1)));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    private withRetryContext(error: unknown, attempts: number): Error {
+        const message = error instanceof Error ? error.message : String(error || 'AI request failed');
+        if (attempts < this.maxRequestAttempts) return error instanceof Error ? error : new Error(message);
+        if (/retried \d+\/\d+/i.test(message)) return error instanceof Error ? error : new Error(message);
+        return new Error(`${message} Retried ${attempts}/${this.maxRequestAttempts} times.`);
+    }
+
+    private async fetchWithRetries(
+        url: string,
+        options: { method: string; headers: Record<string, string>; body: string },
+        fallbackPrefix = 'AI request failed',
+    ): Promise<{ ok: boolean; status: number; text(): Promise<string> }> {
+        for (let attempt = 1; attempt <= this.maxRequestAttempts; attempt += 1) {
+            try {
+                const response = await this.proxyFetch(url, options);
+                if (response.ok) return response;
+
+                const formattedError = await this.formatHttpError(response, fallbackPrefix);
+                if (attempt < this.maxRequestAttempts && this.shouldRetryError(formattedError)) {
+                    await this.waitBeforeRetry(attempt);
+                    continue;
+                }
+                throw this.withRetryContext(formattedError, attempt);
+            } catch (error) {
+                if (attempt < this.maxRequestAttempts && this.shouldRetryError(error)) {
+                    await this.waitBeforeRetry(attempt);
+                    continue;
+                }
+                throw this.withRetryContext(error, attempt);
+            }
+        }
+
+        throw new Error(`AI request failed. Retried ${this.maxRequestAttempts}/${this.maxRequestAttempts} times.`);
+    }
+
     private async formatHttpError(response: { status: number; text(): Promise<string> }, fallbackPrefix = 'AI request failed'): Promise<Error> {
         const rawText = await response.text();
 
@@ -146,8 +192,8 @@ class AIService {
         }
 
         if (this.config.provider === 'openrouter') {
-            headers['HTTP-Referer'] = 'https://sshtool.app';
-            headers['X-Title'] = 'SSH Tool';
+            headers['HTTP-Referer'] = 'https://reflex.app';
+            headers['X-Title'] = 'Reflex';
         }
 
         const requestBody = isOllama
@@ -164,7 +210,7 @@ class AIService {
                 stream: false,
             };
 
-        const response = await this.proxyFetch(endpoint, {
+        const response = await this.fetchWithRetries(endpoint, {
             method: 'POST',
             headers,
             body: JSON.stringify(requestBody),
@@ -218,8 +264,8 @@ class AIService {
         }
 
         if (this.config.provider === 'openrouter') {
-            headers['HTTP-Referer'] = 'https://sshtool.app';
-            headers['X-Title'] = 'SSH Tool';
+            headers['HTTP-Referer'] = 'https://reflex.app';
+            headers['X-Title'] = 'Reflex';
         }
 
         const requestBody = isOllama
@@ -236,7 +282,7 @@ class AIService {
                 stream: true,
             };
 
-        const response = await this.proxyFetch(endpoint, {
+        const response = await this.fetchWithRetries(endpoint, {
             method: 'POST',
             headers,
             body: JSON.stringify(requestBody),
@@ -295,8 +341,8 @@ class AIService {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (effectiveConfig.apiKey) headers.Authorization = `Bearer ${effectiveConfig.apiKey}`;
         if (effectiveConfig.provider === 'openrouter') {
-            headers['HTTP-Referer'] = 'https://sshtool.app';
-            headers['X-Title'] = 'SSH Tool';
+            headers['HTTP-Referer'] = 'https://reflex.app';
+            headers['X-Title'] = 'Reflex';
         }
 
         const sanitizedMessages = request.messages.map((msg) => ({

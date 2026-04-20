@@ -1,8 +1,8 @@
 
-export type BaseThemeId = 'light' | 'black' | 'taxue' | 'coolBlack' | 'coolWhite' | 'cyberpunk' | 'lihua' | 'zangqing' | 'amber' | 'aurora' | 'ocean' | 'sunset' | 'twilight' | 'nebula' | 'blossom';
+export type BaseThemeId = 'light' | 'black' | 'taxue' | 'coolBlack' | 'coolWhite' | 'cyberpunk' | 'lihua' | 'reflex' | 'amber' | 'aurora' | 'ocean' | 'sunset' | 'twilight' | 'nebula' | 'blossom';
 export type AccentColorId = 'green' | 'teal' | 'blue' | 'indigo' | 'purple' | 'yellow' | 'orange' | 'red' | 'pink';
 
-export type TerminalThemeId = 'default' | 'dracula' | 'tokyoNight' | 'nord' | 'oneDarkPro' | 'catppuccinMocha' | 'monokaiPro' | 'solarizedDark' | 'everforestDark' | 'rosePine' | 'adventureTime' | 'afterglow' | 'alienBlood' | 'argonaut' | 'bounds' | 'cyberpunk' | 'pixel' | 'zangqing' | 'githubLight' | 'solarizedLight' | 'taxuexunmei' | 'rosePineDown' | 'catppuccinLatte' | 'oneLight' | 'everforestLight' | 'nordLight' | 'atomOneLight';
+export type TerminalThemeId = 'default' | 'dracula' | 'tokyoNight' | 'nord' | 'oneDarkPro' | 'catppuccinMocha' | 'monokaiPro' | 'solarizedDark' | 'everforestDark' | 'rosePine' | 'adventureTime' | 'afterglow' | 'alienBlood' | 'argonaut' | 'bounds' | 'cyberpunk' | 'pixel' | 'reflex' | 'githubLight' | 'solarizedLight' | 'taxuexunmei' | 'rosePineDown' | 'catppuccinLatte' | 'oneLight' | 'everforestLight' | 'nordLight' | 'atomOneLight';
 
 export interface ThemeColors {
   background: string;
@@ -236,9 +236,9 @@ export const baseThemes: Record<BaseThemeId, BaseTheme> = {
       ring: "150 40% 60%",
     }
   },
-  zangqing: {
-    id: 'zangqing',
-    name: '藏青',
+  reflex: {
+    id: 'reflex',
+    name: 'Reflex',
     type: 'dark',
     colors: {
       background: "225 40% 8%",
@@ -911,8 +911,8 @@ export const terminalThemes: Record<TerminalThemeId, TerminalTheme> = {
     brightCyan: '#33ffff',
     brightWhite: '#ffffff',
   },
-  zangqing: {
-    name: '藏青',
+  reflex: {
+    name: 'Reflex',
     category: 'dark',
     background: '#081426',
     foreground: '#ffffff',

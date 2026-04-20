@@ -24,6 +24,13 @@ interface AppSession {
   status: 'connecting' | 'connected' | 'disconnected';
 }
 
+const CONNECTION_RETRY_ATTEMPTS = 3;
+const CONNECTION_RETRY_DELAY_MS = 1500;
+
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function App() {
   const [page, setPage] = useState<'connections' | 'workspace' | 'settings'>('connections');
   // Multi-session state
@@ -57,7 +64,7 @@ function App() {
     const eWindow = window as any;
     const cleanup = eWindow.electron.onSSHStatus((_: any, { id, status }: any) => {
       setSessions(prev => prev.map(s =>
-        s.uniqueId === id ? { ...s, status: status as 'connected' | 'disconnected' } : s
+        s.uniqueId === id ? { ...s, status: status as AppSession['status'] } : s
       ));
     });
     return cleanup;
@@ -86,12 +93,24 @@ function App() {
     // @ts-ignore
     window.lastSessionId = uniqueId;
 
-    // Connect in background
-    const result = await (window as any).electron.connectSSH({
-      connection,
-      sessionId: uniqueId,
-      profileId: connection.id
-    });
+    // Connect in background. A transient network hiccup should not stop the flow immediately.
+    let result: { success: boolean; error?: string } = { success: false, error: 'Connection failed' };
+    for (let attempt = 1; attempt <= CONNECTION_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        result = await (window as any).electron.connectSSH({
+          connection,
+          sessionId: uniqueId,
+          profileId: connection.id
+        });
+      } catch (err: any) {
+        result = { success: false, error: err?.message || String(err) };
+      }
+
+      if (result.success) break;
+      if (attempt < CONNECTION_RETRY_ATTEMPTS) {
+        await wait(CONNECTION_RETRY_DELAY_MS);
+      }
+    }
 
     if (result.success) {
       setConnError(null);
@@ -105,7 +124,7 @@ function App() {
       setSessions(prev => prev.filter(s => s.uniqueId !== uniqueId));
       setPage('connections');
       setActiveSessionId(null);
-      setConnError(result.error || 'Connection failed');
+      setConnError(`连接失败，已自动重试 ${CONNECTION_RETRY_ATTEMPTS} 次：${result.error || 'Connection failed'}`);
     }
   };
 
@@ -169,7 +188,7 @@ function App() {
           mode={workspaceMode}
           onModeChange={setWorkspaceMode}
           showModeSwitch={page === 'workspace' && sessions.length > 0}
-          showHome={page === 'settings' || (sessions.length > 0 && page === 'workspace')}
+          showHome={true}
           sessions={sessions}
           activeSessionId={activeSessionId}
           onSwitchSession={(id) => { setActiveSessionId(id); setPage('workspace'); }}

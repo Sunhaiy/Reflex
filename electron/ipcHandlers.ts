@@ -6,8 +6,76 @@ import { SSHConnection } from '../src/shared/types.js';
 import { AIProviderProfile } from '../src/shared/aiTypes.js';
 import { LLMProfile } from './llm.js';
 import Store from 'electron-store';
+import fs from 'fs';
+import path from 'path';
 
 const store = new Store();
+const LEGACY_STORE_DIR_NAMES = ['zangqing', 'Zangqing'];
+const MIGRATED_STORE_KEYS = [
+  'connections',
+  'lastConnection',
+  'agentSessions',
+  'aiProfiles',
+  'activeProfileId',
+  'deployProfiles',
+  'deployRuns',
+  'terminalFontFamily',
+  'agentControlMode',
+  'uiFontFamily',
+  'language',
+  'aiPrivacyMode',
+  'aiSendShortcut',
+  'letterSpacing',
+  'baseTheme',
+  'accentColor',
+  'terminalTheme',
+  'opacity',
+];
+
+function isEmptyValue(value: unknown) {
+  if (value === undefined || value === null || value === '') return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
+function readJsonFile(filePath: string): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+  } catch (error) {
+    console.warn('[Store] Failed to read legacy config during migration:', path.dirname(filePath), error);
+    return null;
+  }
+}
+
+function migrateLegacyStore(targetStore: any) {
+  const targetPath = targetStore.path as string | undefined;
+  if (!targetPath) return;
+
+  const appDataRoot = path.dirname(path.dirname(targetPath));
+  for (const legacyDirName of LEGACY_STORE_DIR_NAMES) {
+    const legacyConfigPath = path.join(appDataRoot, legacyDirName, 'config.json');
+    const legacyConfig = readJsonFile(legacyConfigPath);
+    if (!legacyConfig) continue;
+
+    const migratedKeys: string[] = [];
+    for (const key of MIGRATED_STORE_KEYS) {
+      const currentValue = targetStore.get(key);
+      const legacyValue = legacyConfig[key];
+      if (isEmptyValue(currentValue) && !isEmptyValue(legacyValue)) {
+        targetStore.set(key, legacyValue);
+        migratedKeys.push(key);
+      }
+    }
+
+    if (migratedKeys.length > 0) {
+      console.log(`[Store] Migrated legacy Reflex config keys: ${migratedKeys.join(', ')}`);
+    }
+    return;
+  }
+}
+
+migrateLegacyStore(store);
 const sshManager = new SSHManager(store);
 const deploymentManager = new DeploymentManager(sshManager, store);
 const agentManager = new AgentManager(sshManager, store);

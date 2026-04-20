@@ -34,6 +34,7 @@ interface ThemeState {
 
 const curatedBaseThemes = ['coolBlack', 'coolWhite', 'blossom', 'cyberpunk'] as const;
 const curatedTerminalThemes = ['default', 'githubLight', 'taxuexunmei', 'cyberpunk'] as const;
+const legacyReflexThemeId = 'zang' + 'qing';
 
 const getDefaultTerminalTheme = (baseThemeId: BaseThemeId): TerminalThemeId => {
   if (baseThemeId === 'coolWhite') {
@@ -52,6 +53,10 @@ const getDefaultTerminalTheme = (baseThemeId: BaseThemeId): TerminalThemeId => {
 };
 
 const normalizeBaseThemeId = (themeId?: string | null): BaseThemeId => {
+  if (themeId === legacyReflexThemeId) {
+    return 'reflex';
+  }
+
   if (!themeId || !baseThemes[themeId as BaseThemeId]) {
     return 'coolBlack';
   }
@@ -68,6 +73,10 @@ const normalizeBaseThemeId = (themeId?: string | null): BaseThemeId => {
 };
 
 const normalizeTerminalThemeId = (themeId: unknown, baseThemeId: BaseThemeId): TerminalThemeId => {
+  if (themeId === legacyReflexThemeId) {
+    return 'reflex';
+  }
+
   if (typeof themeId === 'string' && curatedTerminalThemes.includes(themeId as typeof curatedTerminalThemes[number])) {
     return themeId as TerminalThemeId;
   }

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SSHConnection } from '../shared/types';
 import { Button } from '../components/ui/button';
-import { Trash2, Plus, Edit2, Server, Zap, Globe, ArrowRight, Search, Copy, Check } from 'lucide-react';
+import { Trash2, Plus, Edit2, Server, Zap, ArrowRight, Search, Copy, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
 import { Modal } from '../components/ui/modal';
 import { ConnectionForm } from '../components/ConnectionForm';
 import { Input } from '../components/ui/input';
+import logoUrl from '../assets/logo.png';
 
 interface ConnectionManagerProps {
   onConnect: (connection: SSHConnection) => void;
@@ -117,8 +118,8 @@ export function ConnectionManager({ onConnect, onNavigate, activeSessions = 0 }:
         {connections.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center h-full text-center px-8">
-            <div className="w-16 h-16 rounded-2xl bg-muted/50 border border-border/40 flex items-center justify-center mb-5">
-              <Globe className="w-7 h-7 text-muted-foreground/25" />
+            <div className="w-16 h-16 rounded-2xl bg-muted/50 border border-border/40 flex items-center justify-center mb-5 overflow-hidden">
+              <img src={logoUrl} alt="Reflex" className="h-10 w-10 rounded-xl object-cover" />
             </div>
             <h3 className="text-sm font-semibold mb-1.5">没有已保存的连接</h3>
             <p className="text-xs text-muted-foreground/60 max-w-sm mb-5 leading-relaxed">

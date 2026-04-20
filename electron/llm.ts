@@ -147,12 +147,14 @@ function throwTimeoutError(
 }
 
 function parseLLMError(rawText: string, status: number, fallbackPrefix: string): LLMRequestError {
+    const retryableProviderMessage = /not available in your region|model is not available|no endpoints found|temporarily unavailable|rate limit/i.test(rawText);
     try {
         const parsed = JSON.parse(rawText);
         const code = parsed?.error?.code;
         const type = parsed?.error?.type;
         const message = parsed?.error?.message;
         const requestId = parsed?.error?.request_id || parsed?.request_id;
+        const retryableMessage = /not available in your region|model is not available|no endpoints found|temporarily unavailable|rate limit/i.test(message || '');
 
         if (status === 429 || code === 'ServerOverloaded' || type === 'TooManyRequests') {
             const detail = message || 'AI service is temporarily overloaded.';
@@ -175,7 +177,7 @@ function parseLLMError(rawText: string, status: number, fallbackPrefix: string):
                 code,
                 type,
                 requestId,
-                retryable: status >= 500,
+                retryable: retryableMessage || retryableProviderMessage || status >= 500,
             });
         }
     } catch {
@@ -194,7 +196,7 @@ function parseLLMError(rawText: string, status: number, fallbackPrefix: string):
 
     return new LLMRequestError(`${fallbackPrefix}: ${rawText.slice(0, 300)}`, {
         status,
-        retryable: status >= 500,
+        retryable: retryableProviderMessage || status >= 500,
     });
 }
 
@@ -355,8 +357,8 @@ export async function callLLMWithTools(
         'Authorization': `Bearer ${apiKey}`,
     };
     if (provider === 'openrouter') {
-        headers['HTTP-Referer'] = 'https://sshtool.app';
-        headers['X-Title'] = 'SSH Tool';
+        headers['HTTP-Referer'] = 'https://reflex.app';
+        headers['X-Title'] = 'Reflex';
     }
 
     const request = createRequestController(signal, timeoutMs);
@@ -420,8 +422,9 @@ export async function callLLMWithTools(
         const content = message?.content || '';
         const funcMatch = content.match(/<function=(\w+)>([\s\S]*?)(?:<\/function>|$)/);
         if (funcMatch) {
+            const visibleContent = content.slice(0, funcMatch.index).trim();
             return {
-                content: null,
+                content: visibleContent || null,
                 toolCalls: [{
                     id: `call_${Date.now()}`,
                     type: 'function',

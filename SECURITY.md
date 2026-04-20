@@ -11,7 +11,7 @@ Currently, only the latest `main` branch and the most recent release are support
 
 ## Reporting a Vulnerability
 
-We take the security of Zangqing (藏青) very seriously.
+We take the security of Reflex very seriously.
 
 If you discover a security vulnerability within this project, please **DO NOT** create a public issue on GitHub. 
 

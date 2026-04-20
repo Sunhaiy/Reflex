@@ -37,21 +37,23 @@ const AIResponseContent = React.memo(({
     };
 }) => (
     <>
-        <div className="flex-1 overflow-y-auto bg-card/50 p-4 custom-scrollbar min-h-[100px]">
+        <div className="min-h-[150px] flex-1 overflow-y-auto bg-popover p-4 custom-scrollbar">
             {isLoading && !response && (
-                <div className="flex flex-col items-center justify-center gap-3 py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-3 text-muted-foreground">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    </div>
                     <span className="text-xs">{labels.thinking}</span>
                 </div>
             )}
 
             {error && (
-                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-xs leading-5 text-destructive">
                     {error}
                 </div>
             )}
 
-            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+            <div className="whitespace-pre-wrap break-words text-sm leading-6 text-popover-foreground">
                 {response}
                 {isLoading && response && (
                     <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-primary align-middle" />
@@ -60,13 +62,13 @@ const AIResponseContent = React.memo(({
         </div>
 
         {type === 'fix' && fixCommand && !isLoading && (
-            <div className="flex justify-end border-t border-border bg-muted/30 p-3">
+            <div className="flex justify-end border-t border-border bg-background/60 p-3">
                 <button
                     onClick={() => {
                         onApplyFix?.(fixCommand);
                         onClose();
                     }}
-                    className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90"
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
                     <Check className="h-3.5 w-3.5" />
                     {labels.applyFix}
@@ -79,7 +81,7 @@ const AIResponseContent = React.memo(({
 AIResponseContent.displayName = 'AIResponseContent';
 
 export function AIPopover({ x, y, text, type, onClose, onApplyFix }: AIPopoverProps) {
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const [response, setResponse] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export function AIPopover({ x, y, text, type, onClose, onApplyFix }: AIPopoverPr
     const rafRef = useRef<number>();
 
     useEffect(() => {
-        const popoverWidth = 350;
+        const popoverWidth = 380;
         const padding = 20;
         const initialX = Math.min(x, window.innerWidth - popoverWidth - padding);
         const initialY = Math.min(y, window.innerHeight - 350 - padding);
@@ -109,16 +111,14 @@ export function AIPopover({ x, y, text, type, onClose, onApplyFix }: AIPopoverPr
             setError(null);
 
             try {
-                const promptType = type === 'explain' ? 'explainCommand' : 'errorAnalysis';
-                const messages = [
-                    { role: 'system' as const, content: (await import('../shared/aiTypes')).AI_SYSTEM_PROMPTS[promptType] },
-                    { role: 'user' as const, content: text },
-                ];
-
-                for await (const chunk of aiService.streamComplete({ messages, temperature: 0.3 })) {
-                    setResponse((prev) => prev + chunk);
-                    setIsLoading(false);
+                if (!aiService.isConfigured()) {
+                    setError(t('aiCommandInput.configureApi'));
+                    return;
                 }
+                const result = type === 'explain'
+                    ? await aiService.explainCommand(text)
+                    : await aiService.analyzeError(text);
+                setResponse(result.trim());
             } catch (err: any) {
                 setError(err?.message || t('aiPopover.requestFailed'));
             } finally {
@@ -191,6 +191,9 @@ export function AIPopover({ x, y, text, type, onClose, onApplyFix }: AIPopoverPr
     };
 
     const fixCommand = type === 'fix' ? extractCommand(response) : null;
+    const subtitle = type === 'fix'
+        ? (language === 'zh' ? '分析选中文本，并给出安全修复命令' : 'Analyze and suggest a safe command')
+        : (language === 'zh' ? '解释选中的终端内容' : 'Explain the selected terminal text');
 
     return createPortal(
         <>
@@ -198,9 +201,9 @@ export function AIPopover({ x, y, text, type, onClose, onApplyFix }: AIPopoverPr
             <div
                 ref={containerRef}
                 className={cn(
-                    'fixed z-[10001] flex max-h-[450px] w-[350px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-0 shadow-2xl',
+                    'fixed z-[10001] flex max-h-[460px] w-[380px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover p-0 text-popover-foreground shadow-none',
                     !hasEntered && 'animate-in slide-in-from-top-2 fade-in duration-300',
-                    isDragging && 'ring-2 ring-primary/20 shadow-3xl',
+                    isDragging && 'ring-2 ring-primary/20',
                 )}
                 style={{
                     left: 0,
@@ -215,28 +218,34 @@ export function AIPopover({ x, y, text, type, onClose, onApplyFix }: AIPopoverPr
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
                     className={cn(
-                        'flex shrink-0 select-none items-center justify-between border-b border-border px-4 py-3',
+                        'flex shrink-0 select-none items-center justify-between border-b border-border bg-background/70 px-4 py-3',
                         isDragging ? 'cursor-grabbing' : 'cursor-grab',
-                        type === 'fix' ? 'bg-orange-500/10' : 'bg-primary/10',
                     )}
                     style={{ touchAction: 'none' }}
                 >
-                    <div className="pointer-events-none flex items-center gap-2">
+                    <div className="pointer-events-none flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card">
                         {type === 'fix' ? (
                             <AlertTriangle className="h-4 w-4 text-orange-500" />
                         ) : (
                             <Sparkles className="h-4 w-4 text-primary" />
                         )}
-                        <span className="text-sm font-semibold">
-                            {type === 'fix' ? t('aiPopover.titleFix') : t('aiPopover.titleExplain')}
-                        </span>
+                        </div>
+                        <div>
+                            <div className="text-sm font-semibold">
+                                {type === 'fix' ? t('aiPopover.titleFix') : t('aiPopover.titleExplain')}
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">
+                                {subtitle}
+                            </div>
+                        </div>
                     </div>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             onClose();
                         }}
-                        className="flex-shrink-0 rounded-full p-1 transition-colors hover:bg-muted"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                         <X className="h-4 w-4 text-muted-foreground" />
                     </button>

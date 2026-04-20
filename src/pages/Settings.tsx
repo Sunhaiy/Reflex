@@ -56,6 +56,8 @@ export function Settings({ onBack }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [visibleProfileKeys, setVisibleProfileKeys] = useState<Record<string, boolean>>({});
 
   const {
     baseThemeId,
@@ -105,13 +107,64 @@ export function Settings({ onBack }: SettingsProps) {
     setActiveProfile,
   } = useSettingsStore();
 
-  const emptyForm = { name: '', provider: 'deepseek' as AIProvider, apiKey: '', baseUrl: '', model: '' };
+  const defaultProviderConfig = AI_PROVIDER_CONFIGS.deepseek;
+  const emptyForm = {
+    name: '',
+    provider: 'deepseek' as AIProvider,
+    apiKey: '',
+    baseUrl: defaultProviderConfig.baseUrl,
+    model: defaultProviderConfig.defaultModel,
+    modelsText: defaultProviderConfig.defaultModel,
+  };
   const [formData, setFormData] = useState(emptyForm);
 
   const { t } = useTranslation();
+  const isZh = language === 'zh';
+  const text = {
+    addProfile: isZh ? '添加配置' : 'Add profile',
+    emptyProfiles: isZh ? '还没有 AI 配置，先添加一个提供商。' : 'No AI profiles yet. Add a provider first.',
+    current: isZh ? '当前' : 'Current',
+    noKey: isZh ? '无密钥' : 'No key',
+    setDefault: isZh ? '设为默认' : 'Set default',
+    edit: isZh ? '编辑' : 'Edit',
+    delete: isZh ? '删除' : 'Delete',
+    editProfile: isZh ? '编辑配置' : 'Edit profile',
+    addNewProfile: isZh ? '添加新配置' : 'Add new profile',
+    profileNamePlaceholder: isZh ? '配置名称，例如 DeepSeek V3' : 'Profile name, e.g. DeepSeek V3',
+    primaryModel: isZh ? '默认模型' : 'Default model',
+    modelList: isZh ? '模型列表' : 'Model list',
+    modelListHint: isZh ? '每行一个模型。同一个接口下，Agent 可以直接从这里切换模型。' : 'One model per line. The Agent can switch between these models on the same endpoint.',
+    save: isZh ? '保存' : 'Save',
+    add: isZh ? '添加' : 'Add',
+    cancel: isZh ? '取消' : 'Cancel',
+    hideKey: isZh ? '隐藏密钥' : 'Hide key',
+    showKey: isZh ? '查看密钥' : 'Show key',
+    modelsCount: (count: number) => isZh ? `${count} 个模型` : `${count} model${count === 1 ? '' : 's'}`,
+    appearanceDesc: isZh ? '主题、终端和 AI 偏好都在这里统一调整。' : 'Theme, terminal, and AI preferences are adjusted here.',
+    officialThemeDesc: isZh ? '官方主题和主色统一管理，切换成本更低。' : 'Official themes and accent colors are managed together.',
+    accentTitle: isZh ? '主题主色' : 'Accent color',
+    accentDesc: isZh ? '夜间主题不再固定蓝色。炫酷黑和炫酷白支持自定义主色，赛博朋克主题保留自己的专属配色。' : 'Dark themes no longer force blue. Cool Black and Cool White support custom accents; Cyberpunk keeps its own palette.',
+    accentDefault: isZh ? '默认推荐' : 'Default choice',
+    accentUsage: isZh ? '可用于强调按钮、状态和进度' : 'Used for buttons, status, and progress',
+    accentLocked: isZh ? '当前主题使用固定主色。你选中的颜色会保留，在切回炫酷黑或炫酷白时自动生效。' : 'The current theme uses a fixed accent. Your selection is saved and will apply when switching back to Cool Black or Cool White.',
+    terminalPresetDesc: isZh ? '终端预设与 UI 主题一一对应，避免再出现一大屏主题列表。' : 'Terminal presets map to UI themes to keep this page compact.',
+    brightBoldDesc: isZh ? '亮色字符自动加粗' : 'Render bright text as bold.',
+  };
+
+  const normalizeModelList = (value: string, fallback?: string) => {
+    const rawModels = value.split(/[\n,，]+/).map((model) => model.trim()).filter(Boolean);
+    const models = [fallback?.trim(), ...rawModels].filter((model): model is string => Boolean(model));
+    return Array.from(new Set(models));
+  };
+
+  const maskApiKey = (apiKey: string) => {
+    if (!apiKey) return text.noKey;
+    if (apiKey.length <= 10) return '••••••';
+    return `${apiKey.slice(0, 6)}••••${apiKey.slice(-4)}`;
+  };
 
   const uiFontOptions = [
-    { label: 'System Default', value: 'system-ui, -apple-system, sans-serif' },
+    { label: isZh ? '系统默认' : 'System Default', value: 'system-ui, -apple-system, sans-serif' },
     { label: 'Inter', value: 'Inter, sans-serif' },
     { label: 'Roboto', value: 'Roboto, sans-serif' },
     { label: 'Segoe UI', value: '"Segoe UI", sans-serif' },
@@ -120,7 +173,7 @@ export function Settings({ onBack }: SettingsProps) {
 
   const terminalFontOptions = [
     { label: 'Inter', value: "'Inter', monospace" },
-    { label: 'Monospace (Default)', value: 'monospace' },
+    { label: isZh ? '等宽字体（默认）' : 'Monospace (Default)', value: 'monospace' },
     { label: 'Consolas', value: "'Consolas', monospace" },
     { label: 'Fira Code', value: "'Fira Code', monospace" },
     { label: 'JetBrains Mono', value: "'JetBrains Mono', monospace" },
@@ -132,17 +185,17 @@ export function Settings({ onBack }: SettingsProps) {
   ];
 
   const curatedThemes: Array<{ id: BaseThemeId; label: string; description: string }> = [
-    { id: 'coolBlack', label: '炫酷黑', description: '深色高对比，聚焦内容和终端。' },
-    { id: 'coolWhite', label: '炫酷白', description: '清爽纯白，适合白天和演示。' },
-    { id: 'blossom', label: '落樱', description: '柔和樱粉，保留一点轻盈氛围。' },
-    { id: 'cyberpunk', label: '赛博朋克 2077', description: '高对比霓虹夜景，保留专属黄青配色。' },
+    { id: 'coolBlack', label: isZh ? '炫酷黑' : 'Cool Black', description: isZh ? '深色高对比，聚焦内容和终端。' : 'High-contrast dark UI focused on content and terminals.' },
+    { id: 'coolWhite', label: isZh ? '炫酷白' : 'Cool White', description: isZh ? '清爽纯白，适合白天和演示。' : 'Clean light UI for daytime work and demos.' },
+    { id: 'blossom', label: isZh ? '落樱' : 'Blossom', description: isZh ? '柔和樱粉，保留一点轻盈氛围。' : 'Soft sakura palette with a light touch.' },
+    { id: 'cyberpunk', label: isZh ? '赛博朋克 2077' : 'Cyberpunk 2077', description: isZh ? '高对比霓虹夜景，保留专属黄青配色。' : 'Neon night contrast with a dedicated yellow/cyan palette.' },
   ];
 
   const curatedTerminalThemes: Array<{ id: TerminalThemeId; label: string; description: string }> = [
-    { id: 'default', label: '黑域终端', description: '适配炫酷黑的深色终端。' },
-    { id: 'githubLight', label: '白域终端', description: '适配炫酷白的浅色终端。' },
-    { id: 'taxuexunmei', label: '落樱终端', description: '适配落樱的柔和浅色终端。' },
-    { id: 'cyberpunk', label: '赛博终端', description: '适配赛博朋克 2077 的黄青终端。' },
+    { id: 'default', label: isZh ? '黑域终端' : 'Dark Terminal', description: isZh ? '适配炫酷黑的深色终端。' : 'Dark terminal preset for Cool Black.' },
+    { id: 'githubLight', label: isZh ? '白域终端' : 'Light Terminal', description: isZh ? '适配炫酷白的浅色终端。' : 'Light terminal preset for Cool White.' },
+    { id: 'taxuexunmei', label: isZh ? '落樱终端' : 'Blossom Terminal', description: isZh ? '适配落樱的柔和浅色终端。' : 'Soft terminal preset for Blossom.' },
+    { id: 'cyberpunk', label: isZh ? '赛博终端' : 'Cyber Terminal', description: isZh ? '适配赛博朋克 2077 的黄青终端。' : 'Yellow/cyan terminal preset for Cyberpunk 2077.' },
   ];
 
   const accentOptions = Object.values(accentColors);
@@ -299,7 +352,7 @@ export function Settings({ onBack }: SettingsProps) {
             <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base">{t('settings.appearance.title')}</CardTitle>
               <CardDescription className="text-xs">
-                现在只保留三套官方主题，切换成本更低，外观控制也更紧凑。
+                {text.officialThemeDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 px-4 py-4 sm:px-5">
@@ -339,9 +392,9 @@ export function Settings({ onBack }: SettingsProps) {
 
               <div className={sectionClass}>
                 <div className="mb-3">
-                  <span className="text-sm font-medium">主题主色</span>
+                  <span className="text-sm font-medium">{text.accentTitle}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    夜间主题不再固定蓝色。炫酷黑和炫酷白支持自定义主色，赛博朋克主题保留自己的专属配色。
+                    {text.accentDesc}
                   </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -367,7 +420,7 @@ export function Settings({ onBack }: SettingsProps) {
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-medium">{accent.name}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {accent.id === 'teal' ? '默认推荐' : '可用于强调按钮、状态和进度'}
+                            {accent.id === 'teal' ? text.accentDefault : text.accentUsage}
                           </span>
                         </span>
                         {isActive && (
@@ -381,7 +434,7 @@ export function Settings({ onBack }: SettingsProps) {
                 </div>
                 {!accentSelectionEnabled && (
                   <div className="mt-3 rounded-lg border border-border/60 bg-background/35 px-3 py-2 text-xs text-muted-foreground">
-                    当前主题使用固定主色。你选中的颜色会保留，在切回炫酷黑或炫酷白时自动生效。
+                    {text.accentLocked}
                   </div>
                 )}
               </div>
@@ -395,7 +448,7 @@ export function Settings({ onBack }: SettingsProps) {
             <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base">{t('settings.terminal.title')}</CardTitle>
               <CardDescription className="text-xs">
-                终端预设与三套 UI 主题一一对应，避免再出现一大屏主题列表。
+                {text.terminalPresetDesc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 px-4 py-4 sm:px-5">
@@ -503,7 +556,7 @@ export function Settings({ onBack }: SettingsProps) {
                   <div className="mt-3 flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2">
                     <div>
                       <div className="text-sm font-medium">{t('settings.terminal.brightBold')}</div>
-                      <div className="text-xs text-muted-foreground">亮色字符自动加粗</div>
+                      <div className="text-xs text-muted-foreground">{text.brightBoldDesc}</div>
                     </div>
                     <ToggleSwitch checked={brightBold} onChange={setBrightBold} />
                   </div>
@@ -575,14 +628,14 @@ export function Settings({ onBack }: SettingsProps) {
                         className="flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
                       >
                         <Plus className="h-3 w-3" />
-                        添加配置
+                        {text.addProfile}
                       </button>
                     </div>
 
                     {aiProfiles.length === 0 && !showAddForm && (
                       <div className="mt-3 rounded-lg border border-dashed border-border py-6 text-center text-sm text-muted-foreground/70">
                         <Cpu className="mx-auto mb-2 h-8 w-8 opacity-30" />
-                        还没有 AI 配置，先添加一个提供商。
+                        {text.emptyProfiles}
                       </div>
                     )}
 
@@ -606,7 +659,7 @@ export function Settings({ onBack }: SettingsProps) {
                               <span className="truncate text-sm font-medium">{profile.name}</span>
                               {activeProfileId === profile.id && (
                                 <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                                  当前
+                                  {text.current}
                                 </span>
                               )}
                             </div>
@@ -614,12 +667,26 @@ export function Settings({ onBack }: SettingsProps) {
                               <span>{AI_PROVIDER_CONFIGS[profile.provider]?.displayName || profile.provider}</span>
                               <span className="opacity-40">·</span>
                               <span className="font-mono">{profile.model || AI_PROVIDER_CONFIGS[profile.provider]?.defaultModel}</span>
+                              {profile.models?.length ? (
+                                <>
+                                  <span className="opacity-40">·</span>
+                                  <span>{text.modelsCount(profile.models.length)}</span>
+                                </>
+                              ) : null}
                               <span className="opacity-40">·</span>
-                              <span className="font-mono">{profile.apiKey ? `${profile.apiKey.slice(0, 6)}***` : '(no key)'}</span>
+                              <span className="font-mono">{visibleProfileKeys[profile.id] ? (profile.apiKey || text.noKey) : maskApiKey(profile.apiKey)}</span>
                             </div>
                           </button>
 
                           <div className="flex flex-shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setVisibleProfileKeys((prev) => ({ ...prev, [profile.id]: !prev[profile.id] }))}
+                              className="rounded-md p-1.5 text-muted-foreground/60 transition-colors hover:bg-secondary hover:text-foreground"
+                              title={visibleProfileKeys[profile.id] ? text.hideKey : text.showKey}
+                            >
+                              {visibleProfileKeys[profile.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
                             <button
                               type="button"
                               onClick={() => setActiveProfile(profile.id)}
@@ -629,7 +696,7 @@ export function Settings({ onBack }: SettingsProps) {
                                   ? 'text-yellow-500'
                                   : 'text-muted-foreground/40 hover:bg-yellow-500/10 hover:text-yellow-500'
                               )}
-                              title="设为默认"
+                              title={text.setDefault}
                             >
                               <Star className={cn('h-3.5 w-3.5', activeProfileId === profile.id && 'fill-current')} />
                             </button>
@@ -642,12 +709,13 @@ export function Settings({ onBack }: SettingsProps) {
                                   apiKey: profile.apiKey,
                                   baseUrl: profile.baseUrl,
                                   model: profile.model,
+                                  modelsText: (profile.models?.length ? profile.models : [profile.model]).filter(Boolean).join('\n'),
                                 });
                                 setEditingProfile(profile.id);
                                 setShowAddForm(true);
                               }}
                               className="rounded-md p-1.5 text-muted-foreground/60 transition-colors hover:bg-secondary hover:text-foreground"
-                              title="编辑"
+                              title={text.edit}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
@@ -655,7 +723,7 @@ export function Settings({ onBack }: SettingsProps) {
                               type="button"
                               onClick={() => removeAiProfile(profile.id)}
                               className="rounded-md p-1.5 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                              title="删除"
+                              title={text.delete}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -666,7 +734,7 @@ export function Settings({ onBack }: SettingsProps) {
 
                     {showAddForm && (
                       <div className="mt-3 space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
-                        <div className="text-sm font-medium">{editingProfile ? '编辑配置' : '添加新配置'}</div>
+                        <div className="text-sm font-medium">{editingProfile ? text.editProfile : text.addNewProfile}</div>
 
                         <Select
                           className="w-full sm:w-64"
@@ -679,6 +747,7 @@ export function Settings({ onBack }: SettingsProps) {
                               provider,
                               baseUrl: config?.baseUrl || '',
                               model: config?.defaultModel || '',
+                              modelsText: config?.defaultModel || '',
                               name: formData.name || config?.displayName || provider,
                             });
                           }}
@@ -691,18 +760,28 @@ export function Settings({ onBack }: SettingsProps) {
                         <Input
                           type="text"
                           className="w-full sm:w-64"
-                          placeholder="配置名称，例如 DeepSeek V3"
+                          placeholder={text.profileNamePlaceholder}
                           value={formData.name}
                           onChange={(event) => setFormData({ ...formData, name: event.target.value })}
                         />
 
-                        <Input
-                          type="password"
-                          className="w-full sm:w-96 font-mono"
-                          placeholder="API Key (sk-xxx...)"
-                          value={formData.apiKey}
-                          onChange={(event) => setFormData({ ...formData, apiKey: event.target.value })}
-                        />
+                        <div className="relative w-full sm:w-96">
+                          <Input
+                            type={showApiKey ? 'text' : 'password'}
+                            className="w-full pr-10 font-mono"
+                            placeholder="API Key (sk-xxx...)"
+                            value={formData.apiKey}
+                            onChange={(event) => setFormData({ ...formData, apiKey: event.target.value })}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey((value) => !value)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                            title={showApiKey ? text.hideKey : text.showKey}
+                          >
+                            {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
                         <div className="flex flex-col gap-1">
                           <span className="text-[11px] text-muted-foreground">Base URL</span>
                           <Input
@@ -715,7 +794,7 @@ export function Settings({ onBack }: SettingsProps) {
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <span className="text-[11px] text-muted-foreground">模型名称</span>
+                          <span className="text-[11px] text-muted-foreground">{text.primaryModel}</span>
                           <Input
                             type="text"
                             className="w-full sm:w-64 font-mono text-xs"
@@ -725,18 +804,32 @@ export function Settings({ onBack }: SettingsProps) {
                           />
                         </div>
 
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] text-muted-foreground">{text.modelList}</span>
+                          <textarea
+                            className="min-h-[84px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary/50"
+                            placeholder={AI_PROVIDER_CONFIGS[formData.provider]?.defaultModel || 'model-name'}
+                            value={formData.modelsText}
+                            onChange={(event) => setFormData({ ...formData, modelsText: event.target.value })}
+                          />
+                          <span className="text-[11px] text-muted-foreground">{text.modelListHint}</span>
+                        </div>
+
                         <div className="flex gap-2 pt-1">
                           <Button
                             size="sm"
                             onClick={() => {
                               const config = AI_PROVIDER_CONFIGS[formData.provider];
+                              const models = normalizeModelList(formData.modelsText, formData.model || config?.defaultModel || '');
+                              const primaryModel = formData.model || models[0] || config?.defaultModel || '';
                               const profile: AIProviderProfile = {
                                 id: editingProfile || `profile-${Date.now()}`,
                                 name: formData.name || config?.displayName || formData.provider,
                                 provider: formData.provider,
                                 apiKey: formData.apiKey,
                                 baseUrl: formData.baseUrl || config?.baseUrl || '',
-                                model: formData.model || config?.defaultModel || '',
+                                model: primaryModel,
+                                models,
                               };
 
                               if (editingProfile) {
@@ -751,7 +844,7 @@ export function Settings({ onBack }: SettingsProps) {
                             }}
                           >
                             <Check className="mr-1 h-3.5 w-3.5" />
-                            {editingProfile ? '保存' : '添加'}
+                            {editingProfile ? text.save : text.add}
                           </Button>
                           <Button
                             size="sm"
@@ -762,7 +855,7 @@ export function Settings({ onBack }: SettingsProps) {
                               setFormData({ ...emptyForm });
                             }}
                           >
-                            取消
+                            {text.cancel}
                           </Button>
                         </div>
                       </div>
@@ -859,7 +952,7 @@ export function Settings({ onBack }: SettingsProps) {
           <div className="mx-auto max-w-3xl animate-in slide-in-from-right-4 duration-300">
             <div className="mb-4">
               <h2 className="text-xl font-bold tracking-tight">{sidebarItems.find((item) => item.id === activeTab)?.label}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">主题、终端和 AI 偏好都在这里统一调整。</p>
+              <p className="mt-1 text-sm text-muted-foreground">{text.appearanceDesc}</p>
             </div>
             {renderContent()}
           </div>

@@ -1,12 +1,13 @@
 ﻿// AIChatPanel - Agent mode chat interface
 import { useState, useRef, useEffect, KeyboardEvent, memo } from 'react';
-import { Bot, User, Send, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Target, AlertTriangle, ShieldAlert, Package } from 'lucide-react';
+import { User, Send, Sparkles, ChevronDown, ChevronRight, Terminal, Square, Zap, Shield, ShieldCheck, Check, X, Cpu, FileText, FolderOpen, Brain, Pencil, ListChecks, ChevronUp, CheckCircle2, XCircle, Target, AlertTriangle, ShieldAlert, Package } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { AI_SYSTEM_PROMPTS, AGENT_TOOLS, AIProviderProfile, AI_PROVIDER_CONFIGS, PlanState } from '../shared/aiTypes';
 import { AgentCompactState, AgentMemoryFileSummary, AgentPlanPhase, AgentSessionRuntime, TaskRunSummary, TaskTodoItem } from '../shared/types';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
+import logoUrl from '../assets/logo.png';
 
 export interface AgentMessage {
     id: string;
@@ -134,7 +135,12 @@ export function AIChatPanel({
     useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
     useEffect(() => { onMessagesChangeRef.current = onMessagesChange; }, [onMessagesChange]);
 
-    const getSelectedProfile = () => aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+    const getBaseProfile = () => aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+    const getSelectedProfile = () => {
+        const profile = getBaseProfile();
+        if (!profile) return undefined;
+        return agentModel ? { ...profile, model: agentModel } : profile;
+    };
 
     const buildRuntimeSnapshot = (): AgentSessionRuntime => ({
         planState,
@@ -178,6 +184,12 @@ export function AIChatPanel({
 @keyframes agentShimmer {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
+}
+@keyframes agentThinkingLine {
+  0%   { transform: translateX(-70%); opacity: 0; }
+  18%  { opacity: 0.8; }
+  82%  { opacity: 0.8; }
+  100% { transform: translateX(130%); opacity: 0; }
 }
 @keyframes agentWaveDot {
   0%, 100% { transform: translateY(0); opacity: 0.35; }
@@ -240,7 +252,7 @@ export function AIChatPanel({
     useEffect(() => { agentControlModeRef.current = agentControlMode; }, [agentControlMode]);
     useEffect(() => { agentWhitelistRef.current = agentWhitelist; }, [agentWhitelist]);
     useEffect(() => { activeTaskRunRef.current = activeTaskRun; }, [activeTaskRun]);
-    useEffect(() => { selectedProfileRef.current = getSelectedProfile(); }, [aiProfiles, agentProfileId, activeProfileId]);
+    useEffect(() => { selectedProfileRef.current = getSelectedProfile(); }, [aiProfiles, agentProfileId, activeProfileId, agentModel]);
 
     // Restore per-chat execution state when switching sessions.
     useEffect(() => {
@@ -391,7 +403,7 @@ export function AIChatPanel({
             clearAutoResumeTimer();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionId, connectionId, host, activeTaskRun?.id, activeTaskRun?.status, activeTaskRun?.nextAutoRetryAt, activeTaskRun?.autoRetryCount, aiProfiles, agentProfileId, activeProfileId]);
+    }, [sessionId, connectionId, host, activeTaskRun?.id, activeTaskRun?.status, activeTaskRun?.nextAutoRetryAt, activeTaskRun?.autoRetryCount, aiProfiles, agentProfileId, activeProfileId, agentModel]);
 
     useEffect(() => () => {
         clearAutoResumeTimer();
@@ -739,7 +751,7 @@ export function AIChatPanel({
             try {
                 const chatMessages = buildChatMessages(loopMessages, envContextRef.current);
                 // Resolve the profile to use: agent-selected > active profile
-                const selectedProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
+                const selectedProfile = getSelectedProfile();
                 const response = await aiService.completeWithTools({
                     messages: chatMessages,
                     tools: AGENT_TOOLS,
@@ -1095,17 +1107,169 @@ export function AIChatPanel({
     };
 
     const starterPrompts = language === 'zh'
-        ? ['把我桌面上的项目部署到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清并修复']
-        : ['Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];
+        ? ['部署这个 GitHub 项目到 3009 端口：https://github.com/owner/repo', '把我桌面上的项目部署到这台服务器', '检查这台服务器现在有什么异常', '把服务启动失败的原因查清并修复']
+        : ['Deploy this GitHub project to port 3009: https://github.com/owner/repo', 'Deploy a local project to this server', 'Inspect what is unhealthy on this server', 'Find and fix why the service failed to start'];
+
+    const visibleTodos = activeTaskRun?.taskTodos?.length ? activeTaskRun.taskTodos : taskTodos;
+    const completedTodoCount = visibleTodos.filter((item) => item.status === 'completed').length;
+    const activeTodo = visibleTodos.find((item) => item.status === 'in_progress') || visibleTodos.find((item) => item.status === 'pending');
+    const activePlanStep = planState?.plan.find((step) => step.status === 'in_progress') || planState?.plan.find((step) => step.status === 'pending');
+    const activeRoute = activeTaskRun?.activeHypothesisId
+        ? activeTaskRun.hypotheses.find((item) => item.id === activeTaskRun.activeHypothesisId)?.kind || activeTaskRun.activeHypothesisId
+        : undefined;
+    const statusLabel = planStatus === 'executing'
+        ? (language === 'zh' ? '执行中' : 'Running')
+        : planStatus === 'generating'
+            ? (language === 'zh' ? '分析计划' : 'Planning')
+            : planStatus === 'paused'
+                ? (language === 'zh' ? '等待继续' : 'Waiting')
+                : planStatus === 'blocked'
+                    ? (language === 'zh' ? '已阻塞' : 'Blocked')
+                    : planStatus === 'waiting_approval'
+                        ? (language === 'zh' ? '等待批准' : 'Waiting approval')
+                        : planStatus === 'done'
+                            ? (language === 'zh' ? '已完成' : 'Completed')
+                            : planStatus === 'stopped'
+                                ? (language === 'zh' ? '已停止' : 'Stopped')
+                                : (language === 'zh' ? '待命' : 'Idle');
+    const currentAgentAction = activeTaskRun?.currentAction
+        || activeTodo?.content
+        || activePlanStep?.description
+        || (isLoading ? (language === 'zh' ? '正在分析任务上下文' : 'Analyzing task context') : '');
+    const nextAgentAction = activeTaskRun?.checkpoint?.nextAction
+        || activePlanStep?.description
+        || activeTodo?.content
+        || (planStatus === 'done'
+            ? (language === 'zh' ? '任务已完成' : 'Task completed')
+            : (language === 'zh' ? '等待生成下一步动作' : 'Waiting for the next action'));
+    const lastFailure = activeTaskRun?.failureHistory?.length
+        ? activeTaskRun.failureHistory[activeTaskRun.failureHistory.length - 1]
+        : undefined;
+    const lastProgressNote = activeTaskRun?.checkpoint?.lastProgressNote
+        || lastFailure?.message
+        || '';
+    const showAgentState = planMode && (isLoading || planStatus !== 'idle' || Boolean(activeTaskRun) || visibleTodos.length > 0);
+    const selectedBaseProfile = getBaseProfile();
+    const selectedProfileModels = selectedBaseProfile
+        ? Array.from(new Set([
+            selectedBaseProfile.model,
+            ...(selectedBaseProfile.models || []),
+            AI_PROVIDER_CONFIGS[selectedBaseProfile.provider]?.defaultModel,
+        ].map((model) => model?.trim()).filter((model): model is string => Boolean(model))))
+        : [];
+    const selectedModelLabel = agentModel || selectedBaseProfile?.model || (selectedBaseProfile ? AI_PROVIDER_CONFIGS[selectedBaseProfile.provider]?.defaultModel : '');
+    const executedActionCount = messages.filter((message) => message.role === 'tool' && message.toolCall).length;
+    const latestStrategy = activeTaskRun?.strategyHistory?.length
+        ? activeTaskRun.strategyHistory[activeTaskRun.strategyHistory.length - 1]
+        : undefined;
+    const repoFinding = activeTaskRun?.repoAnalysis
+        ? [
+            activeTaskRun.repoAnalysis.repoName,
+            activeTaskRun.repoAnalysis.framework,
+            activeTaskRun.repoAnalysis.packaging,
+        ].filter(Boolean).join(' · ')
+        : '';
+    const compactNote = (value: string, max = 180) => {
+        const normalized = value.replace(/\s+/g, ' ').trim();
+        return normalized.length > max ? `${normalized.slice(0, max - 1)}…` : normalized;
+    };
+    const agentProcessEntries = (() => {
+        const entries: Array<{ type: 'thought' | 'status'; text: string }> = [];
+        let commandCount = 0;
+
+        for (const message of messages.slice(-28)) {
+            if (message.role === 'tool' && message.toolCall) {
+                commandCount += 1;
+                continue;
+            }
+
+            const visibleThought = message.role === 'assistant'
+                && !message.toolCall
+                && !message.isError
+                && message.content?.trim();
+            if (!visibleThought) continue;
+
+            if (commandCount > 0) {
+                entries.push({
+                    type: 'status',
+                    text: language === 'zh' ? `Ran ${commandCount} commands` : `Ran ${commandCount} commands`,
+                });
+                commandCount = 0;
+            }
+
+            entries.push({
+                type: 'thought',
+                text: compactNote(message.content, 280),
+            });
+        }
+
+        if (commandCount > 0) {
+            entries.push({
+                type: 'status',
+                text: language === 'zh' ? `Ran ${commandCount} commands` : `Ran ${commandCount} commands`,
+            });
+        }
+
+        if (!entries.length && currentAgentAction) {
+            entries.push({
+                type: 'thought',
+                text: compactNote(currentAgentAction, 280),
+            });
+        }
+
+        if (entries.length < 2 && latestStrategy) {
+            entries.push({
+                type: 'thought',
+                text: compactNote(latestStrategy.summary || latestStrategy.reason, 280),
+            });
+        }
+
+        if (entries.length < 2 && repoFinding) {
+            entries.push({
+                type: 'thought',
+                text: language === 'zh'
+                    ? `我已经定位到项目线索：${repoFinding}。`
+                    : `I found project signals: ${repoFinding}.`,
+            });
+        }
+
+        return entries.slice(-8);
+    })();
 
     return (
         <div className={cn("flex h-full flex-col overflow-hidden bg-card", className)}>
             <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 pt-5">
                 <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-5">
+                {showAgentState && (
+                    <div className="space-y-3 px-3 py-1">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                <Sparkles className="h-4 w-4 text-primary" />
+                                {language === 'zh' ? '思考过程' : 'Working notes'}
+                            </div>
+                            <span className="text-xs font-medium text-primary">{statusLabel}</span>
+                        </div>
+
+                        <div className="space-y-4 text-[15px] leading-8 text-foreground/78">
+                            {agentProcessEntries.map((entry, index) => (
+                                <p
+                                    key={`${entry.text}-${index}`}
+                                    className={cn(
+                                        'whitespace-pre-wrap',
+                                        entry.type === 'status' && 'text-sm font-medium leading-6 text-muted-foreground/62'
+                                    )}
+                                >
+                                    {entry.text}
+                                </p>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {messages.length === 0 && (
                     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-background px-6 py-8 text-muted-foreground">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card">
-                            <Bot className="w-6 h-6 text-foreground/55" />
+                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-border bg-card">
+                            <img src={logoUrl} alt="Reflex" className="h-7 w-7 rounded-md object-cover" />
                         </div>
                         <p className="mt-4 text-sm">{language === 'zh' ? '输入一个目标，AI 会继续接手执行。' : 'Give one goal and the AI will keep driving it.'}</p>
                         <div className="mt-4 flex max-w-2xl flex-wrap justify-center gap-3">
@@ -1127,23 +1291,28 @@ export function AIChatPanel({
                 ))}
 
                 {isLoading && messages[messages.length - 1]?.content === '' && (
-                    <div className="flex items-center gap-3 rounded-lg border border-border bg-background px-4 py-3">
-                        {/* Terminal blink cursor */}
-                        <span
-                            className="text-primary font-mono text-base leading-none"
-                            style={{ animation: 'agentCursorBlink 0.8s step-end infinite' }}
-                        >|</span>
-                        {/* Shimmer skeleton bar */}
-                        <div className="relative flex-1 h-2.5 rounded-full bg-muted/35 overflow-hidden max-w-[160px]">
-                            <div
-                                className="absolute inset-0 rounded-full"
-                                style={{
-                                    background: 'linear-gradient(90deg, transparent 0%, hsl(var(--primary)/0.3) 45%, transparent 100%)',
-                                    animation: 'agentShimmer 1.4s ease-in-out infinite'
-                                }}
-                            />
+                    <div className="rounded-xl border border-border/70 bg-background/55 px-4 py-3">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                                {[0, 1, 2].map((index) => (
+                                    <span
+                                        key={index}
+                                        className="h-1.5 w-1.5 rounded-full bg-primary"
+                                        style={{ animation: `agentWaveDot 1.05s ease-in-out ${index * 0.14}s infinite` }}
+                                    />
+                                ))}
+                            </div>
+                            <div className="relative h-px w-28 overflow-hidden rounded-full bg-border/70">
+                                <div
+                                    className="absolute inset-y-0 w-16 rounded-full"
+                                    style={{
+                                        background: 'linear-gradient(90deg, transparent, hsl(var(--primary) / 0.75), transparent)',
+                                        animation: 'agentThinkingLine 1.65s ease-in-out infinite',
+                                    }}
+                                />
+                            </div>
+                            <span className="text-xs text-muted-foreground/70">{t('agent.thinking')}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground/60 font-mono">{t('agent.thinking')}</span>
                     </div>
                 )}
 
@@ -1153,7 +1322,7 @@ export function AIChatPanel({
 
             {/* Pending approval bar */}
             {pendingCommands.length > 0 && (
-                <div className="mx-auto mb-3 w-full max-w-5xl rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+                <div className="mx-auto mb-3 w-full max-w-5xl rounded-xl border border-border bg-card px-4 py-3 shadow-none">
                     <div className="mb-1.5 flex items-center gap-2 text-[11px] font-medium text-foreground/78">
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                         <span>{pendingCommands.length} 个命令等待批准</span>
@@ -1272,16 +1441,11 @@ export function AIChatPanel({
                         <button
                             onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }}
                             className="flex max-w-[220px] items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent"
-                            title={agentModel || 'Default model from settings'}
+                            title={selectedModelLabel || 'Default model from settings'}
                         >
                             <Cpu className="w-3 h-3 flex-shrink-0" />
                             <span className="truncate">
-                                {(() => {
-                                    const p = aiProfiles.find(pp => pp.id === (agentProfileId || activeProfileId));
-                                    if (agentModel) return agentModel;
-                                    if (p) return p.name;
-                                    return 'default';
-                                })()}
+                                {selectedModelLabel || selectedBaseProfile?.name || 'default'}
                             </span>
                             <ChevronDown className="w-2.5 h-2.5 flex-shrink-0 ml-0.5" />
                         </button>
@@ -1295,32 +1459,65 @@ export function AIChatPanel({
                                         onKeyDown={e => {
                                             if (e.key === 'Enter' && modelInput.trim()) {
                                                 setAgentModel(modelInput.trim());
-                                                setAgentProfileId(''); // use current active profile's API
+                                                setAgentProfileId(selectedBaseProfile?.id || '');
                                                 setShowModelMenu(false);
                                                 e.preventDefault();
                                             }
                                         }}
-                                        placeholder="自定义模型名称（Enter 确认）"
+                                        placeholder={language === 'zh' ? '自定义模型名称（Enter 确认）' : 'Custom model name (Enter to apply)'}
                                         className="w-full px-2 py-1.5 text-[11px] bg-secondary/50 rounded border border-border/40 focus:border-primary/50 outline-none"
                                         autoFocus
                                     />
                                 </div>
 
-                                {/* Configured profiles */}
-                                {aiProfiles.length > 0 && (() => {
-                                    const activeProfile = aiProfiles.find(p => p.id === (agentProfileId || activeProfileId));
-                                    const currentModel = agentModel || activeProfile?.model || (activeProfile ? AI_PROVIDER_CONFIGS[activeProfile.provider]?.defaultModel : '');
-                                    return (
-                                        <div className="px-3 py-1.5 flex items-center justify-between">
-                                            <span className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">已配置</span>
-                                            {currentModel && <span className="text-[10px] font-mono text-primary/70 truncate max-w-[140px]" title={currentModel}>{currentModel}</span>}
+                                {selectedBaseProfile && selectedProfileModels.length > 0 && (
+                                    <div className="border-b border-border/40 px-3 py-2">
+                                        <div className="mb-1.5 flex items-center justify-between">
+                                            <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                                                {language === 'zh' ? '当前接口模型' : 'Current endpoint models'}
+                                            </span>
+                                            <span className="text-[9px] text-muted-foreground/45">{selectedBaseProfile.name}</span>
                                         </div>
-                                    );
-                                })()}
+                                        <div className="space-y-1">
+                                            {selectedProfileModels.map((model) => {
+                                                const isSelected = selectedModelLabel === model;
+                                                return (
+                                                    <button
+                                                        key={`${selectedBaseProfile.id}:${model}`}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAgentProfileId(selectedBaseProfile.id);
+                                                            setAgentModel(model);
+                                                            setModelInput('');
+                                                            setShowModelMenu(false);
+                                                        }}
+                                                        className={cn(
+                                                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-accent',
+                                                            isSelected && 'bg-accent/40 text-primary'
+                                                        )}
+                                                    >
+                                                        <span className="min-w-0 flex-1 truncate font-mono">{model}</span>
+                                                        {isSelected && <Check className="h-3 w-3 flex-shrink-0 text-primary" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Configured profiles */}
+                                {aiProfiles.length > 0 && (
+                                    <div className="px-3 py-1.5">
+                                        <span className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider">
+                                            {language === 'zh' ? '接口配置' : 'Endpoints'}
+                                        </span>
+                                    </div>
+                                )}
                                 {aiProfiles.map(profile => {
                                     const isSelected = (agentProfileId || activeProfileId) === profile.id && !agentModel;
                                     const providerInfo = AI_PROVIDER_CONFIGS[profile.provider];
                                     const modelName = profile.model || providerInfo?.defaultModel || '';
+                                    const modelsCount = profile.models?.length || (modelName ? 1 : 0);
                                     return (
                                         <button
                                             key={profile.id}
@@ -1338,11 +1535,14 @@ export function AIChatPanel({
                                                 <span className="font-semibold text-xs">{modelName}</span>
                                                 {isSelected && <Check className="w-3 h-3 text-primary" />}
                                                 {activeProfileId === profile.id && !isSelected && (
-                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">默认</span>
+                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">
+                                                        {language === 'zh' ? '默认' : 'Default'}
+                                                    </span>
                                                 )}
                                             </div>
                                             <div className="text-[10px] text-muted-foreground/60 mt-0.5">
                                                 {profile.name} · {providerInfo?.displayName}
+                                                {modelsCount > 1 && ` · ${modelsCount} ${language === 'zh' ? '个模型' : 'models'}`}
                                             </div>
                                         </button>
                                     );
@@ -1351,7 +1551,7 @@ export function AIChatPanel({
                                 {/* Empty state */}
                                 {aiProfiles.length === 0 && (
                                     <div className="px-3 py-3 text-[11px] text-muted-foreground/50 text-center">
-                                        请先在设置中添加 AI 配置
+                                        {language === 'zh' ? '请先在设置中添加 AI 配置' : 'Add an AI profile in Settings first'}
                                     </div>
                                 )}
                             </div>
@@ -1633,7 +1833,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                 )}
 
                 <div
-                    className="relative mx-1 overflow-hidden rounded-[18px] border bg-card transition-colors duration-200 shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
+                    className="relative mx-1 overflow-hidden rounded-2xl border bg-card transition-colors duration-200 shadow-none"
                     style={{
                         borderColor: panelPalette.border,
                         background: 'hsl(var(--card))',
@@ -1849,7 +2049,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
                     {isUser ? (
                         <User className="w-3.5 h-3.5 text-primary" />
                     ) : (
-                        <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                        <img src={logoUrl} alt="Reflex" className="h-4 w-4 rounded-sm object-cover" />
                     )}
                 </div>
 

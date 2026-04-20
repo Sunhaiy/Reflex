@@ -50,12 +50,12 @@ export class AgentMemoryLoader {
       : undefined;
 
     for (const fileName of ['CLAUDE.md', 'AGENT.md']) {
-      pushCandidate(seen, candidates, 'user', path.join(options.homeDir, '.zangqing', fileName));
+      pushCandidate(seen, candidates, 'user', path.join(options.homeDir, '.reflex', fileName));
       pushCandidate(seen, candidates, 'workspace', path.join(options.workspaceRoot, fileName));
-      pushCandidate(seen, candidates, 'workspace', path.join(options.workspaceRoot, '.zangqing', fileName));
+      pushCandidate(seen, candidates, 'workspace', path.join(options.workspaceRoot, '.reflex', fileName));
       if (projectRoot) {
         pushCandidate(seen, candidates, 'project', path.join(projectRoot, fileName));
-        pushCandidate(seen, candidates, 'project', path.join(projectRoot, '.zangqing', fileName));
+        pushCandidate(seen, candidates, 'project', path.join(projectRoot, '.reflex', fileName));
       }
     }
 

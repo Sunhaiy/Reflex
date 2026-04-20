@@ -73,6 +73,20 @@ interface SettingsState {
     initSettings: () => Promise<void>;
 }
 
+function normalizeProfileModels(profile: AIProviderProfile): AIProviderProfile {
+    const models = [
+        profile.model,
+        ...(Array.isArray(profile.models) ? profile.models : []),
+    ]
+        .map((model) => model?.trim())
+        .filter((model): model is string => Boolean(model));
+
+    return {
+        ...profile,
+        models: Array.from(new Set(models)),
+    };
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     language: 'en',
     uiFontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -238,7 +252,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // ── Profile CRUD ──
     addAiProfile: (profile: AIProviderProfile) => {
         const state = get();
-        const updated = [...state.aiProfiles, profile];
+        const updated = [...state.aiProfiles, normalizeProfileModels(profile)];
         set({ aiProfiles: updated });
         (window as any).electron.storeSet('aiProfiles', updated);
         // If first profile, auto-activate it
@@ -249,17 +263,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     updateAiProfile: (profile: AIProviderProfile) => {
         const state = get();
-        const updated = state.aiProfiles.map(p => p.id === profile.id ? profile : p);
+        const updatedProfile = normalizeProfileModels(profile);
+        const updated = state.aiProfiles.map(p => p.id === profile.id ? updatedProfile : p);
         set({ aiProfiles: updated });
         (window as any).electron.storeSet('aiProfiles', updated);
         // If editing the active profile, re-apply config
         if (state.activeProfileId === profile.id) {
-            const providerConfig = AI_PROVIDER_CONFIGS[profile.provider];
+            const providerConfig = AI_PROVIDER_CONFIGS[updatedProfile.provider];
             aiService.setConfig({
-                provider: profile.provider,
-                apiKey: profile.apiKey,
-                baseUrl: profile.baseUrl || providerConfig?.baseUrl || undefined,
-                model: profile.model || providerConfig?.defaultModel || undefined,
+                provider: updatedProfile.provider,
+                apiKey: updatedProfile.apiKey,
+                baseUrl: updatedProfile.baseUrl || providerConfig?.baseUrl || undefined,
+                model: updatedProfile.model || providerConfig?.defaultModel || undefined,
                 privacyMode: state.aiPrivacyMode
             });
         }
@@ -383,6 +398,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const savedActiveProfileId = await (window as any).electron.storeGet('activeProfileId');
         let profiles: AIProviderProfile[] = Array.isArray(savedProfiles) ? savedProfiles : [];
         let activeProfileId = (savedActiveProfileId as string) || '';
+        profiles = profiles.map(normalizeProfileModels);
 
         // Migration: if no profiles exist but old single-config has an API key, create first profile
         if (profiles.length === 0 && (aiApiKey || aiProvider === 'ollama')) {
@@ -394,6 +410,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
                 apiKey: aiApiKey,
                 baseUrl: aiBaseUrl || providerConfig?.baseUrl || '',
                 model: aiModel || providerConfig?.defaultModel || '',
+                models: [aiModel || providerConfig?.defaultModel || ''].filter(Boolean),
                 isDefault: true,
             };
             profiles = [migrated];

@@ -61,7 +61,7 @@ export const translations = {
             },
             about: {
                 title: 'About',
-                desc: 'SSH Tool v1.0.0\nPowered by Electron, React, and Shadcn UI.'
+                desc: 'Reflex v1.0.0\nPowered by Electron, React, and Shadcn UI.'
             },
             back: 'Back'
         },
@@ -207,7 +207,7 @@ export const translations = {
             },
             about: {
                 title: '关于',
-                desc: 'SSH Tool v1.0.0\n基于 Electron, React, 和 Shadcn UI 构建。'
+                desc: 'Reflex v1.0.0\n基于 Electron, React, 和 Shadcn UI 构建。'
             },
             back: '返回'
         },
@@ -353,7 +353,7 @@ export const translations = {
             },
             about: {
                 title: '詳細',
-                desc: 'SSH Tool v1.0.0\nElectron, React, Shadcn UI を使用しています。'
+                desc: 'Reflex v1.0.0\nElectron, React, Shadcn UI を使用しています。'
             },
             back: '戻る'
         },
@@ -499,7 +499,7 @@ export const translations = {
             },
             about: {
                 title: '정보',
-                desc: 'SSH Tool v1.0.0\nElectron, React, Shadcn UI 구동.'
+                desc: 'Reflex v1.0.0\nElectron, React, Shadcn UI 구동.'
             },
             back: '뒤로'
         },

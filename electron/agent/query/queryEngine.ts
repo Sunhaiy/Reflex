@@ -1216,7 +1216,11 @@ export class AgentQueryEngine {
         const retryable = error instanceof LLMRequestError
           ? error.retryable
           : /(429|ServerOverloaded|TooManyRequests|temporarily overloaded)/i.test(error?.message || '');
-        if (!retryable || attempt >= maxAttempts || session.aborted) {
+        if (retryable && attempt >= maxAttempts) {
+          const message = error?.message || String(error);
+          throw new Error(`${message} Retried ${attempt}/${maxAttempts} times.`);
+        }
+        if (!retryable || session.aborted) {
           throw error;
         }
         const waitMs = Math.min(20000, 1500 * (2 ** (attempt - 1)));

@@ -21,7 +21,7 @@ function buildRemoteAnalysisRoot(sourceKey: string, homeDir: string) {
     .slice(0, 24)
     .toLowerCase();
   const baseDir = homeDir && homeDir.startsWith('/') ? homeDir : '/tmp';
-  return path.posix.join(baseDir, '.zangqing', 'repos', digest);
+  return path.posix.join(baseDir, '.reflex', 'repos', digest);
 }
 
 export class AgentRepoInspector {

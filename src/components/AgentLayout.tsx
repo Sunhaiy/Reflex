@@ -1,7 +1,6 @@
-﻿import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import {
     Activity,
-    Bot,
     ChevronLeft,
     ChevronDown,
     Container,
@@ -21,6 +20,7 @@ import { TerminalConnecting } from './ConnectingOverlay';
 import { PanelSlotConsumer, PanelName } from './PanelSlot';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
+import logoUrl from '../assets/logo.png';
 
 interface AgentLayoutProps {
     connectionId: string;
@@ -224,9 +224,24 @@ export function AgentLayout({
         : connecting
             ? (language === 'zh' ? '连接中' : 'Connecting')
             : (language === 'zh' ? '未连接' : 'Disconnected');
+    const onlineLabel = connected
+        ? (language === 'zh' ? '在线' : 'Online')
+        : connecting
+            ? (language === 'zh' ? '连接中' : 'Connecting')
+            : (language === 'zh' ? '离线' : 'Offline');
+    const onlineDotClass = connected
+        ? 'bg-emerald-400'
+        : connecting
+            ? 'bg-amber-400 animate-pulse'
+            : 'bg-rose-400';
+    const onlinePillClass = connected
+        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-500'
+        : connecting
+            ? 'border-amber-500/25 bg-amber-500/10 text-amber-500'
+            : 'border-rose-500/25 bg-rose-500/10 text-rose-500';
 
     const workspaceTitle = language === 'zh' ? 'Agent 工作区' : 'Agent Workspace';
-    const stageTitle = language === 'zh' ? '藏青' : 'Zangqing';
+    const stageTitle = language === 'zh' ? 'Reflex' : 'Reflex';
     const stageHint = language === 'zh' ? '实时终端与执行结果' : 'Live terminal and execution output';
     const canvasTitle = host || (language === 'zh' ? '服务器' : 'Server');
 
@@ -305,8 +320,8 @@ export function AgentLayout({
         >
             <div className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-card py-3">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background text-foreground">
-                        <Bot className="h-4.5 w-4.5" />
+                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-foreground">
+                        <img src={logoUrl} alt="Reflex" className="h-6 w-6 rounded-md object-cover" />
                     </div>
                     <div className="h-8 w-px bg-border" />
                     <div className="flex flex-col items-center gap-1.5">
@@ -340,7 +355,7 @@ export function AgentLayout({
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                             <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground">
-                                <Bot className="h-3.5 w-3.5" />
+                                <img src={logoUrl} alt="Reflex" className="h-3.5 w-3.5 rounded-sm object-cover" />
                                 {workspaceTitle}
                             </div>
                         </div>
@@ -446,85 +461,81 @@ export function AgentLayout({
             />
 
             <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
-                <div className="border-b border-border px-5 py-4">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                            <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground">
-                                    <Monitor className="h-5 w-5" />
+                <div className="border-b border-border px-5 py-3.5">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground">
+                                <Monitor className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <div className="truncate text-sm font-semibold text-foreground">{stageTitle}</div>
+                                    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium', onlinePillClass)}>
+                                        <span className={cn('h-1.5 w-1.5 rounded-full', onlineDotClass)} />
+                                        {onlineLabel}
+                                    </span>
                                 </div>
-                                <div className="min-w-0">
-                                    <div className="text-sm font-semibold text-foreground">{stageTitle}</div>
-                                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                        <div className="relative" ref={progressPopoverRef}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setProgressPopoverOpen((value) => !value)}
-                                                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground transition-colors hover:bg-accent"
-                                                title={progressHint}
+                                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <div className="relative" ref={progressPopoverRef}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setProgressPopoverOpen((value) => !value)}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+                                            title={progressHint}
+                                        >
+                                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                            <span>{progressLabel}</span>
+                                            <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', progressPopoverOpen && 'rotate-180')} />
+                                        </button>
+                                        {progressPopoverOpen && (
+                                            <div
+                                                className="absolute left-0 top-full z-30 mt-2 w-[560px] max-w-[min(560px,calc(100vw-120px))] overflow-hidden rounded-xl border border-border bg-card shadow-none"
+                                                style={{ maxHeight: 'calc(100vh - 180px)' }}
                                             >
-                                                <span
-                                                    className={cn(
-                                                        'h-2 w-2 rounded-full',
-                                                        connected ? 'bg-emerald-500' : connecting ? 'bg-amber-400 animate-pulse' : 'bg-rose-500'
-                                                    )}
-                                                />
-                                                <span>{progressLabel}</span>
-                                                <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', progressPopoverOpen && 'rotate-180')} />
-                                            </button>
-                                            {progressPopoverOpen && (
                                                 <div
-                                                    className="absolute left-0 top-full z-30 mt-2 w-[560px] max-w-[min(560px,calc(100vw-120px))] overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+                                                    className="overflow-y-auto p-3"
                                                     style={{ maxHeight: 'calc(100vh - 180px)' }}
                                                 >
-                                                    <div
-                                                        className="overflow-y-auto p-3"
-                                                        style={{ maxHeight: 'calc(100vh - 180px)' }}
-                                                    >
-                                                        <AgentTaskOverview
-                                                            statusLabel={statusLabelShort}
-                                                            tone={progressTone}
-                                                            routeLabel={runtimeRoute ? (language === 'zh' ? `路线 ${runtimeRoute}` : `Route ${runtimeRoute}`) : undefined}
-                                                            repairLabel={runtimeTask?.attemptCount ? (language === 'zh' ? `修复 ${runtimeTask.attemptCount}/5` : `Repair ${runtimeTask.attemptCount}/5`) : undefined}
-                                                            headline={runtimeCurrentAction}
-                                                            description={runtimeDescription}
-                                                            nextAction={runtimeNextAction}
-                                                            nextActionLabel={language === 'zh' ? '下一步' : 'Next'}
-                                                            lastProgress={runtimeLastProgress}
-                                                            lastProgressLabel={language === 'zh' ? '最近确认的进展' : 'Last confirmed progress'}
-                                                            blockingReason={runtimeTask?.blockingReason && runtimeTask.status === 'blocked'
-                                                                ? sanitizeRuntimeText(runtimeTask.blockingReason, language === 'zh' ? '需要补充信息后继续' : 'Waiting for missing input')
-                                                                : undefined}
-                                                            blockingReasonLabel={language === 'zh' ? '阻塞原因' : 'Blocking reason'}
-                                                            progressLabel={language === 'zh' ? '任务推进' : 'Task progress'}
-                                                            progressValue={runtimeTodos.length > 0 ? `${runtimeCompletedTodoCount}/${runtimeTodos.length}` : `${runtimeTodoProgressPercent}%`}
-                                                            progressPercent={runtimeTodoProgressPercent}
-                                                            todos={runtimeTodos.slice(0, 4)}
-                                                            emptyTodosLabel={language === 'zh'
-                                                                ? '任务清单还在生成中，当前动作和路线会先持续更新。'
-                                                                : 'The task list is still being formed. The live action and route will keep updating first.'}
-                                                            completedLabel={language === 'zh' ? '已完成' : 'Completed'}
-                                                            inProgressLabel={language === 'zh' ? '进行中' : 'In progress'}
-                                                            pendingLabel={language === 'zh' ? '待处理' : 'Pending'}
-                                                            animated={currentRuntime?.planStatus === 'executing' || currentRuntime?.planStatus === 'generating'}
-                                                            className="border-0 shadow-none"
-                                                        />
-                                                    </div>
+                                                    <AgentTaskOverview
+                                                        statusLabel={statusLabelShort}
+                                                        tone={progressTone}
+                                                        routeLabel={runtimeRoute ? (language === 'zh' ? `路线 ${runtimeRoute}` : `Route ${runtimeRoute}`) : undefined}
+                                                        repairLabel={runtimeTask?.attemptCount ? (language === 'zh' ? `修复 ${runtimeTask.attemptCount}/5` : `Repair ${runtimeTask.attemptCount}/5`) : undefined}
+                                                        headline={runtimeCurrentAction}
+                                                        description={runtimeDescription}
+                                                        nextAction={runtimeNextAction}
+                                                        nextActionLabel={language === 'zh' ? '下一步' : 'Next'}
+                                                        lastProgress={runtimeLastProgress}
+                                                        lastProgressLabel={language === 'zh' ? '最近确认的进展' : 'Last confirmed progress'}
+                                                        blockingReason={runtimeTask?.blockingReason && runtimeTask.status === 'blocked'
+                                                            ? sanitizeRuntimeText(runtimeTask.blockingReason, language === 'zh' ? '需要补充信息后继续' : 'Waiting for missing input')
+                                                            : undefined}
+                                                        blockingReasonLabel={language === 'zh' ? '阻塞原因' : 'Blocking reason'}
+                                                        progressLabel={language === 'zh' ? '任务推进' : 'Task progress'}
+                                                        progressValue={runtimeTodos.length > 0 ? `${runtimeCompletedTodoCount}/${runtimeTodos.length}` : `${runtimeTodoProgressPercent}%`}
+                                                        progressPercent={runtimeTodoProgressPercent}
+                                                        todos={runtimeTodos.slice(0, 4)}
+                                                        emptyTodosLabel={language === 'zh'
+                                                            ? '任务清单还在生成中，当前动作和路线会先持续更新。'
+                                                            : 'The task list is still being formed. The live action and route will keep updating first.'}
+                                                        completedLabel={language === 'zh' ? '已完成' : 'Completed'}
+                                                        inProgressLabel={language === 'zh' ? '进行中' : 'In progress'}
+                                                        pendingLabel={language === 'zh' ? '待处理' : 'Pending'}
+                                                        animated={currentRuntime?.planStatus === 'executing' || currentRuntime?.planStatus === 'generating'}
+                                                        className="border-0 shadow-none"
+                                                    />
                                                 </div>
-                                            )}
-                                        </div>
-                                        <span className="truncate">{statusLabelShort}</span>
+                                            </div>
+                                        )}
                                     </div>
+                                    <span className="truncate">{statusLabelShort}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-2">
-                            <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground">
-                                {statusLabel}
-                            </span>
-                            <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground/80">
-                                {username ? `${username}@${host}` : stageHint}
+                        <div className="flex min-w-0 shrink-0 items-center gap-2">
+                            <span className="rounded-lg border border-border bg-background px-2.5 py-1 text-xs text-foreground/80">
+                                {username && host ? `${username}@${host}` : stageHint}
                             </span>
                         </div>
                     </div>

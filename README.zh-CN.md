@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 Zangqing (藏青) - 你对现代 SSH 客户端的所有期待
+# 🚀 Reflex - 你对现代 SSH 客户端的所有期待
 
 *让 SSH 连接变得简单的一切。*
 
@@ -17,23 +17,23 @@
 
 ### 深色主题
 
-![主工作区](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
+![主工作区](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/b0e89111-1d1b-4072-adea-1dd2ec06831e.png)
 
-![Agent 自动部署工作区](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
+![Agent 自动部署工作区](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/58beebfc-909a-4a29-adc6-6eb42f36bb50.png)
 
-![Agent 对话与执行过程](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
+![Agent 对话与执行过程](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/d2aca14d-b5f3-47c9-8428-fd41e3036f33.png)
 
 ### 白天主题
 
-![主工作区（白天主题）](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/1e403064-c046-4948-b229-202b99ed692a.png)
+![主工作区（白天主题）](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/1e403064-c046-4948-b229-202b99ed692a.png)
 
-![Agent 自动部署工作区（白天主题）](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/1e44b065-2b41-4316-8d5f-157bf1323034.png)
+![Agent 自动部署工作区（白天主题）](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/1e44b065-2b41-4316-8d5f-157bf1323034.png)
 
-![Agent 对话与执行过程（白天主题）](https://raw.githubusercontent.com/Sunhaiy/zangqing/main/22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
+![Agent 对话与执行过程（白天主题）](https://raw.githubusercontent.com/Sunhaiy/Reflex/main/22174f5b-d599-4a23-a2ee-b738d1b821c7.png)
 
 ## 简介
 
-**藏青 (Zangqing)** 是一款致力于极致开发效率的次世代现代 SSH 客户端。它不仅仅是一个终端模拟器，更是一个全能的开发者工作台，将 AI 辅助调试、原生 Docker 管理、系统硬件监控以及流畅的 SFTP 文件管理融合在一个精美且轻量的跨平台桌面应用中。
+**Reflex** 是一款致力于极致开发效率的次世代现代 SSH 客户端。它不仅仅是一个终端模拟器，更是一个全能的开发者工作台，将 AI 辅助调试、原生 Docker 管理、系统硬件监控以及流畅的 SFTP 文件管理融合在一个精美且轻量的跨平台桌面应用中。
 
 ## 核心能力
 
@@ -71,8 +71,8 @@
 ## 快速开始
 
 ```bash
-git clone https://github.com/Sunhaiy/zangqing.git
-cd zangqing
+git clone https://github.com/Sunhaiy/Reflex.git
+cd reflex
 npm install
 npm run dev
 ```
@@ -93,7 +93,7 @@ npm run dist
 ## 目录结构
 
 ```text
-zangqing
+reflex
 |- electron/            # Electron 主进程、IPC、SSH、部署引擎
 |- src/                 # React 渲染进程源码
 |  |- components/       # 终端、Agent、Docker、文件、监控等组件

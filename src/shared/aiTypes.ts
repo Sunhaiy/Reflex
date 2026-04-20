@@ -1,4 +1,4 @@
-// AI Service Types for SSH Tool
+// AI Service Types for Reflex
 
 export type AIProvider = 'deepseek' | 'openai' | 'anthropic' | 'groq' | 'openrouter' | 'ollama' | 'qwen' | 'custom';
 
@@ -35,6 +35,7 @@ export interface AIProviderProfile {
     apiKey: string;
     baseUrl: string;        // auto-filled from AI_PROVIDER_CONFIGS or manual
     model: string;          // e.g. 'deepseek-chat', 'gpt-4o'
+    models?: string[];      // optional list of models served by the same endpoint
     isDefault?: boolean;    // the one used when nothing is explicitly selected
 }
 
@@ -260,7 +261,7 @@ export const AI_SYSTEM_PROMPTS = {
 
 回答要简洁专业，使用中文，字数控制在 200 字以内。`,
 
-    agent: `你是 Zangqing（藏青），一个为 Linux 服务器管理而生的 SSH 智能体。
+    agent: `你是 Reflex，一个为 Linux 服务器管理而生的 SSH 智能体。
 你已通过 SSH 连接到用户的服务器，可以直接执行命令完成任务。
 
 ## 当前服务器环境
@@ -301,7 +302,7 @@ export const AI_SYSTEM_PROMPTS = {
 - 只输出纯 JSON，不加 markdown 代码块，不加任何说明文字`,
 
     // ── Plan Mode v2: Planner / Executor / Assessor / Replanner ──────────────
-    planner: `你是 Zangqing 运维架构师。根据用户目标和当前服务器环境，制定一份精确的执行计划。
+    planner: `你是 Reflex 运维架构师。根据用户目标和当前服务器环境，制定一份精确的执行计划。
 
 规则：
 - 3-6 个原子步骤，严格按先后顺序排列
@@ -314,7 +315,7 @@ export const AI_SYSTEM_PROMPTS = {
 输出纯 JSON，禁止任何 markdown 包裹或解释文字：
 {"global_goal":"一句话目标（≤30字）","scratchpad":"","plan":[{"id":1,"description":"...","status":"pending","requires_approval":false},{"id":2,"description":"...","status":"pending","requires_approval":false}]}`,
 
-    executor: `你是 Zangqing 执行引擎。根据当前子任务，生成一条能完成该任务的 Shell 命令。
+    executor: `你是 Reflex 执行引擎。根据当前子任务，生成一条能完成该任务的 Shell 命令。
 
 约束：
 - 只输出命令本身，禁止 markdown 代码块和任何解释
@@ -329,7 +330,7 @@ export const AI_SYSTEM_PROMPTS = {
 已知信息（含环境）：{scratchpad}
 当前子任务：{description}`,
 
-    assessor: `你是 Zangqing 评估器。判断命令是否成功完成了子任务。
+    assessor: `你是 Reflex 评估器。判断命令是否成功完成了子任务。
 
 判断规则：
 - exit code 0 通常成功，但结合输出内容验证
@@ -340,7 +341,7 @@ export const AI_SYSTEM_PROMPTS = {
 只输出 JSON，禁止任何额外内容：
 {"success":true,"note":"一句话结果说明","scratchpad_update":"重要发现（路径/版本/IP/状态，无则留空字符串）"}`,
 
-    replanner: `你是 Zangqing 重规划器。某步骤执行失败，分析原因并更新计划以恢复任务。
+    replanner: `你是 Reflex 重规划器。某步骤执行失败，分析原因并更新计划以恢复任务。
 
 操作规则：
 - 已完成步骤的 status 必须保持 "completed"，不得修改
@@ -351,7 +352,7 @@ export const AI_SYSTEM_PROMPTS = {
 
 输出完整 PlanState JSON（格式与 planner 相同），禁止任何解释。`,
 
-    summarizer: `你是 Zangqing 任务总结员。用简洁的语言汇报刚完成的运维任务结果。
+    summarizer: `你是 Reflex 任务总结员。用简洁的语言汇报刚完成的运维任务结果。
 
 要求：
 - 2-4 句话，直接说明完成了什么、结果如何

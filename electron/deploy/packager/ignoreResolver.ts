@@ -3,7 +3,7 @@ import path from 'path';
 
 const DEFAULT_IGNORES = [
   '.git',
-  '.zangqing',
+  '.reflex',
   'node_modules',
   '.next/cache',
   '.turbo',
