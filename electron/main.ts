@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import { restoreBackgroundAgentSessions, setupIpcHandlers } from './ipcHandlers';
 
@@ -16,15 +17,28 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let backgroundRestoreScheduled = false;
 
+app.setName('Reflex');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.reflex.app');
+}
+
 export function getMainWindow() {
   return mainWindow;
 }
 
+function getRuntimeAssetPath(fileName: string) {
+  const appRoot = path.join(__dirname, '../..');
+  const candidates = [
+    path.join(appRoot, 'dist', fileName),
+    path.join(appRoot, 'public', fileName),
+    path.join(appRoot, fileName),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
+}
+
 const createWindow = () => {
   const preloadPath = path.join(__dirname, 'preload.js');
-
-  console.log('Main Process Starting...');
-  console.log('Preload Path:', preloadPath);
+  const appIconPath = getRuntimeAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -34,6 +48,7 @@ const createWindow = () => {
     transparent: true,
     backgroundColor: '#00000000',
     vibrancy: 'fullscreen-ui',
+    icon: appIconPath,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -71,16 +86,13 @@ const createWindow = () => {
 };
 
 function createTrayIcon() {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-      <rect x="3" y="3" width="26" height="26" rx="8" fill="#0f172a"/>
-      <circle cx="16" cy="16" r="6" fill="#22c55e"/>
-      <circle cx="16" cy="16" r="2" fill="#dcfce7"/>
-    </svg>
-  `;
-  return nativeImage
-    .createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`)
-    .resize({ width: 16, height: 16 });
+  const iconPath = getRuntimeAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  const image = nativeImage.createFromPath(iconPath);
+  if (image.isEmpty()) {
+    return nativeImage.createFromPath(getRuntimeAssetPath('logo.png')).resize({ width: 16, height: 16 });
+  }
+  const traySize = process.platform === 'darwin' ? 18 : 16;
+  return image.resize({ width: traySize, height: traySize });
 }
 
 function showMainWindow() {
@@ -99,14 +111,14 @@ function showMainWindow() {
 function createTray() {
   if (tray) return;
   tray = new Tray(createTrayIcon());
-  tray.setToolTip('后台 Agent 正在运行');
+  tray.setToolTip('Reflex is running');
   tray.setContextMenu(Menu.buildFromTemplate([
     {
-      label: '打开窗口',
+      label: 'Open Reflex',
       click: () => showMainWindow(),
     },
     {
-      label: '退出',
+      label: 'Quit Reflex',
       click: () => {
         isQuitting = true;
         app.quit();

@@ -1,13 +1,13 @@
 import { ipcMain, BrowserWindow, dialog, clipboard, type WebContents } from 'electron';
 import { SSHManager } from './ssh/sshManager.js';
-import { DeploymentManager } from './deploy/deploymentManager.js';
-import { AgentManager } from './agent/manager.js';
 import { SSHConnection } from '../src/shared/types.js';
 import { AIProviderProfile } from '../src/shared/aiTypes.js';
 import { LLMProfile } from './llm.js';
 import Store from 'electron-store';
 import fs from 'fs';
 import path from 'path';
+import type { DeploymentManager } from './deploy/deploymentManager.js';
+import type { AgentManager } from './agent/manager.js';
 
 const store = new Store();
 const LEGACY_STORE_DIR_NAMES = ['zangqing', 'Zangqing'];
@@ -77,8 +77,24 @@ function migrateLegacyStore(targetStore: any) {
 
 migrateLegacyStore(store);
 const sshManager = new SSHManager(store);
-const deploymentManager = new DeploymentManager(sshManager, store);
-const agentManager = new AgentManager(sshManager, store);
+let deploymentManager: DeploymentManager | null = null;
+let agentManager: AgentManager | null = null;
+
+async function getDeploymentManager() {
+  if (!deploymentManager) {
+    const module = await import('./deploy/deploymentManager.js');
+    deploymentManager = new module.DeploymentManager(sshManager, store);
+  }
+  return deploymentManager;
+}
+
+async function getAgentManager() {
+  if (!agentManager) {
+    const module = await import('./agent/manager.js');
+    agentManager = new module.AgentManager(sshManager, store);
+  }
+  return agentManager;
+}
 
 const getSessions = () => (store.get('agentSessions') as any[] | undefined) || [];
 const setSessions = (sessions: any[]) => {
@@ -155,9 +171,10 @@ export function restoreBackgroundAgentSessions(webContents: WebContents) {
       updatedAt: Date.now(),
     });
 
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
-        agentManager.resume(session.id, {
+        const manager = await getAgentManager();
+        manager.resume(session.id, {
           sessionId: session.id,
           connectionId: backgroundConnectionId,
           userInput: 'continue',
@@ -404,32 +421,38 @@ export function setupIpcHandlers() {
 
   // Deployment workflow
   ipcMain.handle('deploy-analyze-project', async (_event, { projectRoot }) => {
-    return deploymentManager.analyzeProject(projectRoot);
+    const manager = await getDeploymentManager();
+    return manager.analyzeProject(projectRoot);
   });
 
   ipcMain.handle('deploy-probe-server', async (_event, { sessionId, host }) => {
-    return deploymentManager.probeServer(sessionId, host);
+    const manager = await getDeploymentManager();
+    return manager.probeServer(sessionId, host);
   });
 
   ipcMain.handle('deploy-create-draft', async (_event, payload) => {
-    return deploymentManager.createDraft(payload.sessionId, payload);
+    const manager = await getDeploymentManager();
+    return manager.createDraft(payload.sessionId, payload);
   });
 
   ipcMain.handle('deploy-start', async (event, payload) => {
-    deploymentManager.start(payload.sessionId, event.sender, payload);
+    const manager = await getDeploymentManager();
+    manager.start(payload.sessionId, event.sender, payload);
     return { success: true };
   });
 
   ipcMain.on('deploy-cancel', (_event, { sessionId }) => {
-    deploymentManager.cancel(sessionId);
+    void getDeploymentManager().then((manager) => manager.cancel(sessionId));
   });
 
   ipcMain.handle('deploy-list-runs', async (_event, { serverProfileId }) => {
-    return deploymentManager.listRuns(serverProfileId);
+    const manager = await getDeploymentManager();
+    return manager.listRuns(serverProfileId);
   });
 
   ipcMain.handle('deploy-get-run', async (_event, { runId }) => {
-    return deploymentManager.getRun(runId);
+    const manager = await getDeploymentManager();
+    return manager.getRun(runId);
   });
 
 
@@ -463,19 +486,21 @@ export function setupIpcHandlers() {
   });
 
   // ── Agent Plan Mode (main-process brain) ────────────────────────────────────
-  ipcMain.handle('agent-plan-start', (event, payload) => {
-    agentManager.startPlan(payload.sessionId, payload, event.sender);
+  ipcMain.handle('agent-plan-start', async (event, payload) => {
+    const manager = await getAgentManager();
+    manager.startPlan(payload.sessionId, payload, event.sender);
   });
 
   ipcMain.on('agent-plan-stop', (_event, { sessionId }) => {
-    agentManager.stop(sessionId);
+    void getAgentManager().then((manager) => manager.stop(sessionId));
   });
 
-  ipcMain.handle('agent-plan-resume', (event, payload) => {
-    agentManager.resume(payload.sessionId, payload, event.sender);
+  ipcMain.handle('agent-plan-resume', async (event, payload) => {
+    const manager = await getAgentManager();
+    manager.resume(payload.sessionId, payload, event.sender);
   });
 
   ipcMain.on('agent-session-close', (_event, { sessionId }) => {
-    agentManager.cleanup(sessionId);
+    void getAgentManager().then((manager) => manager.cleanup(sessionId));
   });
 }

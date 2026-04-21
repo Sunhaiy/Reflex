@@ -1,7 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-console.log('Preload script loading...');
-
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   openFileDialog: (opts?: { title?: string; filters?: any[] }) => ipcRenderer.invoke('open-file-dialog', opts),
@@ -136,5 +134,3 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('deploy-run-finished', sub);
   },
 });
-
-console.log('Preload script loaded');

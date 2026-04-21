@@ -6,15 +6,16 @@
 //
 // Shared panels: SystemMonitor, FileBrowser, DockerManager.
 
-import { useRef, useEffect, createContext, useContext } from 'react';
+import { lazy, Suspense, useRef, useEffect, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { SystemMonitor } from './SystemMonitor';
-import { FileBrowser } from './FileBrowser';
-import { DockerManager } from './DockerManager';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SSHConnection } from '../shared/types';
 
 export type PanelName = 'monitor' | 'files' | 'docker';
+
+const SystemMonitor = lazy(() => import('./SystemMonitor').then((module) => ({ default: module.SystemMonitor })));
+const FileBrowser = lazy(() => import('./FileBrowser').then((module) => ({ default: module.FileBrowser })));
+const DockerManager = lazy(() => import('./DockerManager').then((module) => ({ default: module.DockerManager })));
 
 interface PanelSlots {
     monitor: HTMLDivElement;
@@ -52,19 +53,25 @@ export function PanelSlotProvider({ children, connectionId, isConnected, connect
         <PanelSlotContext.Provider value={slots}>
             {createPortal(
                 <ErrorBoundary name="SystemMonitor">
-                    <SystemMonitor connectionId={connectionId} />
+                    <Suspense fallback={null}>
+                        <SystemMonitor connectionId={connectionId} />
+                    </Suspense>
                 </ErrorBoundary>,
                 slots.monitor
             )}
             {createPortal(
                 <ErrorBoundary name="FileBrowser">
-                    <FileBrowser connectionId={connectionId} isConnected={isConnected} />
+                    <Suspense fallback={null}>
+                        <FileBrowser connectionId={connectionId} isConnected={isConnected} />
+                    </Suspense>
                 </ErrorBoundary>,
                 slots.files
             )}
             {createPortal(
                 <ErrorBoundary name="DockerManager">
-                    <DockerManager connectionId={connectionId} />
+                    <Suspense fallback={null}>
+                        <DockerManager connectionId={connectionId} />
+                    </Suspense>
                 </ErrorBoundary>,
                 slots.docker
             )}

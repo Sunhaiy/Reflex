@@ -15,7 +15,7 @@
     "preview": "vite preview"
   },
   "build": {
-    "asar": false,
+    "asar": true,
     "appId": "com.reflex.app",
     "productName": "Reflex",
     "artifactName": "${name}-${version}-${os}-${arch}.${ext}",

@@ -1,22 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TitleBar, WorkspaceMode } from './components/TitleBar';
 import { ConnectionManager } from './pages/ConnectionManager';
-import { Settings } from './pages/Settings';
 import { SSHConnection } from './shared/types';
 import { ResizableLayout } from './components/ResizableLayout';
 import { useThemeStore } from './store/themeStore';
 import { useSettingsStore } from './store/settingsStore';
-import { RightPanel } from './components/RightPanel';
-import { AICommandInput } from './components/AICommandInput';
-import { AgentLayout } from './components/AgentLayout';
-import { AgentMessage } from './components/AIChatPanel';
+import type { AgentMessage } from './components/AIChatPanel';
 import { TerminalSlotProvider, TerminalSlotConsumer } from './components/TerminalSlot';
 import { PanelSlotProvider, PanelSlotConsumer } from './components/PanelSlot';
 import { Modal } from './components/ui/modal';
 import { ConnectionForm } from './components/ConnectionForm';
 import { TerminalConnecting } from './components/ConnectingOverlay';
 import { ThemeBackground } from './components/ThemeBackground';
+
+const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
+const RightPanel = lazy(() => import('./components/RightPanel').then((module) => ({ default: module.RightPanel })));
+const AICommandInput = lazy(() => import('./components/AICommandInput').then((module) => ({ default: module.AICommandInput })));
+const AgentLayout = lazy(() => import('./components/AgentLayout').then((module) => ({ default: module.AgentLayout })));
 
 interface AppSession {
   uniqueId: string;
@@ -176,8 +177,6 @@ function App() {
 
   const activeSession = sessions.find(s => s.uniqueId === activeSessionId);
 
-  console.log('App rendering, page:', page, 'sessions:', sessions.length, 'mode:', workspaceMode);
-
   return (
     <>
       <div className="h-screen w-screen flex flex-col text-foreground overflow-hidden border border-border bg-transparent relative">
@@ -233,7 +232,9 @@ function App() {
           {/* ── Settings page ── */}
           {page === 'settings' && (
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-              <Settings onBack={() => setPage(sessions.length > 0 ? 'workspace' : 'connections')} />
+              <Suspense fallback={null}>
+                <Settings onBack={() => setPage(sessions.length > 0 ? 'workspace' : 'connections')} />
+              </Suspense>
             </div>
           )}
 
@@ -294,12 +295,14 @@ function App() {
                               )}
                               {aiEnabled && (
                                 <div className="flex-shrink-0 border-t border-border p-1.5 bg-card">
-                                  <AICommandInput
-                                    onCommandGenerated={(cmd) => {
-                                      const eWindow = window as any;
-                                      eWindow.electron?.writeTerminal(session.uniqueId, cmd);
-                                    }}
-                                  />
+                                  <Suspense fallback={null}>
+                                    <AICommandInput
+                                      onCommandGenerated={(cmd) => {
+                                        const eWindow = window as any;
+                                        eWindow.electron?.writeTerminal(session.uniqueId, cmd);
+                                      }}
+                                    />
+                                  </Suspense>
                                 </div>
                               )}
                             </div>
@@ -307,7 +310,9 @@ function App() {
                           rightContent={
                             <div className="h-full bg-card rounded-lg border border-border overflow-hidden">
                               <ErrorBoundary name="RightPanel">
-                                <RightPanel connectionId={session.uniqueId} isConnected={session.status === 'connected'} isActive={workspaceMode === 'normal'} />
+                                <Suspense fallback={null}>
+                                  <RightPanel connectionId={session.uniqueId} isConnected={session.status === 'connected'} isActive={workspaceMode === 'normal'} />
+                                </Suspense>
                               </ErrorBoundary>
                             </div>
                           }
@@ -319,16 +324,18 @@ function App() {
                         className="absolute inset-0"
                         style={{ visibility: workspaceMode === 'agent' ? 'visible' : 'hidden', height: '100%' }}
                       >
-                        <AgentLayout
-                          connectionId={session.uniqueId}
-                          profileId={session.connection.id || ''}
-                          messages={getAgentMessages(session.uniqueId)}
-                          onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
-                          isActive={workspaceMode === 'agent'}
-                          sessionStatus={session.status}
-                          host={session.connection.host}
-                          username={session.connection.username || 'root'}
-                        />
+                        <Suspense fallback={null}>
+                          <AgentLayout
+                            connectionId={session.uniqueId}
+                            profileId={session.connection.id || ''}
+                            messages={getAgentMessages(session.uniqueId)}
+                            onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
+                            isActive={workspaceMode === 'agent'}
+                            sessionStatus={session.status}
+                            host={session.connection.host}
+                            username={session.connection.username || 'root'}
+                          />
+                        </Suspense>
                       </div>
                     </PanelSlotProvider>
                   </TerminalSlotProvider>
