@@ -1,7 +1,7 @@
 {
   "name": "reflex",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
