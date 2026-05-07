@@ -121,9 +121,9 @@ export function ConnectionManager({ onConnect, onNavigate, activeSessions = 0 }:
             <div className="w-16 h-16 rounded-2xl bg-muted/50 border border-border/40 flex items-center justify-center mb-5 overflow-hidden">
               <img src={logoUrl} alt="Reflex" className="h-10 w-10 rounded-xl object-cover" />
             </div>
-            <h3 className="text-sm font-semibold mb-1.5">没有已保存的连接</h3>
+            <h3 className="text-sm font-semibold mb-1.5">{t('connection.noConnections')}</h3>
             <p className="text-xs text-muted-foreground/60 max-w-sm mb-5 leading-relaxed">
-              添加你的第一个 SSH 服务器，开始远程管理。
+              {t('connection.addFirstConnection')}
             </p>
             <Button
               onClick={() => { setEditingConnection({}); setIsModalOpen(true); }}
@@ -131,7 +131,7 @@ export function ConnectionManager({ onConnect, onNavigate, activeSessions = 0 }:
               className="gap-1.5 text-xs h-8 px-5 rounded-md"
             >
               <Plus className="w-3.5 h-3.5" />
-              添加服务器
+              {t('connection.add')}
             </Button>
           </div>
         ) : filtered.length === 0 ? (

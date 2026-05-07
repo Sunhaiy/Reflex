@@ -243,6 +243,7 @@ export function Settings({ onBack }: SettingsProps) {
 
   const languageOptions = [
     { label: 'English', value: 'en' },
+    { label: 'Italiano', value: 'it' },
     { label: '中文', value: 'zh' },
     { label: '日本語', value: 'ja' },
     { label: '한국어', value: 'ko' },
