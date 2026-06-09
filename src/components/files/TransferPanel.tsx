@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { TransferItem } from './hooks/useTransferQueue';
 import { Download, Upload, CheckCircle2, XCircle, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface Props {
     transfers: TransferItem[];
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function TransferPanel({ transfers, onClearHistory }: Props) {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(true);
 
     if (transfers.length === 0) return null;
@@ -24,7 +26,7 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
                 onClick={() => setExpanded(v => !v)}
             >
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex-1">
-                    传输
+                    {t('fileBrowser.transfers')}
                     {active.length > 0 && (
                         <span className="ml-1.5 px-1.5 py-0.5 bg-primary/20 text-primary rounded-full">{active.length}</span>
                     )}
@@ -33,7 +35,7 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
                     <button
                         onClick={e => { e.stopPropagation(); onClearHistory(); }}
                         className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                        title="清除历史"
+                        title={t('fileBrowser.clearHistory')}
                     >
                         <Trash2 className="w-3 h-3" />
                     </button>

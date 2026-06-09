@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface Props {
     title: string;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function InputDialog({ title, placeholder, defaultValue = '', onConfirm, onCancel }: Props) {
+    const { t } = useTranslation();
     const [value, setValue] = useState(defaultValue);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -42,14 +44,14 @@ export function InputDialog({ title, placeholder, defaultValue = '', onConfirm, 
                         onClick={onCancel}
                         className="px-3 py-1.5 text-xs rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
                     >
-                        取消
+                        {t('common.cancel')}
                     </button>
                     <button
                         onClick={submit}
                         disabled={!value.trim()}
                         className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
                     >
-                        确认
+                        {t('common.confirm')}
                     </button>
                 </div>
             </div>

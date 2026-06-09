@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useTranslation } from '../../hooks/useTranslation';
 import { FileBreadcrumb } from './FileBreadcrumb';
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function FileToolbar({ currentPath, loading, onUp, onHome, onRefresh, onUpload, onNavigate }: Props) {
+    const { t } = useTranslation();
     const { bookmarks, toggleBookmark } = useSettingsStore();
     const [showBookmarks, setShowBookmarks] = useState(false);
     const bmBtnRef = useRef<HTMLButtonElement>(null);
@@ -45,18 +47,18 @@ export function FileToolbar({ currentPath, loading, onUp, onHome, onRefresh, onU
 
             {/* Row 1: Nav controls */}
             <div className="h-9 flex items-center gap-0.5 px-2">
-                <button onClick={onUp} className={btn} title="向上一级"><ArrowUp className="w-3.5 h-3.5" /></button>
-                <button onClick={onRefresh} className={btn} title="刷新">
+                <button onClick={onUp} className={btn} title={t('fileBrowser.upLevel')}><ArrowUp className="w-3.5 h-3.5" /></button>
+                <button onClick={onRefresh} className={btn} title={t('fileBrowser.refresh')}>
                     <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
                 </button>
-                <button onClick={onHome} className={btn} title="根目录">
+                <button onClick={onHome} className={btn} title={t('fileBrowser.home')}>
                     <FolderOpen className="w-3.5 h-3.5" />
                 </button>
                 <div className="w-px h-4 bg-border mx-1 shrink-0" />
                 <button
                     onClick={() => toggleBookmark(currentPath)}
                     className={cn(btn, isBookmarked ? 'text-yellow-500 hover:bg-yellow-500/10' : '')}
-                    title="书签"
+                    title={t('fileBrowser.bookmark')}
                 >
                     <Star className={cn('w-3.5 h-3.5', isBookmarked && 'fill-current')} />
                 </button>
@@ -65,7 +67,7 @@ export function FileToolbar({ currentPath, loading, onUp, onHome, onRefresh, onU
                         ref={bmBtnRef}
                         onClick={() => setShowBookmarks(v => !v)}
                         className={cn(btn, showBookmarks && 'bg-accent text-accent-foreground')}
-                        title="书签列表"
+                        title={t('fileBrowser.bookmarkList')}
                     >
                         <Bookmark className="w-3.5 h-3.5" />
                     </button>
@@ -79,9 +81,9 @@ export function FileToolbar({ currentPath, loading, onUp, onHome, onRefresh, onU
                                     return r ? { top: r.bottom + 4, left: Math.max(4, r.right - 224) } : { top: 40, left: 10 };
                                 })()}
                             >
-                                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">收藏夹</div>
+                                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground border-b border-border mb-1">{t('fileBrowser.favorites')}</div>
                                 {bookmarks.length === 0
-                                    ? <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">暂无书签</div>
+                                    ? <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">{t('fileBrowser.noBookmarks')}</div>
                                     : bookmarks.map(p => (
                                         <div
                                             key={p}
@@ -107,10 +109,10 @@ export function FileToolbar({ currentPath, loading, onUp, onHome, onRefresh, onU
                 <button
                     onClick={() => fileInputRef.current?.click()}
                     className={cn(btn, 'flex items-center gap-1 text-xs px-2')}
-                    title="上传文件"
+                    title={t('fileBrowser.uploadFile')}
                 >
                     <Upload className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">上传</span>
+                    <span className="hidden sm:inline">{t('fileBrowser.upload')}</span>
                 </button>
             </div>
             {/* Row 2: Breadcrumb */}

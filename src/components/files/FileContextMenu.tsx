@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { FileEntry } from '../../shared/types';
 import { Download, Edit2, Trash2, FolderPlus, Plus, RefreshCw, Pencil } from 'lucide-react';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface Props {
     x: number;
@@ -23,6 +24,7 @@ const sep = 'h-px bg-border/50 my-1 mx-2';
 export function FileContextMenu({
     x, y, file, onClose, onDownload, onOpen, onRename, onDelete, onNewFolder, onNewFile, onRefresh,
 }: Props) {
+    const { t } = useTranslation();
     // Clamp to viewport edges
     const menuW = 192, menuH = file ? 160 : 120;
     const left = Math.min(x, window.innerWidth - menuW - 8);
@@ -38,38 +40,38 @@ export function FileContextMenu({
             >
                 {/* Label */}
                 <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border/50 mb-1 truncate mx-1">
-                    {file ? file.name : '当前目录'}
+                    {file ? file.name : t('fileBrowser.currentDir')}
                 </div>
 
                 {file ? (
                     <>
                         {file.type === '-' && (
                             <button className={item} onClick={() => onOpen(file)}>
-                                <Edit2 className="w-3.5 h-3.5" /> 打开编辑
+                                <Edit2 className="w-3.5 h-3.5" /> {t('fileBrowser.openEditor')}
                             </button>
                         )}
                         <button className={item} onClick={() => onDownload(file)}>
-                            <Download className="w-3.5 h-3.5" /> 下载
+                            <Download className="w-3.5 h-3.5" /> {t('fileBrowser.download')}
                         </button>
                         <button className={item} onClick={() => onRename(file)}>
-                            <Pencil className="w-3.5 h-3.5" /> 重命名
+                            <Pencil className="w-3.5 h-3.5" /> {t('fileBrowser.rename')}
                         </button>
                         <div className={sep} />
                         <button className={danger} onClick={() => onDelete(file)}>
-                            <Trash2 className="w-3.5 h-3.5" /> 删除
+                            <Trash2 className="w-3.5 h-3.5" /> {t('fileBrowser.delete')}
                         </button>
                     </>
                 ) : (
                     <>
                         <button className={item} onClick={onNewFolder}>
-                            <FolderPlus className="w-3.5 h-3.5" /> 新建文件夹
+                            <FolderPlus className="w-3.5 h-3.5" /> {t('fileBrowser.newFolder')}
                         </button>
                         <button className={item} onClick={onNewFile}>
-                            <Plus className="w-3.5 h-3.5" /> 新建文件
+                            <Plus className="w-3.5 h-3.5" /> {t('fileBrowser.newFile')}
                         </button>
                         <div className={sep} />
                         <button className={item} onClick={onRefresh}>
-                            <RefreshCw className="w-3.5 h-3.5" /> 刷新
+                            <RefreshCw className="w-3.5 h-3.5" /> {t('fileBrowser.refresh')}
                         </button>
                     </>
                 )}

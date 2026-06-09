@@ -1,5 +1,6 @@
 import { X, ZoomIn, ZoomOut, RotateCw, Maximize2, Minimize2 } from 'lucide-react';
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface Props {
     name: string;
@@ -10,6 +11,7 @@ interface Props {
 const W = 800, H = 560;
 
 export function ImageViewer({ name, src, onClose }: Props) {
+    const { t } = useTranslation();
     const [scale, setScale] = useState(1);
     const [rotation, setRotation] = useState(0);
     const [isMaximized, setIsMaximized] = useState(false);
@@ -79,18 +81,18 @@ export function ImageViewer({ name, src, onClose }: Props) {
                     </span>
                     <div className="flex items-center gap-0.5" onMouseDown={e => e.stopPropagation()}>
                         <button onClick={() => setScale(s => Math.max(0.1, s - 0.25))}
-                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title="缩小">
+                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title={t('fileBrowser.zoomOut')}>
                             <ZoomOut className="w-3.5 h-3.5" />
                         </button>
                         <span className="text-xs w-10 text-center tabular-nums text-muted-foreground">
                             {Math.round(scale * 100)}%
                         </span>
                         <button onClick={() => setScale(s => Math.min(5, s + 0.25))}
-                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title="放大">
+                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title={t('fileBrowser.zoomIn')}>
                             <ZoomIn className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => setRotation(r => (r + 90) % 360)}
-                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground ml-1" title="旋转">
+                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground ml-1" title={t('fileBrowser.rotate')}>
                             <RotateCw className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => { setScale(1); setRotation(0); }}
@@ -100,7 +102,7 @@ export function ImageViewer({ name, src, onClose }: Props) {
                         <div className="w-px h-3.5 bg-border mx-1.5" />
                         <button onClick={() => setIsMaximized(v => !v)}
                             className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-                            title={isMaximized ? '还原' : '最大化'}>
+                            title={isMaximized ? t('fileBrowser.restore') : t('fileBrowser.maximize')}>
                             {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                         </button>
                         <button onClick={onClose}
@@ -116,12 +118,12 @@ export function ImageViewer({ name, src, onClose }: Props) {
                         <div className="absolute inset-0 flex items-center justify-center z-10">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                <span className="text-xs text-muted-foreground">加载中...</span>
+                                <span className="text-xs text-muted-foreground">{t('fileBrowser.loading')}</span>
                             </div>
                         </div>
                     )}
                     {hasError ? (
-                        <div className="text-sm text-muted-foreground">图片加载失败</div>
+                        <div className="text-sm text-muted-foreground">{t('fileBrowser.imageLoadFailed')}</div>
                     ) : (
                         <img
                             src={src}

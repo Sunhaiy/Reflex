@@ -3,6 +3,7 @@ import { FileEntry } from '../../shared/types';
 import { FileItem } from './FileItem';
 import { ConnectingLog } from '../ConnectingOverlay';
 import { Folder, ChevronDown, ChevronUp } from 'lucide-react';
+import { useTranslation } from '../../hooks/useTranslation';
 
 type SortField = 'name' | 'size' | 'date';
 type SortOrder = 'asc' | 'desc';
@@ -48,6 +49,7 @@ export const FileList = memo(function FileList({
     files, loading, hasLoaded, isCompact, sortField, sortOrder, filterQuery,
     onToggleSort, onFileClick, onFileDoubleClick, onContextMenu,
 }: Props) {
+    const { t } = useTranslation();
     const sorted = sortFiles(files, sortField, sortOrder, filterQuery);
     const hdrCls = 'flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors select-none';
 
@@ -57,16 +59,16 @@ export const FileList = memo(function FileList({
             <div className="flex items-center px-3 py-1.5 border-b border-border/50 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/10 shrink-0">
                 <div className="w-6 shrink-0" />
                 <div className={`flex-1 pl-1 ${hdrCls}`} onClick={() => onToggleSort('name')}>
-                    名称 <SortIcon field="name" sortField={sortField} sortOrder={sortOrder} />
+                    {t('fileBrowser.name')} <SortIcon field="name" sortField={sortField} sortOrder={sortOrder} />
                 </div>
                 {!isCompact && (
                     <div className={`w-28 justify-end ${hdrCls}`} onClick={() => onToggleSort('date')}>
-                        日期 <SortIcon field="date" sortField={sortField} sortOrder={sortOrder} />
+                        {t('fileBrowser.date')} <SortIcon field="date" sortField={sortField} sortOrder={sortOrder} />
                     </div>
                 )}
                 {!isCompact && (
                     <div className={`w-16 justify-end ${hdrCls}`} onClick={() => onToggleSort('size')}>
-                        大小 <SortIcon field="size" sortField={sortField} sortOrder={sortOrder} />
+                        {t('fileBrowser.size')} <SortIcon field="size" sortField={sortField} sortOrder={sortOrder} />
                     </div>
                 )}
             </div>
@@ -82,7 +84,7 @@ export const FileList = memo(function FileList({
                 ) : sorted.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground/50 gap-2">
                         <Folder className="w-10 h-10 opacity-30" />
-                        <p className="text-xs">{filterQuery ? '没有匹配的文件' : '目录为空'}</p>
+                        <p className="text-xs">{filterQuery ? t('fileBrowser.noMatches') : t('fileBrowser.emptyFolder')}</p>
                     </div>
                 ) : (
                     sorted.map((file, i) => (

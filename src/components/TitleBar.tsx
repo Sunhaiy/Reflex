@@ -1,6 +1,7 @@
 import { Bot, Minus, Square, X, Settings, Terminal, Home, Plus } from "lucide-react";
 import { cn } from '../lib/utils';
 import { SSHConnection } from '../shared/types';
+import { useTranslation } from '../hooks/useTranslation';
 import logoUrl from '../assets/logo.png';
 
 export type WorkspaceMode = 'normal' | 'agent';
@@ -28,20 +29,20 @@ interface TitleBarProps {
 function getStatusMeta(status: SessionInfo['status']) {
   if (status === 'connected') {
     return {
-      label: '在线',
+      label: 'Online',
       dot: 'bg-emerald-400',
     };
   }
 
   if (status === 'connecting') {
     return {
-      label: '连接中',
+      label: 'Connecting',
       dot: 'bg-amber-400 animate-pulse',
     };
   }
 
   return {
-    label: '离线',
+    label: 'Offline',
     dot: 'bg-rose-400',
   };
 }
@@ -59,6 +60,7 @@ export function TitleBar({
   onCloseSession,
   onNewSession,
 }: TitleBarProps) {
+  const { t } = useTranslation();
   const hasSessions = sessions.length > 0;
 
   return (
@@ -87,7 +89,7 @@ export function TitleBar({
             <button
               onClick={onHome}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title="连接管理"
+              title={t('connection.manager')}
             >
               <Home className="h-3.5 w-3.5" />
             </button>
@@ -105,7 +107,7 @@ export function TitleBar({
                 )}
               >
                 <Terminal className="h-3.5 w-3.5" />
-                终端
+                {t('connection.terminal')}
               </button>
               <button
                 onClick={() => onModeChange?.('agent')}
@@ -156,7 +158,7 @@ export function TitleBar({
                       "ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100",
                       active && "opacity-60"
                     )}
-                    title="关闭连接"
+                    title={t('connection.close')}
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -167,7 +169,7 @@ export function TitleBar({
             <button
               onClick={onNewSession}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-              title="新建连接"
+              title={t('connection.new')}
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -180,7 +182,7 @@ export function TitleBar({
           <button
             onClick={onSettings}
             className="flex h-full w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            title="设置"
+            title={t('settings.title')}
           >
             <Settings className="h-3.5 w-3.5" />
           </button>
