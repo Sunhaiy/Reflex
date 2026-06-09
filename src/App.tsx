@@ -139,6 +139,8 @@ function App() {
     if (autoConnectedRef.current) return;
     autoConnectedRef.current = true;
     (async () => {
+      const autoReconnect = await (window as any).electron.storeGet('autoReconnect');
+      if (!autoReconnect) return;
       const last = await (window as any).electron.storeGet('lastConnection');
       if (last) {
         try { handleConnect(JSON.parse(last)); } catch { }

@@ -104,6 +104,8 @@ export function Settings({ onBack }: SettingsProps) {
     setBrightBold,
     bellStyle,
     setBellStyle,
+    autoReconnect,
+    setAutoReconnect,
     aiEnabled,
     setAiEnabled,
     aiPrivacyMode,
@@ -377,7 +379,28 @@ export function Settings({ onBack }: SettingsProps) {
     switch (activeTab) {
       case 'app':
         return (
-          <Card className={cardClass}>
+          <div className="space-y-4">
+            <Card className={cardClass}>
+              <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
+                <CardTitle className="text-base">{isZh ? '行为' : 'Behavior'}</CardTitle>
+                <CardDescription className="text-xs">
+                  {isZh ? '控制应用启动和连接行为。' : 'Control app startup and connection behavior.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-4 py-4 sm:px-5">
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/35 p-4">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">{isZh ? '启动时自动重连上次会话' : 'Auto-reconnect on startup'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {isZh ? '重启应用时自动连接上次使用的服务器。' : 'Automatically reconnect to the last used server when the app starts.'}
+                    </span>
+                  </div>
+                  <ToggleSwitch checked={autoReconnect} onChange={setAutoReconnect} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={cardClass}>
             <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base">{text.aboutTitle}</CardTitle>
               <CardDescription className="text-xs">{text.aboutLead}</CardDescription>
@@ -449,6 +472,7 @@ export function Settings({ onBack }: SettingsProps) {
               </div>
             </CardContent>
           </Card>
+          </div>
         );
 
       case 'appearance':

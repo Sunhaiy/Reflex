@@ -70,6 +70,10 @@ interface SettingsState {
     removeAiProfile: (id: string) => void;
     setActiveProfile: (id: string) => void;
 
+    // Behavior
+    autoReconnect: boolean;
+    setAutoReconnect: (enabled: boolean) => void;
+
     // Bookmarks
     bookmarks: string[];
     toggleBookmark: (path: string) => void;
@@ -121,6 +125,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // Multi-provider profiles
     aiProfiles: [],
     activeProfileId: '',
+
+    // Behavior
+    autoReconnect: false,
 
     setLanguage: (lang: Language) => {
         set({ language: lang });
@@ -324,6 +331,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         }
     },
 
+    setAutoReconnect: (enabled: boolean) => {
+        set({ autoReconnect: enabled });
+        window.electron.storeSet('autoReconnect', enabled);
+    },
+
     // Bookmarks
     bookmarks: [],
     toggleBookmark: (path: string) => {
@@ -350,6 +362,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
         // Load Bookmarks
         const savedBookmarks = await window.electron.storeGet('bookmarks');
+        const savedAutoReconnect = await window.electron.storeGet('autoReconnect');
 
         set({
             language: (savedLang as Language) || 'en',
@@ -367,6 +380,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             bellStyle: (savedBellStyle as 'none' | 'visual' | 'sound') || 'none',
 
             bookmarks: Array.isArray(savedBookmarks) ? savedBookmarks : [],
+            autoReconnect: typeof savedAutoReconnect === 'boolean' ? savedAutoReconnect : false,
         });
 
         await window.electron.storeSet('uiFontFamily', HOPPSCOTCH_UI_FONT_STACK);
