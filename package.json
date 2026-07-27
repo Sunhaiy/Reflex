@@ -1,7 +1,7 @@
 {
   "name": "reflex",
   "private": true,
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Reflex is a modern SSH workspace with terminal, file, Docker, monitoring, and agent workflows.",
   "author": "SUNHIY",
   "main": "dist-electron/electron/main.js",
