@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electron', {
   sftpRename: (id: string, oldPath: string, newPath: string) => ipcRenderer.invoke('sftp-rename', { id, oldPath, newPath }),
   sftpReadFile: (id: string, path: string) => ipcRenderer.invoke('sftp-read-file', { id, path }),
   sftpWriteFile: (id: string, path: string, content: string) => ipcRenderer.invoke('sftp-write-file', { id, path, content }),
+  getPathForFile: (file: any) => webUtils.getPathForFile(file),
   getPwd: (id: string) => ipcRenderer.invoke('get-pwd', id),
 
   openDialog: () => ipcRenderer.invoke('dialog-open'),

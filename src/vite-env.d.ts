@@ -25,6 +25,7 @@ declare global {
       sftpRename: (id: string, oldPath: string, newPath: string) => Promise<void>;
       sftpReadFile: (id: string, path: string) => Promise<string>;
       sftpWriteFile: (id: string, path: string, content: string) => Promise<void>;
+      getPathForFile: (file: File) => string;
       getPwd: (id: string) => Promise<string>;
 
       openDialog: () => Promise<string | undefined>;

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { FileEntry } from '../../shared/types';
+import type { FileEntry } from '../../../shared/types';
 import { joinPath, parentPath, getFileKind } from '../utils/fileUtils';
 import { useTransferQueue } from './useTransferQueue';
 
@@ -26,6 +26,7 @@ export function useFileBrowser(connectionId: string) {
     const [hasLoaded, setHasLoaded] = useState(false);
     const [openFile, setOpenFile] = useState<FileOpenResult | null>(null);
     const [toasts, setToasts] = useState<Toast[]>([]);
+    const [directoryRevision, setDirectoryRevision] = useState(0);
 
     const pathCacheRef = useRef<Record<string, FileEntry[]>>({});
     const transferQueue = useTransferQueue();
@@ -42,33 +43,34 @@ export function useFileBrowser(connectionId: string) {
     }, []);
 
     // ── Directory listing ─────────────────────────────────────────────────────────
+    const fetchDirectory = useCallback(async (path: string, force = false): Promise<FileEntry[]> => {
+        if (!force && pathCacheRef.current[path]) return pathCacheRef.current[path];
+
+        const list = await window.electron.sftpList(connectionId, path);
+        const entries: FileEntry[] = Array.isArray(list) ? list : [];
+        pathCacheRef.current[path] = entries;
+        return entries;
+    }, [connectionId]);
+
+    const listDirectories = useCallback(async (path: string, force = false): Promise<FileEntry[]> => {
+        const entries = await fetchDirectory(path, force);
+        return entries.filter(entry => entry.type === 'd' && entry.name !== '.' && entry.name !== '..');
+    }, [fetchDirectory]);
+
     const loadFiles = useCallback(async (path: string, force = false) => {
         const el = window as any;
-        if (!force && pathCacheRef.current[path]) {
-            setFiles(pathCacheRef.current[path]);
-            setCurrentPath(path);
-            return;
-        }
 
         setLoading(true);
         try {
             let resolvedPath = path;
             if (path === '.') {
                 resolvedPath = await el.electron.getPwd(connectionId);
-                if (!force && pathCacheRef.current[resolvedPath]) {
-                    setFiles(pathCacheRef.current[resolvedPath]);
-                    setCurrentPath(resolvedPath);
-                    setLoading(false);
-                    setHasLoaded(true);
-                    return;
-                }
             }
 
-            const list = await el.electron.sftpList(connectionId, resolvedPath);
-            const newFiles: FileEntry[] = Array.isArray(list) ? list : [];
-            pathCacheRef.current[resolvedPath] = newFiles;
+            const newFiles = await fetchDirectory(resolvedPath, force);
             setFiles(newFiles);
             setCurrentPath(resolvedPath);
+            if (force) setDirectoryRevision(revision => revision + 1);
         } catch (err: any) {
             pushToast(`无法加载目录: ${err?.message ?? err}`);
             setFiles([]);
@@ -76,7 +78,7 @@ export function useFileBrowser(connectionId: string) {
             setLoading(false);
             setHasLoaded(true);
         }
-    }, [connectionId, pushToast]);
+    }, [connectionId, fetchDirectory, pushToast]);
 
     const refresh = useCallback(() => {
         pathCacheRef.current = {};
@@ -214,49 +216,28 @@ export function useFileBrowser(connectionId: string) {
 
     // ── Upload ───────────────────────────────────────────────────────────────────
     const uploadFile = useCallback(async (fileOrPath?: File | string) => {
-        const el = window as any;
+        let filePath: string | undefined;
+        let filename: string | undefined;
 
-        // Case 1: File object from browser file input
-        if (fileOrPath instanceof File) {
-            const file = fileOrPath;
-            const filename = file.name;
-            const remotePath = joinPath(currentPath, filename);
-            const tid = transferQueue.addTransfer(filename, 'upload');
-            try {
-                // Read file as base64 and upload via buffer IPC
-                const buffer = await file.arrayBuffer();
-                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-                if (typeof el.electron?.sftpUploadBuffer === 'function') {
-                    await el.electron.sftpUploadBuffer(connectionId, base64, remotePath);
-                } else {
-                    // Fallback: write via path if electron exposed the file path
-                    const localPath = (file as any).path;
-                    if (localPath) {
-                        await el.electron.sftpUpload(connectionId, localPath, remotePath);
-                    } else {
-                        throw new Error('当前环境不支持通过文件对象上传，请尝试拖放文件');
-                    }
-                }
-                transferQueue.markDone(tid);
-                pathCacheRef.current[currentPath] = undefined as any;
-                await loadFiles(currentPath, true);
-            } catch (err: any) {
-                transferQueue.markError(tid, err?.message ?? String(err));
-                pushToast(`上传失败: ${err?.message ?? err}`);
+        try {
+            if (fileOrPath instanceof File) {
+                filePath = window.electron.getPathForFile(fileOrPath);
+                filename = fileOrPath.name;
+            } else {
+                filePath = fileOrPath ?? await window.electron.openDialog();
             }
+        } catch (err: any) {
+            pushToast(`无法读取本地文件路径: ${err?.message ?? err}`);
             return;
         }
 
-        // Case 2: Local path string (from drag & drop or legacy call)
-        const el2 = window as any;
-        const filePath = fileOrPath ?? await el2.electron.openDialog();
         if (!filePath) return;
 
-        const filename = (filePath as string).split(/[\\/]/).pop() ?? 'file';
+        filename ??= filePath.split(/[\\/]/).pop() ?? 'file';
         const remotePath = joinPath(currentPath, filename);
         const tid = transferQueue.addTransfer(filename, 'upload');
         try {
-            await el2.electron.sftpUpload(connectionId, filePath, remotePath);
+            await window.electron.sftpUpload(connectionId, filePath, remotePath);
             transferQueue.markDone(tid);
             pathCacheRef.current[currentPath] = undefined as any;
             await loadFiles(currentPath, true);
@@ -269,23 +250,18 @@ export function useFileBrowser(connectionId: string) {
     // ── Drop upload ──────────────────────────────────────────────────────────────
     const uploadDroppedFiles = useCallback(async (nativeFiles: File[]) => {
         for (const file of nativeFiles) {
-            const localPath = (file as any).path;
-            // Prefer path-based upload (Electron), fall back to File object
-            if (localPath) {
-                await uploadFile(localPath);
-            } else {
-                await uploadFile(file);
-            }
+            await uploadFile(file);
         }
     }, [uploadFile]);
 
     return {
         // State
         currentPath, files, loading, openingFile, hasLoaded, openFile, toasts,
+        directoryRevision,
         transfers: transferQueue.transfers,
         activeTransferCount: transferQueue.activeCount,
         // File ops
-        loadFiles, refresh, navigateTo, navigateUp, navigateInto,
+        loadFiles, listDirectories, refresh, navigateTo, navigateUp, navigateInto,
         openFileEntry, closeFile, saveFile,
         createFolder, createFile,
         deleteEntry, renameEntry,
