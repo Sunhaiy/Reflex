@@ -1,5 +1,7 @@
 // FileBrowser — orchestration layer
 // All state lives in useFileBrowser; this file only handles layout and dialog state.
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Loading02Icon, Upload01Icon } from "@hugeicons/core-free-icons";
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { FileEntry } from '../shared/types';
 import { useFileBrowser } from './files/hooks/useFileBrowser';
@@ -9,10 +11,8 @@ import { FileContextMenu } from './files/FileContextMenu';
 import { TransferPanel } from './files/TransferPanel';
 import { ToastNotification } from './files/ToastNotification';
 import { InputDialog } from './files/InputDialog';
-import { ImageViewer } from './files/ImageViewer';
+import { FilePreview } from './files/FilePreview';
 import { FileEditor } from './FileEditor';
-import { Upload, Loader2 } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 interface Props {
   connectionId: string;
@@ -43,6 +43,8 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [filterQuery, setFilterQuery] = useState('');
+  const [selectedFile, setSelectedFile] = useState<FileEntry | null>(null);
+  const [isEditingFile, setIsEditingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,6 +57,10 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, [connectionId, isConnected]);
+
+  useEffect(() => {
+    setSelectedFile(null);
+  }, [fb.currentPath]);
 
   // ── Compact mode ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -74,6 +80,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
   const openContextMenu = useCallback((e: React.MouseEvent, file: FileEntry | null = null) => {
     e.preventDefault();
     e.stopPropagation();
+    setSelectedFile(file);
     setContextMenu({ x: e.clientX, y: e.clientY, file });
   }, []);
 
@@ -103,27 +110,32 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
   };
 
   // ── File click ────────────────────────────────────────────────────────────────
-  const handleSingleClick = (file: FileEntry) => {
-    if (file.type === 'd') fb.navigateInto(file);
+  const handleSingleClick = (file: FileEntry) => setSelectedFile(file);
+  const openEntry = async (file: FileEntry) => {
+    setSelectedFile(file);
+    if (file.type === 'd') {
+      await fb.navigateInto(file);
+      return;
+    }
+    setIsEditingFile(false);
+    await fb.openFileEntry(file);
   };
-  const handleDoubleClick = (file: FileEntry) => {
-    if (file.type !== 'd') fb.openFileEntry(file);
-  };
+  const handleDoubleClick = (file: FileEntry) => { void openEntry(file); };
 
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full bg-transparent text-foreground relative select-none overflow-hidden min-w-0"
+      className="relative flex h-full min-w-0 select-none flex-col overflow-hidden bg-transparent text-foreground"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Drag overlay */}
       {isDragging && (
-        <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary flex items-center justify-center pointer-events-none backdrop-blur-[1px]">
-          <div className="bg-background/80 p-4 rounded-lg shadow-lg flex flex-col items-center gap-2">
-            <Upload className="w-8 h-8 text-primary animate-bounce" />
-            <span className="font-medium text-primary text-sm">松开以上传文件</span>
+        <div className="pointer-events-none absolute inset-1.5 z-50 flex items-center justify-center rounded-xl border border-dashed border-foreground/30 bg-background/75 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 rounded-2xl bg-foreground/[0.055] px-6 py-5 shadow-xl">
+            <HugeiconsIcon icon={Upload01Icon} className="h-7 w-7 animate-bounce text-foreground" />
+            <span className="text-sm font-medium text-foreground">松开以上传文件</span>
           </div>
         </div>
       )}
@@ -132,11 +144,22 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       <FileToolbar
         currentPath={fb.currentPath}
         loading={fb.loading}
+        isCompact={isCompact}
+        selectedFile={selectedFile}
+        fileCount={fb.files.length}
+        filterQuery={filterQuery}
+        onFilterChange={setFilterQuery}
         onUp={fb.navigateUp}
         onHome={() => fb.navigateTo('/')}
         onRefresh={fb.refresh}
         onUpload={(file) => fb.uploadFile(file)}
         onNavigate={fb.navigateTo}
+        onNewFolder={openNewFolder}
+        onNewFile={openNewFile}
+        onOpenSelected={() => { if (selectedFile) void openEntry(selectedFile); }}
+        onDownloadSelected={() => { if (selectedFile && selectedFile.type !== 'd') void fb.downloadEntry(selectedFile); }}
+        onRenameSelected={() => { if (selectedFile) openRename(selectedFile); }}
+        onDeleteSelected={() => { if (selectedFile) requestDelete(selectedFile); }}
       />
 
       {/* File list */}
@@ -149,6 +172,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
           sortField={sortField}
           sortOrder={sortOrder}
           filterQuery={filterQuery}
+          selectedName={selectedFile?.name ?? null}
           onToggleSort={toggleSort}
           onFileClick={handleSingleClick}
           onFileDoubleClick={handleDoubleClick}
@@ -167,7 +191,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
           file={contextMenu.file}
           onClose={() => setContextMenu(null)}
           onDownload={file => { setContextMenu(null); fb.downloadEntry(file); }}
-          onOpen={file => { setContextMenu(null); fb.openFileEntry(file); }}
+          onOpen={file => { setContextMenu(null); void openEntry(file); }}
           onRename={file => { setContextMenu(null); openRename(file); }}
           onDelete={file => { setContextMenu(null); requestDelete(file); }}
           onNewFolder={() => { setContextMenu(null); openNewFolder(); }}
@@ -190,7 +214,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       {/* Delete confirm */}
       {deleteTarget && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-card border border-border rounded-xl shadow-2xl w-72 p-5 animate-in zoom-in-95">
+          <div className="w-72 rounded-2xl border border-border/70 bg-card p-5 shadow-2xl animate-in zoom-in-95">
             <h3 className="text-sm font-semibold mb-2">删除确认</h3>
             <p className="text-xs text-muted-foreground mb-5">
               确定要删除 <span className="font-mono text-foreground">{deleteTarget.name}</span> 吗？此操作不可撤销。
@@ -203,7 +227,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
                 取消
               </button>
               <button
-                onClick={async () => { const t = deleteTarget; setDeleteTarget(null); await fb.deleteEntry(t); }}
+                onClick={async () => { const t = deleteTarget; setDeleteTarget(null); setSelectedFile(null); await fb.deleteEntry(t); }}
                 className="px-3 py-1.5 text-xs rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
               >
                 删除
@@ -219,24 +243,25 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       {/* File-open loading overlay */}
       {fb.openingFile && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-background/50 backdrop-blur-[2px] pointer-events-none">
-          <div className="flex flex-col items-center gap-3 bg-card border border-border rounded-xl px-6 py-5 shadow-xl pointer-events-auto">
-            <Loader2 className="w-7 h-7 text-primary animate-spin" />
+          <div className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-border/70 bg-card px-6 py-5 shadow-xl">
+            <HugeiconsIcon icon={Loading02Icon} className="h-7 w-7 animate-spin text-foreground" />
             <span className="text-sm text-muted-foreground">正在加载文件...</span>
           </div>
         </div>
       )}
 
-      {/* Image viewer */}
-      {fb.openFile?.kind === 'image' && (
-        <ImageViewer
-          name={fb.openFile.name}
-          src={fb.openFile.content}
-          onClose={fb.closeFile}
+      {/* Unified read-only preview */}
+      {fb.openFile && !isEditingFile && (
+        <FilePreview
+          file={fb.openFile}
+          onClose={() => { setIsEditingFile(false); fb.closeFile(); }}
+          onEdit={() => setIsEditingFile(true)}
+          onDownload={() => void fb.downloadEntry(fb.openFile!.entry)}
         />
       )}
 
       {/* Text editor overlay */}
-      {fb.openFile?.kind === 'text' && (
+      {fb.openFile?.kind === 'text' && isEditingFile && (
         <FileEditor
           fileName={fb.openFile.name}
           filePath={fb.openFile.path}
@@ -244,7 +269,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
           onSave={async (content) => {
             await fb.saveFile(fb.openFile!.path, content);
           }}
-          onClose={fb.closeFile}
+          onClose={() => { setIsEditingFile(false); fb.closeFile(); }}
         />
       )}
     </div>

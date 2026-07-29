@@ -1,40 +1,10 @@
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { AlertCircleIcon, Cancel01Icon, ContainerIcon, Delete02Icon, FileAttachmentIcon, HardDriveIcon, Layers01Icon, PackageIcon, PauseIcon, PlayIcon, Refresh01Icon, RotateRight01Icon, Search01Icon, SquareIcon, TerminalIcon } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    AlertCircle,
-    Container,
-    FileText,
-    HardDrive,
-    Layers,
-    Package,
-    Pause,
-    Play,
-    RefreshCw,
-    RotateCw,
-    Search,
-    Square,
-    Terminal,
-    Trash2,
-    X,
-} from 'lucide-react';
 import { useTranslation } from '../hooks/useTranslation';
-
-interface DockerContainer {
-    id: string;
-    name: string;
-    image: string;
-    status: string;
-    state: string;
-    ports: string;
-    composeProject: string;
-}
-
-interface DockerImage {
-    id: string;
-    repository: string;
-    tag: string;
-    size: string;
-    created: string;
-}
+import { cn } from '../lib/utils';
+import type { DockerAction, DockerContainer, DockerImage, DockerPruneType } from '../shared/types';
+import { workspaceBarClass, workspaceTabClass } from './workspaceChrome';
 
 interface DockerManagerProps {
     connectionId: string;
@@ -47,26 +17,25 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
     const [tab, setTab] = useState<TabId>('containers');
     const { t } = useTranslation();
 
-    const tabs: { id: TabId; label: string; icon: any }[] = [
-        { id: 'containers', label: t('docker.containers'), icon: Container },
-        { id: 'images', label: t('docker.images'), icon: Package },
-        { id: 'prune', label: t('docker.prune'), icon: Trash2 },
+    const tabs: { id: TabId; label: string; icon: IconSvgElement }[] = [
+        { id: 'containers', label: t('docker.containers'), icon: ContainerIcon },
+        { id: 'images', label: t('docker.images'), icon: PackageIcon },
+        { id: 'prune', label: t('docker.prune'), icon: Delete02Icon },
     ];
 
     return (
         <div className="flex h-full flex-col bg-transparent text-foreground">
-            <div className="flex border-b border-border bg-muted/30">
+            <div className={cn(workspaceBarClass, 'gap-1 px-2')}>
                 {tabs.map((item) => (
                     <button
                         key={item.id}
                         onClick={() => setTab(item.id)}
-                        className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${
-                            tab === item.id
-                                ? 'border-b-2 border-primary bg-primary/5 text-primary'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                        }`}
+                        className={cn(
+                            workspaceTabClass,
+                            tab === item.id && 'bg-foreground/[0.09] text-foreground shadow-sm'
+                        )}
                     >
-                        <item.icon className="h-3.5 w-3.5" />
+                        <HugeiconsIcon icon={item.icon} className="h-3.5 w-3.5" />
                         {item.label}
                     </button>
                 ))}
@@ -92,6 +61,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [actionMsg, setActionMsg] = useState<string | null>(null);
     const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
+    const fetchInFlightRef = useRef(false);
 
     const actionLabels: Record<string, string> = {
         start: t('dockerManager.start'),
@@ -103,14 +73,17 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
     };
 
     const fetchContainers = async () => {
+        if (fetchInFlightRef.current) return;
+        fetchInFlightRef.current = true;
         setLoading(true);
         setError(null);
         try {
-            const list = await (window as any).electron.getDockerContainers(connectionId);
+            const list = await window.electron.getDockerContainers(connectionId);
             setContainers(list);
         } catch (err: any) {
             setError(err?.message || t('dockerManager.fetchContainersFailed'));
         } finally {
+            fetchInFlightRef.current = false;
             setLoading(false);
         }
     };
@@ -121,11 +94,11 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
         return () => window.clearInterval(interval);
     }, [connectionId]);
 
-    const handleAction = async (containerId: string, action: string) => {
+    const handleAction = async (containerId: string, action: DockerAction) => {
         setActionLoading(containerId);
         setActionMsg(null);
         try {
-            await (window as any).electron.dockerAction(connectionId, containerId, action);
+            await window.electron.dockerAction(connectionId, containerId, action);
             setActionMsg(`${t('dockerManager.actionSucceeded')}: ${actionLabels[action] || action} ${containerId.substring(0, 12)}`);
             window.setTimeout(() => setActionMsg(null), 3000);
             await fetchContainers();
@@ -137,7 +110,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
     };
 
     const handleExec = (containerId: string) => {
-        (window as any).electron?.writeTerminal(connectionId, `docker exec -it ${containerId} /bin/sh\n`);
+        window.electron.writeTerminal(connectionId, `docker exec -it ${containerId} /bin/sh\n`);
     };
 
     const composeProjects = useMemo(() => {
@@ -210,7 +183,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                 </div>
 
                 <div className="relative flex-1">
-                    <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+                    <HugeiconsIcon icon={Search01Icon} className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
                     <input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -220,16 +193,16 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                 </div>
 
                 <button onClick={fetchContainers} className="rounded p-1.5 transition-colors hover:bg-secondary" title={t('dockerManager.refresh')}>
-                    <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
                 </button>
             </div>
 
             {error && (
                 <div className="mx-3 mt-2 flex items-center gap-2 rounded-md bg-destructive/10 p-2.5 text-[11px] text-destructive">
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <HugeiconsIcon icon={AlertCircleIcon} className="h-3.5 w-3.5 shrink-0" />
                     {error}
                     <button onClick={() => setError(null)} className="ml-auto">
-                        <X className="h-3 w-3" />
+                        <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
                     </button>
                 </div>
             )}
@@ -246,7 +219,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                         const running = projectContainers.filter((item) => item.state?.toLowerCase() === 'running').length;
                         return (
                             <div key={project} className="flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2 py-0.5 font-mono text-[10px] text-blue-400">
-                                <Layers className="h-3 w-3" />
+                                <HugeiconsIcon icon={Layers01Icon} className="h-3 w-3" />
                                 {project}
                                 <span className="opacity-60">{running}/{projectContainers.length}</span>
                             </div>
@@ -258,7 +231,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
             <div className="flex-1 space-y-2 overflow-y-auto p-3">
                 {filtered.length === 0 && !loading && !error && (
                     <div className="py-8 text-center text-xs text-muted-foreground opacity-70">
-                        <Container className="mx-auto mb-2 h-8 w-8 opacity-30" />
+                        <HugeiconsIcon icon={ContainerIcon} className="mx-auto mb-2 h-8 w-8 opacity-30" />
                         {t('dockerManager.noContainers')}
                     </div>
                 )}
@@ -300,7 +273,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         }`}
                                         title={t('dockerManager.logs')}
                                     >
-                                        <FileText className="h-3.5 w-3.5" />
+                                        <HugeiconsIcon icon={FileAttachmentIcon} className="h-3.5 w-3.5" />
                                     </button>
 
                                     <button
@@ -309,7 +282,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         className="rounded p-1 text-muted-foreground transition-colors hover:bg-purple-500/10 hover:text-purple-400 disabled:opacity-20"
                                         title={t('dockerManager.exec')}
                                     >
-                                        <Terminal className="h-3.5 w-3.5" />
+                                        <HugeiconsIcon icon={TerminalIcon} className="h-3.5 w-3.5" />
                                     </button>
 
                                     <button
@@ -318,7 +291,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         className="rounded p-1 text-muted-foreground transition-colors hover:bg-green-500/10 hover:text-green-500 disabled:opacity-20"
                                         title={t('dockerManager.start')}
                                     >
-                                        <Play className="h-3.5 w-3.5" />
+                                        <HugeiconsIcon icon={PlayIcon} className="h-3.5 w-3.5" />
                                     </button>
 
                                     {container.state?.toLowerCase() === 'paused' ? (
@@ -328,7 +301,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                             className="rounded p-1 text-muted-foreground transition-colors hover:bg-yellow-500/10 hover:text-yellow-500 disabled:opacity-20"
                                             title={t('dockerManager.resume')}
                                         >
-                                            <Play className="h-3.5 w-3.5" />
+                                            <HugeiconsIcon icon={PlayIcon} className="h-3.5 w-3.5" />
                                         </button>
                                     ) : (
                                         <button
@@ -337,7 +310,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                             className="rounded p-1 text-muted-foreground transition-colors hover:bg-yellow-500/10 hover:text-yellow-500 disabled:opacity-20"
                                             title={t('dockerManager.pause')}
                                         >
-                                            <Pause className="h-3.5 w-3.5" />
+                                            <HugeiconsIcon icon={PauseIcon} className="h-3.5 w-3.5" />
                                         </button>
                                     )}
 
@@ -347,7 +320,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         className="rounded p-1 text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-500 disabled:opacity-20"
                                         title={t('dockerManager.restart')}
                                     >
-                                        <RotateCw className={`h-3.5 w-3.5 ${actionLoading === container.id ? 'animate-spin' : ''}`} />
+                                        <HugeiconsIcon icon={RotateRight01Icon} className={`h-3.5 w-3.5 ${actionLoading === container.id ? 'animate-spin' : ''}`} />
                                     </button>
 
                                     <button
@@ -356,7 +329,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         className="rounded p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-20"
                                         title={t('dockerManager.stop')}
                                     >
-                                        <Square className="h-3.5 w-3.5 fill-current" />
+                                        <HugeiconsIcon icon={SquareIcon} className="h-3.5 w-3.5 fill-current" />
                                     </button>
 
                                     {pendingConfirm === container.id ? (
@@ -384,7 +357,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                             className="rounded p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-20"
                                             title={t('dockerManager.remove')}
                                         >
-                                            <Trash2 className="h-3.5 w-3.5" />
+                                            <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
                                         </button>
                                     )}
                                 </div>
@@ -411,7 +384,7 @@ function LogViewer({ connectionId, containerId, containerName }: { connectionId:
     const fetchLogs = async () => {
         setLoading(true);
         try {
-            const text = await (window as any).electron.dockerLogs(connectionId, containerId, 300);
+            const text = await window.electron.dockerLogs(connectionId, containerId, 300);
             setLogs(text);
             window.setTimeout(() => logRef.current?.scrollTo(0, logRef.current!.scrollHeight), 50);
         } catch {
@@ -448,10 +421,10 @@ function LogViewer({ connectionId, containerId, containerName }: { connectionId:
     return (
         <div className="border-t border-border bg-background/80">
             <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3 py-1.5">
-                <FileText className="h-3 w-3 text-muted-foreground" />
+                <HugeiconsIcon icon={FileAttachmentIcon} className="h-3 w-3 text-muted-foreground" />
                 <span className="font-mono text-[10px] text-muted-foreground">{containerName} {t('dockerManager.logs')}</span>
                 <div className="relative flex-1">
-                    <Search className="absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/50" />
+                    <HugeiconsIcon icon={Search01Icon} className="absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/50" />
                     <input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -460,7 +433,7 @@ function LogViewer({ connectionId, containerId, containerName }: { connectionId:
                     />
                 </div>
                 <button onClick={fetchLogs} className="rounded p-1 hover:bg-secondary" title={t('dockerManager.refresh')}>
-                    <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                    <HugeiconsIcon icon={Refresh01Icon} className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
                 </button>
             </div>
 
@@ -486,12 +459,13 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
     const [loading, setLoading] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
     const fetchImages = async () => {
         setLoading(true);
         setError(null);
         try {
-            const list = await (window as any).electron.dockerImages(connectionId);
+            const list = await window.electron.dockerImages(connectionId);
             setImages(list);
         } catch (err: any) {
             setError(err?.message || t('common.error'));
@@ -505,9 +479,10 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
     }, [connectionId]);
 
     const handleDelete = async (imageId: string) => {
+        setPendingDelete(null);
         setDeleting(imageId);
         try {
-            await (window as any).electron.dockerRemoveImage(connectionId, imageId);
+            await window.electron.dockerRemoveImage(connectionId, imageId);
             await fetchImages();
         } catch (err: any) {
             setError(err?.message || t('common.error'));
@@ -516,23 +491,41 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
         }
     };
 
+    const pendingImage = images.find((image) => image.id === pendingDelete);
+
     return (
         <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-border/50 p-3">
                 <div className="flex items-center gap-2 text-xs">
-                    <Package className="h-4 w-4 text-blue-400" />
+                    <HugeiconsIcon icon={PackageIcon} className="h-4 w-4 text-blue-400" />
                     <span className="font-medium">{t('docker.images')}</span>
                     <span className="rounded-full bg-secondary px-1.5 text-[10px] text-muted-foreground">{images.length}</span>
                 </div>
                 <button onClick={fetchImages} className="rounded p-1.5 transition-colors hover:bg-secondary" title={t('dockerManager.refresh')}>
-                    <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
                 </button>
             </div>
 
             {error && (
                 <div className="mx-3 mt-2 flex items-center gap-2 rounded-md bg-destructive/10 p-2 text-[11px] text-destructive">
-                    <AlertCircle className="h-3.5 w-3.5" />
+                    <HugeiconsIcon icon={AlertCircleIcon} className="h-3.5 w-3.5" />
                     {error}
+                </div>
+            )}
+
+            {pendingImage && (
+                <div className="mx-3 mt-2 rounded-md border border-destructive/25 bg-destructive/[0.06] p-2.5 text-[11px]">
+                    <div className="break-all text-foreground/90">
+                        {t('dockerManager.remove')} {pendingImage.repository}:{pendingImage.tag}?
+                    </div>
+                    <div className="mt-2 flex justify-end gap-1.5">
+                        <button onClick={() => setPendingDelete(null)} className="rounded px-2 py-1 text-muted-foreground hover:bg-secondary">
+                            {t('dockerManager.cancel')}
+                        </button>
+                        <button onClick={() => handleDelete(pendingImage.id)} className="rounded bg-destructive px-2 py-1 text-destructive-foreground hover:bg-destructive/90">
+                            {t('dockerManager.confirm')}
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -551,12 +544,12 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
                                 </div>
                             </div>
                             <button
-                                onClick={() => handleDelete(image.id)}
+                                onClick={() => setPendingDelete(image.id)}
                                 disabled={Boolean(deleting)}
                                 className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-20"
                                 title={t('dockerManager.remove')}
                             >
-                                <Trash2 className={`h-3.5 w-3.5 ${deleting === image.id ? 'animate-spin' : ''}`} />
+                                <HugeiconsIcon icon={Delete02Icon} className={`h-3.5 w-3.5 ${deleting === image.id ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
                     </div>
@@ -564,7 +557,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
 
                 {images.length === 0 && !loading && (
                     <div className="py-8 text-center text-xs text-muted-foreground opacity-70">
-                        <Package className="mx-auto mb-2 h-8 w-8 opacity-30" />
+                        <HugeiconsIcon icon={PackageIcon} className="mx-auto mb-2 h-8 w-8 opacity-30" />
                         {t('docker.noDockerHint')}
                     </div>
                 )}
@@ -578,12 +571,13 @@ function PruneTab({ connectionId }: { connectionId: string }) {
     const [diskUsage, setDiskUsage] = useState('');
     const [loading, setLoading] = useState(false);
     const [pruneResult, setPruneResult] = useState<string | null>(null);
-    const [pruning, setPruning] = useState<string | null>(null);
+    const [pruning, setPruning] = useState<DockerPruneType | null>(null);
+    const [pendingPrune, setPendingPrune] = useState<DockerPruneType | null>(null);
 
     const fetchDiskUsage = async () => {
         setLoading(true);
         try {
-            const text = await (window as any).electron.dockerDiskUsage(connectionId);
+            const text = await window.electron.dockerDiskUsage(connectionId);
             setDiskUsage(text);
         } catch {
             setDiskUsage(t('dockerManager.diskUsageFailed'));
@@ -596,11 +590,12 @@ function PruneTab({ connectionId }: { connectionId: string }) {
         fetchDiskUsage();
     }, [connectionId]);
 
-    const handlePrune = async (type: string) => {
+    const handlePrune = async (type: DockerPruneType) => {
+        setPendingPrune(null);
         setPruning(type);
         setPruneResult(null);
         try {
-            const result = await (window as any).electron.dockerPrune(connectionId, type);
+            const result = await window.electron.dockerPrune(connectionId, type);
             setPruneResult(result);
             await fetchDiskUsage();
         } catch (err: any) {
@@ -610,23 +605,24 @@ function PruneTab({ connectionId }: { connectionId: string }) {
         }
     };
 
-    const pruneActions = [
-        { type: 'containers', label: t('dockerManager.pruneContainers'), icon: Container, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker container prune' },
-        { type: 'images', label: t('dockerManager.pruneImages'), icon: Package, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker image prune -a' },
-        { type: 'volumes', label: t('dockerManager.pruneVolumes'), icon: HardDrive, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker volume prune' },
-        { type: 'system', label: t('dockerManager.pruneSystem'), icon: Trash2, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker system prune -af --volumes' },
+    const pruneActions: Array<{ type: DockerPruneType; label: string; icon: IconSvgElement; color: string; desc: string }> = [
+        { type: 'containers', label: t('dockerManager.pruneContainers'), icon: ContainerIcon, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker container prune' },
+        { type: 'images', label: t('dockerManager.pruneImages'), icon: PackageIcon, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker image prune -a' },
+        { type: 'volumes', label: t('dockerManager.pruneVolumes'), icon: HardDriveIcon, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker volume prune' },
+        { type: 'system', label: t('dockerManager.pruneSystem'), icon: Delete02Icon, color: 'text-muted-foreground hover:bg-secondary', desc: 'docker system prune -af --volumes' },
     ];
+    const pendingAction = pruneActions.find((action) => action.type === pendingPrune);
 
     return (
         <div className="flex h-full flex-col">
             <div className="border-b border-border/50 p-3">
                 <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-medium">
-                        <HardDrive className="h-4 w-4 text-amber-400" />
+                        <HugeiconsIcon icon={HardDriveIcon} className="h-4 w-4 text-amber-400" />
                         {t('docker.stats')}
                     </div>
                     <button onClick={fetchDiskUsage} className="rounded p-1 hover:bg-secondary" title={t('dockerManager.refresh')}>
-                        <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                        <HugeiconsIcon icon={Refresh01Icon} className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
                 <pre className="overflow-x-auto whitespace-pre rounded-md bg-secondary/30 p-2 font-mono text-[10px] leading-[1.5] text-muted-foreground">
@@ -638,12 +634,12 @@ function PruneTab({ connectionId }: { connectionId: string }) {
                 {pruneActions.map((action) => (
                     <button
                         key={action.type}
-                        onClick={() => handlePrune(action.type)}
+                        onClick={() => setPendingPrune(action.type)}
                         disabled={Boolean(pruning)}
                         className={`w-full rounded-lg border border-border bg-card/50 p-3 text-left transition-all disabled:opacity-40 ${action.color}`}
                     >
                         <div className="flex items-center gap-3">
-                            <action.icon className={`h-5 w-5 shrink-0 ${pruning === action.type ? 'animate-pulse' : ''}`} />
+                            <HugeiconsIcon icon={action.icon} className={`h-5 w-5 shrink-0 ${pruning === action.type ? 'animate-pulse' : ''}`} />
                             <div className="min-w-0">
                                 <div className="text-xs font-medium">{action.label}</div>
                                 <div className="font-mono text-[10px] text-muted-foreground/60">{action.desc}</div>
@@ -653,12 +649,30 @@ function PruneTab({ connectionId }: { connectionId: string }) {
                 ))}
             </div>
 
+            {pendingAction && (
+                <div className="border-t border-destructive/20 bg-destructive/[0.05] p-3">
+                    <div className="text-[11px] font-medium text-foreground">{pendingAction.label}</div>
+                    <div className="mt-1 font-mono text-[9px] text-muted-foreground">{pendingAction.desc}</div>
+                    <div className="mt-2 text-[10px] text-destructive">
+                        {t('dockerManager.confirm')} · {t('dockerManager.remove')}
+                    </div>
+                    <div className="mt-2 flex justify-end gap-1.5">
+                        <button onClick={() => setPendingPrune(null)} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary">
+                            {t('dockerManager.cancel')}
+                        </button>
+                        <button onClick={() => handlePrune(pendingAction.type)} className="rounded bg-destructive px-2 py-1 text-[10px] text-destructive-foreground hover:bg-destructive/90">
+                            {t('dockerManager.confirm')}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {pruneResult && (
                 <div className="border-t border-border p-3">
                     <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[10px] font-medium text-muted-foreground">{t('docker.prune')}</span>
                         <button onClick={() => setPruneResult(null)} className="rounded p-0.5 hover:bg-secondary">
-                            <X className="h-3 w-3" />
+                            <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
                         </button>
                     </div>
                     <pre className="max-h-[150px] overflow-x-auto overflow-y-auto whitespace-pre rounded-md bg-secondary/30 p-2 font-mono text-[10px] leading-[1.5] text-green-400/80">

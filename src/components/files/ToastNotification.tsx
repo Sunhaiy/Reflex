@@ -1,5 +1,6 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, CancelCircleIcon, CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { useEffect, useRef } from 'react';
-import { CheckCircle2, XCircle, Info, X } from 'lucide-react';
 import { Toast } from './hooks/useFileBrowser';
 import { cn } from '../../lib/utils';
 
@@ -9,9 +10,9 @@ interface Props {
 }
 
 const icons = {
-    error: <XCircle className="w-4 h-4 text-destructive shrink-0" />,
-    success: <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />,
-    info: <Info className="w-4 h-4 text-blue-400 shrink-0" />,
+    error: <HugeiconsIcon icon={CancelCircleIcon} className="w-4 h-4 text-destructive shrink-0" />,
+    success: <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-emerald-500 shrink-0" />,
+    info: <HugeiconsIcon icon={InformationCircleIcon} className="w-4 h-4 text-blue-400 shrink-0" />,
 };
 
 export function ToastNotification({ toasts, onDismiss }: Props) {
@@ -22,7 +23,7 @@ export function ToastNotification({ toasts, onDismiss }: Props) {
                 <div
                     key={t.id}
                     className={cn(
-                        'flex items-start gap-2 px-3 py-2.5 rounded-lg border shadow-lg text-xs',
+                        'flex items-start gap-2 px-3 py-2.5 rounded-xl border shadow-lg text-xs',
                         'bg-card/95 backdrop-blur-sm animate-in slide-in-from-bottom-2 fade-in',
                         t.type === 'error' && 'border-destructive/30',
                         t.type === 'success' && 'border-emerald-500/30',
@@ -32,7 +33,7 @@ export function ToastNotification({ toasts, onDismiss }: Props) {
                     {icons[t.type]}
                     <span className="flex-1 leading-relaxed">{t.message}</span>
                     <button onClick={() => onDismiss(t.id)} className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0">
-                        <X className="w-3 h-3" />
+                        <HugeiconsIcon icon={Cancel01Icon} className="w-3 h-3" />
                     </button>
                 </div>
             ))}

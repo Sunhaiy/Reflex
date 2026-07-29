@@ -1,6 +1,7 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Add01Icon, Delete02Icon, Download01Icon, FolderAddIcon, FolderOpenIcon, PencilIcon, Refresh01Icon, ViewIcon } from "@hugeicons/core-free-icons";
 import { createPortal } from 'react-dom';
 import { FileEntry } from '../../shared/types';
-import { Download, Edit2, Trash2, FolderPlus, Plus, RefreshCw, Pencil } from 'lucide-react';
 import { useTranslation } from '../../hooks/useTranslation';
 
 interface Props {
@@ -17,8 +18,8 @@ interface Props {
     onRefresh: () => void;
 }
 
-const item = 'w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-xs flex items-center gap-2 transition-colors';
-const danger = 'w-full text-left px-3 py-2 text-destructive hover:bg-destructive/10 text-xs flex items-center gap-2 transition-colors';
+const item = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors hover:bg-foreground/[0.06]';
+const danger = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-destructive transition-colors hover:bg-destructive/10';
 const sep = 'h-px bg-border/50 my-1 mx-2';
 
 export function FileContextMenu({
@@ -34,7 +35,7 @@ export function FileContextMenu({
         <>
             <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }} />
             <div
-                className="fixed z-50 w-48 bg-popover border border-border rounded-lg shadow-xl py-1 animate-in fade-in zoom-in-95"
+                className="fixed z-50 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-2xl animate-in fade-in zoom-in-95"
                 style={{ top, left }}
                 onClick={onClose}
             >
@@ -45,33 +46,34 @@ export function FileContextMenu({
 
                 {file ? (
                     <>
-                        {file.type === '-' && (
-                            <button className={item} onClick={() => onOpen(file)}>
-                                <Edit2 className="w-3.5 h-3.5" /> {t('fileBrowser.openEditor')}
+                        <button className={item} onClick={() => onOpen(file)}>
+                            {file.type === 'd' ? <HugeiconsIcon icon={FolderOpenIcon} className="w-3.5 h-3.5" /> : <HugeiconsIcon icon={ViewIcon} className="w-3.5 h-3.5" />}
+                            {t(file.type === 'd' ? 'fileBrowser.open' : 'fileBrowser.preview')}
+                        </button>
+                        {file.type !== 'd' && (
+                            <button className={item} onClick={() => onDownload(file)}>
+                                <HugeiconsIcon icon={Download01Icon} className="w-3.5 h-3.5" /> {t('fileBrowser.download')}
                             </button>
                         )}
-                        <button className={item} onClick={() => onDownload(file)}>
-                            <Download className="w-3.5 h-3.5" /> {t('fileBrowser.download')}
-                        </button>
                         <button className={item} onClick={() => onRename(file)}>
-                            <Pencil className="w-3.5 h-3.5" /> {t('fileBrowser.rename')}
+                            <HugeiconsIcon icon={PencilIcon} className="w-3.5 h-3.5" /> {t('fileBrowser.rename')}
                         </button>
                         <div className={sep} />
                         <button className={danger} onClick={() => onDelete(file)}>
-                            <Trash2 className="w-3.5 h-3.5" /> {t('fileBrowser.delete')}
+                            <HugeiconsIcon icon={Delete02Icon} className="w-3.5 h-3.5" /> {t('fileBrowser.delete')}
                         </button>
                     </>
                 ) : (
                     <>
                         <button className={item} onClick={onNewFolder}>
-                            <FolderPlus className="w-3.5 h-3.5" /> {t('fileBrowser.newFolder')}
+                            <HugeiconsIcon icon={FolderAddIcon} className="w-3.5 h-3.5" /> {t('fileBrowser.newFolder')}
                         </button>
                         <button className={item} onClick={onNewFile}>
-                            <Plus className="w-3.5 h-3.5" /> {t('fileBrowser.newFile')}
+                            <HugeiconsIcon icon={Add01Icon} className="w-3.5 h-3.5" /> {t('fileBrowser.newFile')}
                         </button>
                         <div className={sep} />
                         <button className={item} onClick={onRefresh}>
-                            <RefreshCw className="w-3.5 h-3.5" /> {t('fileBrowser.refresh')}
+                            <HugeiconsIcon icon={Refresh01Icon} className="w-3.5 h-3.5" /> {t('fileBrowser.refresh')}
                         </button>
                     </>
                 )}

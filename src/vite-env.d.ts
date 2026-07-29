@@ -1,15 +1,27 @@
 /// <reference types="vite/client" />
-import type { FileEntry, SSHConnection, SystemStats } from './shared/types';
+import type {
+  DockerAction,
+  DockerContainer,
+  DockerImage,
+  DockerPruneType,
+  FileEntry,
+  RemoteProcess,
+  SSHConnection,
+  SystemStats,
+  UsageDelta,
+  UsageStats,
+} from './shared/types';
 
 declare global {
   interface Window {
     electron: {
       getVersion: () => Promise<string>;
       openFileDialog: (opts?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
-      connectSSH: (args: { connection: SSHConnection; sessionId: string; profileId?: string }) => Promise<{ success: boolean; error?: string }>;
+      connectSSH: (args: { connection: SSHConnection; sessionId: string }) => Promise<{ success: boolean; error?: string }>;
       onTerminalData: (callback: (event: unknown, payload: { id: string; data: string }) => void) => () => void;
       writeTerminal: (id: string, data: string) => void;
       sshReconnect: (id: string) => Promise<{ success: boolean; error?: string }>;
+      disconnectSSH: (id: string) => Promise<void>;
       resizeTerminal: (id: string, cols: number, rows: number) => void;
       sftpList: (id: string, path: string) => Promise<FileEntry[]>;
       sftpUpload: (id: string, localPath: string, remotePath: string) => Promise<void>;
@@ -26,15 +38,15 @@ declare global {
       startMonitoring: (id: string) => void;
       stopMonitoring: (id: string) => void;
       onStatsUpdate: (callback: (event: unknown, payload: { id: string; stats: SystemStats }) => void) => () => void;
-      getProcesses: (id: string) => Promise<unknown[]>;
+      getProcesses: (id: string) => Promise<RemoteProcess[]>;
       killProcess: (id: string, pid: number) => Promise<void>;
-      getDockerContainers: (id: string) => Promise<unknown[]>;
-      dockerAction: (id: string, containerId: string, action: 'start' | 'stop' | 'restart') => Promise<void>;
+      getDockerContainers: (id: string) => Promise<DockerContainer[]>;
+      dockerAction: (id: string, containerId: string, action: DockerAction) => Promise<void>;
       dockerLogs: (id: string, containerId: string, lines?: number) => Promise<string>;
-      dockerImages: (id: string) => Promise<unknown[]>;
+      dockerImages: (id: string) => Promise<DockerImage[]>;
       dockerRemoveImage: (id: string, imageId: string) => Promise<void>;
-      dockerPrune: (id: string, type: string) => Promise<unknown>;
-      dockerDiskUsage: (id: string) => Promise<unknown>;
+      dockerPrune: (id: string, type: DockerPruneType) => Promise<string>;
+      dockerDiskUsage: (id: string) => Promise<string>;
       onSSHStatus: (callback: (event: unknown, payload: { id: string; status: string }) => void) => () => void;
       minimize: () => void;
       maximize: () => void;
@@ -42,6 +54,9 @@ declare global {
       storeGet: (key: string) => Promise<unknown>;
       storeSet: (key: string, value: unknown) => Promise<void>;
       storeDelete: (key: string) => Promise<void>;
+      usageGet: () => Promise<UsageStats>;
+      usageRecord: (delta: UsageDelta) => void;
+      onUsageStats: (callback: (stats: UsageStats) => void) => () => void;
       openExternal: (url: string) => Promise<void>;
     };
   }

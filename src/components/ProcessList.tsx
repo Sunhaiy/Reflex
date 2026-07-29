@@ -1,15 +1,8 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, PowerIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, RefreshCw, Power } from 'lucide-react';
-
-interface Process {
-    pid: number;
-    user: string;
-    cpu: number;
-    mem: number;
-    command: string;
-    args: string;
-}
+import type { RemoteProcess } from '../shared/types';
 
 interface ProcessListProps {
     connectionId: string;
@@ -17,7 +10,7 @@ interface ProcessListProps {
 }
 
 export function ProcessList({ connectionId, onClose }: ProcessListProps) {
-    const [processes, setProcesses] = useState<Process[]>([]);
+    const [processes, setProcesses] = useState<RemoteProcess[]>([]);
     const [loading, setLoading] = useState(false);
     const [sortBy, setSortBy] = useState<'cpu' | 'mem'>('cpu');
     const [error, setError] = useState<string | null>(null);
@@ -28,7 +21,7 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
         try {
             const list = await window.electron.getProcesses(connectionId);
             // Backend returns top 50 sorted by cpu. We can re-sort if needed.
-            const sorted = list.sort((a: Process, b: Process) => b[sortBy] - a[sortBy]);
+            const sorted = [...list].sort((a, b) => b[sortBy] - a[sortBy]).slice(0, 50);
             setProcesses(sorted);
         } catch (err: any) {
             setError(err.message || 'Failed to fetch processes');
@@ -55,7 +48,7 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
 
     return createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-card border border-border rounded-lg shadow-xl w-[800px] h-[600px] flex flex-col">
+            <div className="flex h-[min(600px,calc(100vh-32px))] w-[min(800px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -64,10 +57,10 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                     </h2>
                     <div className="flex items-center gap-2">
                         <button onClick={fetchProcesses} className="p-2 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
-                            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                            <HugeiconsIcon icon={Refresh01Icon} className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                         </button>
                         <button onClick={onClose} className="p-2 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Close">
-                            <X className="w-4 h-4" />
+                            <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
@@ -123,7 +116,7 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                                                 className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded opacity-0 group-hover:opacity-100 transition-all"
                                                 title="Kill Process"
                                             >
-                                                <Power className="w-3.5 h-3.5" />
+                                                <HugeiconsIcon icon={PowerIcon} className="w-3.5 h-3.5" />
                                             </button>
                                         </td>
                                     </tr>

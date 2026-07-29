@@ -1,6 +1,7 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import * as React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
-import { ChevronDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface SelectOption {
@@ -102,9 +103,9 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 onKeyDown={handleKeyDown}
                 className={cn(
-                    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background/50 px-3 py-1 text-sm transition-all",
-                    "hover:bg-accent/50 hover:border-accent-foreground/20",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    "flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background/48 px-3.5 py-2 text-sm transition-all",
+                    "hover:border-foreground/20 hover:bg-background/68",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20",
                     "disabled:cursor-not-allowed disabled:opacity-50",
                     isOpen && "ring-1 ring-ring border-ring"
                 )}
@@ -112,17 +113,17 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                 <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
                     {selectedOption?.label || placeholder}
                 </span>
-                <ChevronDown className={cn(
-                    "ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
-                    isOpen && "rotate-180"
-                )} />
+                <HugeiconsIcon icon={ArrowDown01Icon} className={cn(
+                                    "ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+                                    isOpen && "rotate-180"
+                                )} />
             </button>
 
             {/* Dropdown */}
             {isOpen && (
                 <div
                     className={cn(
-                        "absolute z-50 mt-1 w-full min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover shadow-lg",
+                        "glass-panel absolute z-50 mt-2 w-full min-w-[8rem] overflow-hidden rounded-2xl shadow-xl",
                         "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
                     )}
                 >
@@ -142,7 +143,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                                     }}
                                     onMouseEnter={() => setHighlightedIndex(index)}
                                     className={cn(
-                                        "relative flex cursor-pointer items-center rounded-sm px-2.5 py-1.5 text-sm transition-colors",
+                                        "relative flex cursor-pointer items-center rounded-xl px-3 py-2.5 text-sm transition-colors",
                                         "select-none outline-none",
                                         isHighlighted && "bg-accent text-accent-foreground",
                                         isSelected && !isHighlighted && "text-primary",
@@ -151,7 +152,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                                 >
                                     <span className="flex-1 truncate">{option.label}</span>
                                     {isSelected && (
-                                        <Check className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" />
+                                        <HugeiconsIcon icon={Tick01Icon} className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" />
                                     )}
                                 </div>
                             )

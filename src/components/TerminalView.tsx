@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { queueUsage } from '../lib/usageTracker';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -12,7 +13,7 @@ interface TerminalViewProps {
 export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const { rendererType } = useSettingsStore();
+  const rendererType = useSettingsStore((state) => state.rendererType);
 
   // Effect to handle initialization
   useEffect(() => {
@@ -34,8 +35,6 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         lineHeight: settings.lineHeight,
         scrollback: settings.scrollback,
         drawBoldTextInBrightColors: settings.brightBold,
-        // @ts-ignore
-        bellStyle: settings.bellStyle,
         allowProposedApi: true,
         allowTransparency: true,
         theme: {
@@ -51,6 +50,41 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
 
       // Open terminal
       term.open(containerRef.current!);
+
+      const bellDisposable = term.onBell(() => {
+        const bellStyle = useSettingsStore.getState().bellStyle;
+        if (bellStyle === 'none') return;
+
+        if (bellStyle === 'visual') {
+          containerRef.current?.animate(
+            [
+              { filter: 'brightness(1)' },
+              { filter: 'brightness(1.55)' },
+              { filter: 'brightness(1)' },
+            ],
+            { duration: 180, easing: 'ease-out' },
+          );
+          return;
+        }
+
+        const audioContext = new AudioContext();
+        const playBell = async () => {
+          if (audioContext.state === 'suspended') await audioContext.resume();
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          const now = audioContext.currentTime;
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(660, now);
+          gain.gain.setValueAtTime(0.035, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          oscillator.start(now);
+          oscillator.stop(now + 0.1);
+          oscillator.addEventListener('ended', () => void audioContext.close(), { once: true });
+        };
+        void playBell().catch(() => void audioContext.close());
+      });
 
       // Load WebGL if enabled
       if (rendererType === 'webgl') {
@@ -88,8 +122,6 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         term.options.cursorBlink = s.cursorBlink;
         term.options.scrollback = s.scrollback;
         term.options.drawBoldTextInBrightColors = s.brightBold;
-        // @ts-ignore
-        term.options.bellStyle = s.bellStyle;
         try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
         try { fitAddon.fit(); } catch (_) { }
       };
@@ -97,10 +129,16 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       const unsubSettings = useSettingsStore.subscribe(applySettings);
 
       term.onData(data => {
-        (window as any).electron.writeTerminal(connectionId, data);
+        window.electron.writeTerminal(connectionId, data);
+        const submittedCommands = (data.match(/[\r\n]/g) || []).length;
+        queueUsage({
+          terminalInputCharacters: data.length,
+          serverOperations: submittedCommands,
+          activity: Math.min(40, data.length + submittedCommands * 4),
+        });
       });
 
-      const cleanup = (window as any).electron.onTerminalData((_: any, { id, data }: { id: string, data: string }) => {
+      const cleanup = window.electron.onTerminalData((_, { id, data }) => {
         if (id === connectionId) {
           term.write(data);
         }
@@ -124,7 +162,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         try {
           fitAddon.fit();
           if (term.cols > 0 && term.rows > 0) {
-            (window as any).electron.resizeTerminal(connectionId, term.cols, term.rows);
+            window.electron.resizeTerminal(connectionId, term.cols, term.rows);
           }
         } catch (e) {
           console.warn('Resize fit failed:', e);
@@ -139,6 +177,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       return () => {
         unsubTheme();
         unsubSettings();
+        bellDisposable.dispose();
         window.removeEventListener('terminal-refresh', handleTermRefresh);
         try {
           cleanup();
@@ -158,14 +197,18 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     // We need to manage cleanup manually since initTerminal is async
     let isMounted = true;
 
-    initTerminal().then(fn => {
-      if (isMounted) {
-        cleanupFn = fn;
-      } else {
-        // If unmounted before init finished, run cleanup immediately
-        fn();
-      }
-    });
+    void initTerminal()
+      .then(fn => {
+        if (isMounted) {
+          cleanupFn = fn;
+        } else {
+          // If unmounted before init finished, run cleanup immediately
+          fn();
+        }
+      })
+      .catch((error) => {
+        console.error(`[Terminal] Failed to initialize session ${connectionId}:`, error);
+      });
 
     return () => {
       isMounted = false;

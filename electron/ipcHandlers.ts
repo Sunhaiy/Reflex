@@ -2,14 +2,17 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import Store from 'electron-store';
 import fs from 'fs';
 import path from 'path';
-import type { SSHConnection } from '../src/shared/types.js';
+import type { SSHConnection, UsageDelta, UsageStats } from '../src/shared/types.js';
+import { mergeUsageDelta, normalizeUsageStats } from '../src/shared/usage.js';
 import { SSHManager } from './ssh/sshManager.js';
 
 const store = new Store();
-const sshManager = new SSHManager(store);
+const sshManager = new SSHManager();
 const LEGACY_STORE_DIR_NAMES = ['zangqing', 'Zangqing'];
 const MIGRATED_STORE_KEYS = [
   'connections',
+  'connectionDraft',
+  'appearance',
   'lastConnection',
   'terminalFontFamily',
   'uiFontFamily',
@@ -29,7 +32,30 @@ const MIGRATED_STORE_KEYS = [
   'accentColor',
   'terminalTheme',
   'opacity',
+  'usageStats',
 ];
+const ALLOWED_STORE_KEYS = new Set(MIGRATED_STORE_KEYS);
+
+function assertStoreKey(key: string) {
+  if (!ALLOWED_STORE_KEYS.has(key)) throw new Error('Unsupported settings key');
+}
+
+function getUsageStats(): UsageStats {
+  return normalizeUsageStats(store.get('usageStats'));
+}
+
+function recordUsage(delta: UsageDelta, sender?: Electron.WebContents) {
+  const stats = mergeUsageDelta(store.get('usageStats'), delta);
+  store.set('usageStats', stats);
+  if (sender && !sender.isDestroyed()) sender.send('usage-stats-updated', stats);
+  return stats;
+}
+
+async function trackServerOperation<T>(sender: Electron.WebContents, operation: () => Promise<T>, activity = 4) {
+  const result = await operation();
+  recordUsage({ serverOperations: 1, activity }, sender);
+  return result;
+}
 
 function isEmptyValue(value: unknown) {
   if (value === undefined || value === null || value === '') return true;
@@ -74,9 +100,23 @@ function migrateLegacyStore(targetStore: Store) {
 migrateLegacyStore(store);
 
 export function setupIpcHandlers() {
-  ipcMain.handle('store-get', (_event, key: string) => store.get(key));
-  ipcMain.handle('store-set', (_event, key: string, value: unknown) => store.set(key, value));
-  ipcMain.handle('store-delete', (_event, key: string) => store.delete(key));
+  ipcMain.handle('store-get', (_event, key: string) => {
+    assertStoreKey(key);
+    return store.get(key);
+  });
+  ipcMain.handle('store-set', (_event, key: string, value: unknown) => {
+    assertStoreKey(key);
+    return store.set(key, value);
+  });
+  ipcMain.handle('store-delete', (_event, key: string) => {
+    assertStoreKey(key);
+    return store.delete(key);
+  });
+  ipcMain.handle('usage-get', () => getUsageStats());
+  ipcMain.on('usage-record', (event, delta: UsageDelta) => {
+    if (!delta || typeof delta !== 'object') return;
+    recordUsage(delta, event.sender);
+  });
 
   ipcMain.handle('open-file-dialog', async (event, opts?: { title?: string; filters?: Electron.FileFilter[] }) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -92,35 +132,41 @@ export function setupIpcHandlers() {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  ipcMain.handle('ssh-connect', async (event, payload: { connection: SSHConnection; sessionId: string; profileId?: string }) => {
+  ipcMain.handle('ssh-connect', async (event, payload: { connection: SSHConnection; sessionId: string }) => {
     try {
-      await sshManager.connect(payload.connection, event.sender, payload.sessionId, payload.profileId);
+      await sshManager.connect(payload.connection, event.sender, payload.sessionId);
+      recordUsage({ successfulConnections: 1, serverOperations: 1, activity: 8 }, event.sender);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  ipcMain.handle('ssh-reconnect', async (_event, sessionId: string) => {
+  ipcMain.handle('ssh-reconnect', async (event, sessionId: string) => {
     try {
       await sshManager.reconnect(sessionId);
+      recordUsage({ successfulConnections: 1, serverOperations: 1, activity: 8 }, event.sender);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
+  });
+
+  ipcMain.handle('ssh-disconnect', (_event, sessionId: string) => {
+    sshManager.disconnect(sessionId);
   });
 
   ipcMain.on('term-write', (_event, { id, data }: { id: string; data: string }) => sshManager.write(id, data));
   ipcMain.on('term-resize', (_event, { id, cols, rows }: { id: string; cols: number; rows: number }) => sshManager.resize(id, cols, rows));
 
   ipcMain.handle('sftp-list', (_event, { id, path: remotePath }) => sshManager.listFiles(id, remotePath));
-  ipcMain.handle('sftp-upload', (_event, { id, localPath, remotePath }) => sshManager.uploadFile(id, localPath, remotePath));
-  ipcMain.handle('sftp-download', (_event, { id, remotePath, localPath }) => sshManager.downloadFile(id, remotePath, localPath));
-  ipcMain.handle('sftp-delete', (_event, { id, path: remotePath }) => sshManager.deleteFile(id, remotePath));
-  ipcMain.handle('sftp-mkdir', (_event, { id, path: remotePath }) => sshManager.createFolder(id, remotePath));
-  ipcMain.handle('sftp-rename', (_event, { id, oldPath, newPath }) => sshManager.renameFile(id, oldPath, newPath));
+  ipcMain.handle('sftp-upload', (event, { id, localPath, remotePath }) => trackServerOperation(event.sender, () => sshManager.uploadFile(id, localPath, remotePath), 6));
+  ipcMain.handle('sftp-download', (event, { id, remotePath, localPath }) => trackServerOperation(event.sender, () => sshManager.downloadFile(id, remotePath, localPath), 6));
+  ipcMain.handle('sftp-delete', (event, { id, path: remotePath }) => trackServerOperation(event.sender, () => sshManager.deleteFile(id, remotePath)));
+  ipcMain.handle('sftp-mkdir', (event, { id, path: remotePath }) => trackServerOperation(event.sender, () => sshManager.createFolder(id, remotePath)));
+  ipcMain.handle('sftp-rename', (event, { id, oldPath, newPath }) => trackServerOperation(event.sender, () => sshManager.renameFile(id, oldPath, newPath)));
   ipcMain.handle('sftp-read-file', (_event, { id, path: remotePath }) => sshManager.readFile(id, remotePath));
-  ipcMain.handle('sftp-write-file', (_event, { id, path: remotePath, content }) => sshManager.writeFile(id, remotePath, content));
+  ipcMain.handle('sftp-write-file', (event, { id, path: remotePath, content }) => trackServerOperation(event.sender, () => sshManager.writeFile(id, remotePath, content), 5));
   ipcMain.handle('get-pwd', (_event, id: string) => sshManager.getPwd(id));
 
   ipcMain.handle('dialog-open', async () => {
@@ -135,14 +181,14 @@ export function setupIpcHandlers() {
   ipcMain.on('start-monitoring', (event, id: string) => sshManager.startMonitoring(id, event.sender));
   ipcMain.on('stop-monitoring', (_event, id: string) => sshManager.stopMonitoring(id));
   ipcMain.handle('get-processes', (_event, id: string) => sshManager.getProcesses(id));
-  ipcMain.handle('kill-process', (_event, { id, pid }: { id: string; pid: number }) => sshManager.killProcess(id, pid));
+  ipcMain.handle('kill-process', (event, { id, pid }: { id: string; pid: number }) => trackServerOperation(event.sender, () => sshManager.killProcess(id, pid), 5));
 
   ipcMain.handle('docker-list', (_event, id: string) => sshManager.getDockerContainers(id));
-  ipcMain.handle('docker-action', (_event, { id, containerId, action }) => sshManager.dockerAction(id, containerId, action));
+  ipcMain.handle('docker-action', (event, { id, containerId, action }) => trackServerOperation(event.sender, () => sshManager.dockerAction(id, containerId, action), 5));
   ipcMain.handle('docker-logs', (_event, { id, containerId, lines }) => sshManager.dockerLogs(id, containerId, lines));
   ipcMain.handle('docker-images', (_event, id: string) => sshManager.dockerImages(id));
-  ipcMain.handle('docker-remove-image', (_event, { id, imageId }) => sshManager.dockerRemoveImage(id, imageId));
-  ipcMain.handle('docker-prune', (_event, { id, type }) => sshManager.dockerPrune(id, type));
+  ipcMain.handle('docker-remove-image', (event, { id, imageId }) => trackServerOperation(event.sender, () => sshManager.dockerRemoveImage(id, imageId), 5));
+  ipcMain.handle('docker-prune', (event, { id, type }) => trackServerOperation(event.sender, () => sshManager.dockerPrune(id, type), 6));
   ipcMain.handle('docker-disk-usage', (_event, id: string) => sshManager.dockerDiskUsage(id));
 
   ipcMain.on('window-minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize());

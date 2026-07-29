@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import type { Language } from '../shared/locales';
 import {
-    HOPPSCOTCH_MONO_FONT_STACK,
-    HOPPSCOTCH_UI_FONT_STACK,
+    DEFAULT_TERMINAL_FONT_STACK,
+    DEFAULT_UI_FONT_STACK,
+    normalizeTerminalFont,
+    normalizeUiFont,
 } from '../shared/fontStacks';
 
 interface SettingsState {
@@ -42,10 +44,23 @@ function persist(key: string, value: unknown) {
     void window.electron.storeSet(key, value);
 }
 
+function normalizeSettingNumber(
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number,
+    step: number,
+) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+    const clamped = Math.min(max, Math.max(min, value));
+    const rounded = Math.round(clamped / step) * step;
+    return Number(rounded.toFixed(4));
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     language: 'en',
-    uiFontFamily: HOPPSCOTCH_UI_FONT_STACK,
-    terminalFontFamily: HOPPSCOTCH_MONO_FONT_STACK,
+    uiFontFamily: DEFAULT_UI_FONT_STACK,
+    terminalFontFamily: DEFAULT_TERMINAL_FONT_STACK,
     fontSize: 14,
     lineHeight: 1.2,
     letterSpacing: 0,
@@ -71,16 +86,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         persist('terminalFontFamily', terminalFontFamily);
     },
     setFontSize: (fontSize) => {
-        set({ fontSize });
-        persist('fontSize', fontSize);
+        const value = normalizeSettingNumber(fontSize, get().fontSize, 10, 24, 1);
+        set({ fontSize: value });
+        persist('fontSize', value);
     },
     setLineHeight: (lineHeight) => {
-        set({ lineHeight });
-        persist('lineHeight', lineHeight);
+        const value = normalizeSettingNumber(lineHeight, get().lineHeight, 1, 2, 0.1);
+        set({ lineHeight: value });
+        persist('lineHeight', value);
     },
     setLetterSpacing: (letterSpacing) => {
-        set({ letterSpacing });
-        persist('letterSpacing', letterSpacing);
+        const value = normalizeSettingNumber(letterSpacing, get().letterSpacing, -5, 5, 0.5);
+        set({ letterSpacing: value });
+        persist('letterSpacing', value);
     },
     setCursorStyle: (cursorStyle) => {
         set({ cursorStyle });
@@ -95,8 +113,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         persist('rendererType', rendererType);
     },
     setScrollback: (scrollback) => {
-        set({ scrollback });
-        persist('scrollback', scrollback);
+        const value = normalizeSettingNumber(scrollback, get().scrollback, 1000, 100000, 1000);
+        set({ scrollback: value });
+        persist('scrollback', value);
     },
     setBrightBold: (brightBold) => {
         set({ brightBold });
@@ -122,6 +141,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     initSettings: async () => {
         const [
             language,
+            uiFontFamily,
+            terminalFontFamily,
             fontSize,
             lineHeight,
             letterSpacing,
@@ -135,6 +156,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             autoReconnect,
         ] = await Promise.all([
             window.electron.storeGet('language'),
+            window.electron.storeGet('uiFontFamily'),
+            window.electron.storeGet('terminalFontFamily'),
             window.electron.storeGet('fontSize'),
             window.electron.storeGet('lineHeight'),
             window.electron.storeGet('letterSpacing'),
@@ -150,22 +173,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
         set({
             language: (language as Language) || 'en',
-            uiFontFamily: HOPPSCOTCH_UI_FONT_STACK,
-            terminalFontFamily: HOPPSCOTCH_MONO_FONT_STACK,
-            fontSize: typeof fontSize === 'number' ? fontSize : 14,
-            lineHeight: typeof lineHeight === 'number' ? lineHeight : 1.2,
-            letterSpacing: typeof letterSpacing === 'number' ? letterSpacing : 0,
+            uiFontFamily: normalizeUiFont(uiFontFamily),
+            terminalFontFamily: normalizeTerminalFont(terminalFontFamily),
+            fontSize: normalizeSettingNumber(fontSize, 14, 10, 24, 1),
+            lineHeight: normalizeSettingNumber(lineHeight, 1.2, 1, 2, 0.1),
+            letterSpacing: normalizeSettingNumber(letterSpacing, 0, -5, 5, 0.5),
             cursorStyle: (cursorStyle as SettingsState['cursorStyle']) || 'block',
             cursorBlink: typeof cursorBlink === 'boolean' ? cursorBlink : true,
             rendererType: (rendererType as SettingsState['rendererType']) || 'canvas',
-            scrollback: typeof scrollback === 'number' ? scrollback : 5000,
+            scrollback: normalizeSettingNumber(scrollback, 5000, 1000, 100000, 1000),
             brightBold: typeof brightBold === 'boolean' ? brightBold : true,
             bellStyle: (bellStyle as SettingsState['bellStyle']) || 'none',
             bookmarks: Array.isArray(bookmarks) ? bookmarks : [],
             autoReconnect: typeof autoReconnect === 'boolean' ? autoReconnect : false,
         });
 
-        persist('uiFontFamily', HOPPSCOTCH_UI_FONT_STACK);
-        persist('terminalFontFamily', HOPPSCOTCH_MONO_FONT_STACK);
     },
 }));

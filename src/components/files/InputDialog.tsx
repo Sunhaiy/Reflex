@@ -26,11 +26,11 @@ export function InputDialog({ title, placeholder, defaultValue = '', onConfirm, 
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-card border border-border rounded-xl shadow-2xl w-72 p-5 animate-in zoom-in-95">
+            <div className="w-72 rounded-2xl border border-border/70 bg-card p-5 shadow-2xl animate-in zoom-in-95">
                 <h3 className="text-sm font-semibold mb-4">{title}</h3>
                 <input
                     ref={inputRef}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-muted/30 outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors mb-4"
+                    className="mb-4 w-full rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-sm outline-none transition-colors focus:border-foreground/25 focus:ring-1 focus:ring-foreground/15"
                     placeholder={placeholder}
                     value={value}
                     onChange={e => setValue(e.target.value)}
@@ -49,7 +49,7 @@ export function InputDialog({ title, placeholder, defaultValue = '', onConfirm, 
                     <button
                         onClick={submit}
                         disabled={!value.trim()}
-                        className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40"
+                        className="rounded-lg bg-foreground px-3 py-1.5 text-xs text-background transition-opacity hover:opacity-90 disabled:opacity-40"
                     >
                         {t('common.confirm')}
                     </button>

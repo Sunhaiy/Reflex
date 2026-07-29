@@ -1,38 +1,102 @@
-import { Client, ClientChannel } from 'ssh2';
+import { Client, type ClientChannel } from 'ssh2';
 
-import { SSHConnection, SystemStats, FileEntry, CpuCore } from '../../src/shared/types';
-import { WebContents, dialog } from 'electron';
+import type { SSHConnection, SystemStats, FileEntry, CpuCore } from '../../src/shared/types';
+import type { WebContents } from 'electron';
 import { readFileSync } from 'fs';
-import path from 'path';
+
+interface CpuTimes {
+    total: number;
+    idle: number;
+}
+
+interface CpuSnapshot {
+    total: CpuTimes;
+    cores: Map<number, CpuTimes>;
+}
 
 export class SSHManager {
     private connections: Map<string, Client> = new Map();
+    private jumpConnections: Map<string, Client> = new Map();
     private streams: Map<string, ClientChannel> = new Map();
     private intervals: Map<string, NodeJS.Timeout> = new Map();
-    private prevCpu: any = null;
-    private prevNet: any = null;
+    private prevCpuBySession: Map<string, CpuSnapshot> = new Map();
+    private prevNetBySession: Map<string, { time: number; rx: number; tx: number }> = new Map();
 
-    private profileIds: Map<string, string> = new Map();
     // Stored so we can reconnect automatically
     private connectionConfigs: Map<string, SSHConnection> = new Map();
     private webContentsBySession: Map<string, WebContents> = new Map();
-    private store: any;
 
-    constructor(store?: any) {
-        this.store = store;
+    private assertSafeIdentifier(value: string, label: string) {
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value)) {
+            throw new Error(`Invalid ${label}`);
+        }
     }
 
-    async connect(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
-        console.log(`[SSH] New connection request: session=${sessionId}, profile=${profileId}`);
+    private async execCommand(
+        id: string,
+        command: string,
+        maxOutputBytes = 4 * 1024 * 1024,
+    ): Promise<{ stdout: string; stderr: string }> {
+        const conn = this.connections.get(id);
+        if (!conn) throw new Error('Not connected');
+
+        return new Promise((resolve, reject) => {
+            conn.exec(command, (error, stream) => {
+                if (error) return reject(error);
+
+                let stdout = '';
+                let stderr = '';
+                let capturedBytes = 0;
+                let truncated = false;
+                let settled = false;
+
+                const append = (target: 'stdout' | 'stderr', chunk: Buffer) => {
+                    const text = chunk.toString();
+                    const remaining = maxOutputBytes - capturedBytes;
+                    if (remaining <= 0) {
+                        truncated = true;
+                        return;
+                    }
+                    const slice = Buffer.from(text).subarray(0, remaining).toString();
+                    capturedBytes += Buffer.byteLength(slice);
+                    if (slice.length < text.length) truncated = true;
+                    if (target === 'stdout') stdout += slice;
+                    else stderr += slice;
+                };
+
+                stream.on('data', (chunk: Buffer) => append('stdout', chunk));
+                stream.stderr.on('data', (chunk: Buffer) => append('stderr', chunk));
+                stream.on('error', (streamError: Error) => {
+                    if (settled) return;
+                    settled = true;
+                    reject(streamError);
+                });
+                stream.on('close', (code: number | null, signal?: string) => {
+                    if (settled) return;
+                    settled = true;
+                    const suffix = truncated ? '\n[output truncated]' : '';
+                    if (suffix) stdout += suffix;
+                    if (signal || (typeof code === 'number' && code !== 0)) {
+                        reject(new Error(stderr.trim() || stdout.trim() || `Command failed (${signal || code})`));
+                        return;
+                    }
+                    resolve({ stdout, stderr });
+                });
+            });
+        });
+    }
+
+    async connect(connection: SSHConnection, webContents: WebContents, sessionId: string): Promise<void> {
+        console.log(`[SSH] New connection request: session=${sessionId}`);
         // Store for auto-reconnect
         this.connectionConfigs.set(sessionId, connection);
         this.webContentsBySession.set(sessionId, webContents);
         this.emitStatus(sessionId, 'connecting', webContents);
 
         if (connection.jumpHost) {
-            return this._connectViaJump(connection, webContents, sessionId, profileId);
+            return this._connectViaJump(connection, webContents, sessionId);
         }
-        return this._connectDirect(connection, webContents, sessionId, profileId);
+        return this._connectDirect(connection, webContents, sessionId);
     }
 
     /** Re-establish the SSH connection using the stored config. */
@@ -44,20 +108,7 @@ export class SSHManager {
         }
         console.log(`[SSH] Auto-reconnect attempt for session=${sessionId}`);
         this.cleanup(sessionId);
-        const profileId = this.profileIds.get(sessionId);
-        await this.connect(connection, webContents, sessionId, profileId);
-    }
-
-    getConnectionConfig(sessionId: string): SSHConnection | undefined {
-        return this.connectionConfigs.get(sessionId);
-    }
-
-    registerPersistentSession(sessionId: string, connection: SSHConnection, webContents: WebContents, profileId?: string) {
-        this.connectionConfigs.set(sessionId, connection);
-        this.webContentsBySession.set(sessionId, webContents);
-        if (profileId) {
-            this.profileIds.set(sessionId, profileId);
-        }
+        await this.connect(connection, webContents, sessionId);
     }
 
     private emitStatus(sessionId: string, status: 'connecting' | 'connected' | 'disconnected', webContents?: WebContents) {
@@ -74,8 +125,9 @@ export class SSHManager {
             readyTimeout: 30000,
             keepaliveInterval: 10000,
             keepaliveCountMax: 3,
-            compress: true,
-            algorithms: { compress: ['zlib@openssh.com', 'zlib', 'none'] }
+            // Interactive terminal traffic gains little from forced zlib, while
+            // ssh2 can emit "Invalid Zlib instance" during compressed teardown.
+            compress: false,
         };
         if (connection.authType === 'privateKey' && connection.privateKeyPath) {
             config.privateKey = readFileSync(connection.privateKeyPath);
@@ -87,9 +139,8 @@ export class SSHManager {
         return config;
     }
 
-    private _attachShell(conn: Client, webContents: WebContents, sessionId: string, profileId: string | undefined, resolve: Function, reject: Function) {
+    private _attachShell(conn: Client, webContents: WebContents, sessionId: string, resolve: () => void, reject: (error: Error) => void) {
         this.connections.set(sessionId, conn);
-        if (profileId) this.profileIds.set(sessionId, profileId);
         conn.shell((err, stream) => {
             if (err) { this.cleanup(sessionId); return reject(err); }
             this.streams.set(sessionId, stream);
@@ -127,12 +178,13 @@ export class SSHManager {
         });
     }
 
-    private _connectDirect(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
+    private _connectDirect(connection: SSHConnection, webContents: WebContents, sessionId: string): Promise<void> {
         return new Promise((resolve, reject) => {
             const conn = new Client();
+            this.connections.set(sessionId, conn);
             conn.on('ready', () => {
                 console.log(`[SSH] Connection ready: session=${sessionId}`);
-                this._attachShell(conn, webContents, sessionId, profileId, resolve, reject);
+                this._attachShell(conn, webContents, sessionId, resolve, reject);
             });
             conn.on('error', (err) => {
                 console.error(`[SSH] Connection error for ${connection.host}:${connection.port} (auth=${connection.authType}): ${err.message}`);
@@ -154,91 +206,131 @@ export class SSHManager {
             });
             try { conn.connect(this._buildConfig(connection)); } catch (err: any) {
                 console.error(`[SSH] Connect threw:`, err);
+                this.cleanup(sessionId);
                 this.emitStatus(sessionId, 'disconnected', webContents);
                 reject(err);
             }
         });
     }
 
-    private _connectViaJump(connection: SSHConnection, webContents: WebContents, sessionId: string, profileId?: string): Promise<void> {
+    private _connectViaJump(connection: SSHConnection, webContents: WebContents, sessionId: string): Promise<void> {
         return new Promise((resolve, reject) => {
             const jump = new Client();
-            const jumpConfig: any = {
-                host: connection.jumpHost,
-                port: connection.jumpPort || 22,
-                username: connection.jumpUsername || connection.username,
-                readyTimeout: 15000,
-            };
-            if (connection.jumpPrivateKeyPath) {
-                jumpConfig.privateKey = readFileSync(connection.jumpPrivateKeyPath);
-            } else {
-                jumpConfig.password = connection.jumpPassword || connection.password;
+            this.jumpConnections.set(sessionId, jump);
+            let jumpConfig: any;
+            try {
+                jumpConfig = {
+                    host: connection.jumpHost,
+                    port: connection.jumpPort || 22,
+                    username: connection.jumpUsername || connection.username,
+                    readyTimeout: 15000,
+                };
+                if (connection.jumpPrivateKeyPath) {
+                    jumpConfig.privateKey = readFileSync(connection.jumpPrivateKeyPath);
+                } else {
+                    jumpConfig.password = connection.jumpPassword || connection.password;
+                }
+            } catch (error) {
+                this.cleanup(sessionId);
+                reject(error);
+                return;
             }
 
             jump.on('ready', () => {
                 console.log(`[SSH] Jump host ready, forwarding to ${connection.host}`);
                 jump.forwardOut('127.0.0.1', 0, connection.host, connection.port, (err, channel) => {
                     if (err) {
-                        jump.end();
+                        this.cleanup(sessionId);
                         this.emitStatus(sessionId, 'disconnected', webContents);
                         return reject(err);
                     }
 
                     const conn = new Client();
-                    const directConfig = this._buildConfig(connection);
+                    this.connections.set(sessionId, conn);
+                    let directConfig: any;
+                    try {
+                        directConfig = this._buildConfig(connection);
+                    } catch (error) {
+                        this.cleanup(sessionId);
+                        reject(error);
+                        return;
+                    }
                     directConfig.sock = channel; // tunnel through jump
                     delete directConfig.host; delete directConfig.port;
 
                     conn.on('ready', () => {
                         console.log(`[SSH] Tunneled connection ready: session=${sessionId}`);
-                        this._attachShell(conn, webContents, sessionId, profileId, resolve, reject);
+                        this._attachShell(conn, webContents, sessionId, resolve, reject);
                     });
                     conn.on('error', (e) => {
-                        jump.end();
                         const currentConn = this.connections.get(sessionId);
                         if (currentConn && currentConn !== conn) return;
+                        this.cleanup(sessionId);
                         this.emitStatus(sessionId, 'disconnected', webContents);
                         reject(e);
                     });
                     conn.on('close', () => {
-                        jump.end();
                         if (this.connections.get(sessionId) === conn) {
                             this.cleanup(sessionId);
                             this.emitStatus(sessionId, 'disconnected', webContents);
                         }
                     });
-                    conn.connect(directConfig);
+                    try {
+                        conn.connect(directConfig);
+                    } catch (error) {
+                        this.cleanup(sessionId);
+                        reject(error);
+                    }
                 });
             });
             jump.on('error', (err) => {
+                if (this.jumpConnections.get(sessionId) !== jump) return;
+                this.cleanup(sessionId);
                 this.emitStatus(sessionId, 'disconnected', webContents);
                 reject(err);
             });
-            jump.connect(jumpConfig);
+            try {
+                jump.connect(jumpConfig);
+            } catch (error) {
+                this.cleanup(sessionId);
+                reject(error);
+            }
         });
     }
 
     cleanup(id: string) {
-        if (!this.connections.has(id) && !this.streams.has(id)) return;
-
-        console.log(`[SSH] Cleaning up resources for session: ${id}`);
+        const hasResources = this.connections.has(id) || this.jumpConnections.has(id) || this.streams.has(id) || this.intervals.has(id);
+        if (hasResources) console.log(`[SSH] Cleaning up resources for session: ${id}`);
         this.stopMonitoring(id);
+        this.prevCpuBySession.delete(id);
+        this.prevNetBySession.delete(id);
 
         const stream = this.streams.get(id);
         if (stream) {
-            try { stream.end(); } catch (e) { }
             this.streams.delete(id);
+            try { stream.end(); } catch (e) { }
         }
 
         const conn = this.connections.get(id);
         if (conn) {
-            try { conn.end(); } catch (e) { }
             this.connections.delete(id);
+            try { conn.end(); } catch (e) { }
         }
 
-        this.profileIds.delete(id);
+        const jump = this.jumpConnections.get(id);
+        if (jump) {
+            this.jumpConnections.delete(id);
+            try { jump.end(); } catch (e) { }
+        }
+
         // Note: do NOT clear connectionConfigs / webContentsBySession here —
         // they are needed for reconnect() after a drop.
+    }
+
+    disconnect(id: string) {
+        this.cleanup(id);
+        this.connectionConfigs.delete(id);
+        this.webContentsBySession.delete(id);
     }
 
     write(id: string, data: string) {
@@ -412,19 +504,21 @@ export class SSHManager {
     echo ">>>CPU_INFO"; cat /proc/cpuinfo | grep -E "model name|cpu MHz" | head -2;
     echo ">>>MEM"; cat /proc/meminfo; 
     echo ">>>NET"; cat /proc/net/dev; 
-    echo ">>>DISK"; df -B1 -x tmpfs -x devtmpfs;
+    echo ">>>DISK"; df -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs;
     `;
 
         let pending = false; // prevent overlapping execs when network is slow
 
-        const interval = setInterval(() => {
+        const collect = () => {
             const conn = this.connections.get(id);
             if (!conn) return this.stopMonitoring(id);
             if (pending) return; // skip this tick if the previous one is still running
             pending = true;
 
             let stream: any;
+            let timedOut = false;
             const timeout = setTimeout(() => {
+                timedOut = true;
                 try {
                     if (stream) {
                         stream.removeAllListeners('error');
@@ -443,16 +537,25 @@ export class SSHManager {
                 stream = s;
                 let output = '';
                 stream.on('data', (data: any) => output += data.toString());
+                stream.on('error', () => {
+                    clearTimeout(timeout);
+                    pending = false;
+                });
                 stream.on('close', () => {
                     clearTimeout(timeout);
                     pending = false;
-                    const stats = this.parseStats(output);
-                    if (stats) webContents.send('stats-update', { id, stats });
+                    if (timedOut) return;
+                    const stats = this.parseStats(id, output);
+                    if (stats && !webContents.isDestroyed()) {
+                        webContents.send('stats-update', { id, stats });
+                    }
                 });
             });
-        }, 2000);
+        };
 
+        const interval = setInterval(collect, 2000);
         this.intervals.set(id, interval);
+        collect();
     }
 
     stopMonitoring(id: string) {
@@ -464,44 +567,34 @@ export class SSHManager {
     }
 
     async getProcesses(id: string): Promise<any[]> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
-        return new Promise((resolve, reject) => {
-            // ps -ax -o pid,user,%cpu,%mem,comm,args --sort=-%cpu | head -n 50
-            const cmd = 'ps -ax -o pid,user,%cpu,%mem,comm,args --sort=-%cpu | head -n 50';
-            conn.exec(cmd, (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', () => {
-                    const lines = output.trim().split('\n');
-                    // Skip header
-                    const processes = lines.slice(1).map(line => {
-                        const parts = line.trim().split(/\s+/);
-                        if (parts.length < 6) return null;
-
-                        // args can be multiple parts, join them back
-                        const args = parts.slice(5).join(' ');
-
-                        return {
-                            pid: parseInt(parts[0]),
-                            user: parts[1],
-                            cpu: parseFloat(parts[2]),
-                            mem: parseFloat(parts[3]),
-                            command: parts[4],
-                            args: args
-                        };
-                    }).filter(p => p !== null);
-                    resolve(processes);
-                });
-            });
-        });
+        const { stdout } = await this.execCommand(
+            id,
+            'ps -ax -o pid,user,%cpu,%mem,comm,args',
+            2 * 1024 * 1024,
+        );
+        const lines = stdout.trim().split('\n');
+        return lines.slice(1).map((line) => {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length < 6) return null;
+            const pid = Number.parseInt(parts[0], 10);
+            const cpu = Number.parseFloat(parts[2]);
+            const mem = Number.parseFloat(parts[3]);
+            if (!Number.isSafeInteger(pid) || !Number.isFinite(cpu) || !Number.isFinite(mem)) return null;
+            return {
+                pid,
+                user: parts[1],
+                cpu,
+                mem,
+                command: parts[4],
+                args: parts.slice(5).join(' '),
+            };
+        }).filter((process) => process !== null);
     }
 
     async killProcess(id: string, pid: number): Promise<void> {
         const conn = this.connections.get(id);
         if (!conn) throw new Error('Not connected');
+        if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('Invalid process ID');
 
         return new Promise((resolve, reject) => {
             conn.exec(`kill -9 ${pid}`, (err, stream) => {
@@ -515,149 +608,79 @@ export class SSHManager {
     }
 
     async getDockerContainers(id: string): Promise<any[]> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
-        return new Promise((resolve, reject) => {
-            const cmd = 'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.State}}|{{.Ports}}|{{.Label \\"com.docker.compose.project\\"}}"';
-            conn.exec(cmd, (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', () => {
-                    try {
-                        const containers = output.trim().split('\n').filter(line => line.trim()).map(line => {
-                            const parts = line.split('|');
-                            return {
-                                id: parts[0] || '',
-                                name: parts[1] || '',
-                                image: parts[2] || '',
-                                status: parts[3] || '',
-                                state: parts[4] || '',
-                                ports: parts[5] || '',
-                                composeProject: parts[6] || '',
-                            };
-                        });
-                        resolve(containers);
-                    } catch (e) {
-                        resolve([]);
-                    }
-                });
-            });
+        const command = 'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.State}}|{{.Ports}}|{{.Label \\"com.docker.compose.project\\"}}"';
+        const { stdout } = await this.execCommand(id, command, 2 * 1024 * 1024);
+        return stdout.trim().split('\n').filter((line) => line.trim()).map((line) => {
+            const parts = line.split('|');
+            return {
+                id: parts[0] || '',
+                name: parts[1] || '',
+                image: parts[2] || '',
+                status: parts[3] || '',
+                state: parts[4] || '',
+                ports: parts[5] || '',
+                composeProject: parts[6] || '',
+            };
         });
     }
 
     async dockerAction(id: string, containerId: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove'): Promise<void> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
+        this.assertSafeIdentifier(containerId, 'container ID');
+        const allowedActions = new Set(['start', 'stop', 'restart', 'pause', 'unpause', 'remove']);
+        if (!allowedActions.has(action)) throw new Error('Invalid Docker action');
 
         const cmd = action === 'remove' ? `docker rm -f ${containerId}` : `docker ${action} ${containerId}`;
-        return new Promise((resolve, reject) => {
-            conn.exec(cmd, (err, stream) => {
-                if (err) return reject(err);
-                let stderr = '';
-                stream.on('data', () => { });
-                stream.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
-                stream.on('close', (code: any) => {
-                    if (code === 0) resolve();
-                    else reject(new Error(stderr || `Docker action failed with code ${code}`));
-                });
-            });
-        });
+        await this.execCommand(id, cmd);
     }
 
     async dockerLogs(id: string, containerId: string, lines: number = 200): Promise<string> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
-        return new Promise((resolve, reject) => {
-            conn.exec(`docker logs --tail ${lines} ${containerId} 2>&1`, (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', () => resolve(output));
-            });
-        });
+        this.assertSafeIdentifier(containerId, 'container ID');
+        const safeLines = Math.min(10_000, Math.max(1, Math.trunc(lines)));
+        const { stdout, stderr } = await this.execCommand(
+            id,
+            `docker logs --tail ${safeLines} ${containerId}`,
+        );
+        return `${stdout}${stderr}`;
     }
 
     async dockerImages(id: string): Promise<any[]> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
-        return new Promise((resolve, reject) => {
-            conn.exec('docker images --format "{{.ID}}|{{.Repository}}|{{.Tag}}|{{.Size}}|{{.CreatedSince}}"', (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', () => {
-                    try {
-                        const images = output.trim().split('\n').filter(l => l.trim()).map(line => {
-                            const [imgId, repo, tag, size, created] = line.split('|');
-                            return { id: imgId, repository: repo, tag, size, created };
-                        });
-                        resolve(images);
-                    } catch {
-                        resolve([]);
-                    }
-                });
-            });
+        const { stdout } = await this.execCommand(
+            id,
+            'docker images --format "{{.ID}}|{{.Repository}}|{{.Tag}}|{{.Size}}|{{.CreatedSince}}"',
+            2 * 1024 * 1024,
+        );
+        return stdout.trim().split('\n').filter((line) => line.trim()).map((line) => {
+            const [imageId, repository, tag, size, created] = line.split('|');
+            return { id: imageId, repository, tag, size, created };
         });
     }
 
     async dockerRemoveImage(id: string, imageId: string): Promise<string> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
-        return new Promise((resolve, reject) => {
-            conn.exec(`docker rmi ${imageId} 2>&1`, (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', (code: any) => {
-                    if (code === 0) resolve(output);
-                    else reject(new Error(output || 'Failed to remove image'));
-                });
-            });
-        });
+        this.assertSafeIdentifier(imageId, 'image ID');
+        const { stdout, stderr } = await this.execCommand(id, `docker rmi ${imageId}`);
+        return `${stdout}${stderr}`;
     }
 
     async dockerPrune(id: string, type: 'system' | 'images' | 'volumes' | 'containers'): Promise<string> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
         const cmds: Record<string, string> = {
-            system: 'docker system prune -af --volumes 2>&1',
-            images: 'docker image prune -af 2>&1',
-            volumes: 'docker volume prune -af 2>&1',
-            containers: 'docker container prune -f 2>&1',
+            system: 'docker system prune -af --volumes',
+            images: 'docker image prune -af',
+            volumes: 'docker volume prune -af',
+            containers: 'docker container prune -f',
         };
-
-        return new Promise((resolve, reject) => {
-            conn.exec(cmds[type], (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', () => resolve(output));
-            });
-        });
+        const command = cmds[type];
+        if (!command) throw new Error('Invalid Docker prune type');
+        const { stdout, stderr } = await this.execCommand(id, command);
+        return `${stdout}${stderr}`;
     }
 
     async dockerDiskUsage(id: string): Promise<string> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-
-        return new Promise((resolve, reject) => {
-            conn.exec('docker system df 2>&1', (err, stream) => {
-                if (err) return reject(err);
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('close', () => resolve(output));
-            });
-        });
+        const { stdout, stderr } = await this.execCommand(id, 'docker system df');
+        return `${stdout}${stderr}`;
     }
 
 
-    private parseStats(output: string): SystemStats | null {
+    private parseStats(sessionId: string, output: string): SystemStats | null {
         try {
             const parts = output.split('>>>');
             const data: any = {};
@@ -692,41 +715,48 @@ export class SSHManager {
             const totalCpuLine = cpuLines[0]; // cpu  ...
             const coreLines = cpuLines.slice(1);
 
-            const parseCpuLine = (line: string) => {
+            const parseCpuLine = (line: string): CpuTimes | null => {
                 const parts = line.split(/\s+/);
                 if (parts.length < 5) return null;
+                const values = parts.slice(1).map((value) => Number.parseInt(value, 10));
+                if (values.some((value) => !Number.isFinite(value))) return null;
                 return {
-                    user: parseInt(parts[1]),
-                    nice: parseInt(parts[2]),
-                    sys: parseInt(parts[3]),
-                    idle: parseInt(parts[4])
+                    total: values.reduce((sum, value) => sum + value, 0),
+                    // Linux reports iowait immediately after idle. Treat both as
+                    // idle time so busy I/O does not appear as CPU execution.
+                    idle: values[3] + (values[4] || 0),
                 };
             };
 
             const currentTotalCpu = parseCpuLine(totalCpuLine);
+            const previousCpu = this.prevCpuBySession.get(sessionId);
             let totalUsage = 0;
 
-            if (currentTotalCpu && this.prevCpu) {
-                const prev = this.prevCpu.total;
-                const curr = currentTotalCpu;
-                const totalDiff = (curr.user + curr.nice + curr.sys + curr.idle) - (prev.user + prev.nice + prev.sys + prev.idle);
+            const calculateCpuUsage = (curr: CpuTimes, prev?: CpuTimes) => {
+                if (!prev) return 0;
+                const totalDiff = curr.total - prev.total;
                 const idleDiff = curr.idle - prev.idle;
-                totalUsage = totalDiff > 0 ? Math.round(((totalDiff - idleDiff) / totalDiff) * 100) : 0;
+                return totalDiff > 0
+                    ? Math.min(100, Math.max(0, Math.round(((totalDiff - idleDiff) / totalDiff) * 100)))
+                    : 0;
+            };
+
+            if (currentTotalCpu) {
+                totalUsage = calculateCpuUsage(currentTotalCpu, previousCpu?.total);
             }
 
+            const currentCoreTimes = new Map<number, CpuTimes>();
             const cores: CpuCore[] = coreLines.map((line: string, index: number) => {
                 const match = line.match(/^cpu(\d+)\s+/);
                 const id = match ? parseInt(match[1]) : index;
                 const coreStats = parseCpuLine(line);
-                let usage = 0;
-                if (coreStats) {
-                    usage = totalUsage; // Placeholder
-                }
+                if (coreStats) currentCoreTimes.set(id, coreStats);
+                const usage = coreStats ? calculateCpuUsage(coreStats, previousCpu?.cores.get(id)) : 0;
                 return { id, usage };
             });
 
             if (currentTotalCpu) {
-                this.prevCpu = { total: currentTotalCpu };
+                this.prevCpuBySession.set(sessionId, { total: currentTotalCpu, cores: currentCoreTimes });
             }
 
             // Network
@@ -746,14 +776,15 @@ export class SSHManager {
             let upSpeed = 0;
             let downSpeed = 0;
 
-            if (this.prevNet) {
-                const timeDiff = (now - this.prevNet.time) / 1000;
+            const previousNet = this.prevNetBySession.get(sessionId);
+            if (previousNet) {
+                const timeDiff = (now - previousNet.time) / 1000;
                 if (timeDiff > 0) {
-                    downSpeed = Math.round((totalRx - this.prevNet.rx) / timeDiff);
-                    upSpeed = Math.round((totalTx - this.prevNet.tx) / timeDiff);
+                    downSpeed = Math.max(0, Math.round((totalRx - previousNet.rx) / timeDiff));
+                    upSpeed = Math.max(0, Math.round((totalTx - previousNet.tx) / timeDiff));
                 }
             }
-            this.prevNet = { time: now, rx: totalRx, tx: totalTx };
+            this.prevNetBySession.set(sessionId, { time: now, rx: totalRx, tx: totalTx });
 
             // Disk
             const diskInfo = data['DISK'] || '';

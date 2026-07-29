@@ -1,6 +1,7 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon, ArrowUp01Icon, CancelCircleIcon, CheckmarkCircle02Icon, Delete02Icon, Download01Icon, Upload01Icon } from "@hugeicons/core-free-icons";
 import { useState } from 'react';
 import { TransferItem } from './hooks/useTransferQueue';
-import { Download, Upload, CheckCircle2, XCircle, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -19,7 +20,7 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
     const history = transfers.filter(t => t.status !== 'active');
 
     return (
-        <div className="border-t border-border shrink-0 bg-card/50">
+        <div className="mx-1.5 mb-1.5 shrink-0 overflow-hidden rounded-xl bg-foreground/[0.035]">
             {/* Header */}
             <div
                 className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30 transition-colors select-none"
@@ -28,7 +29,7 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex-1">
                     {t('fileBrowser.transfers')}
                     {active.length > 0 && (
-                        <span className="ml-1.5 px-1.5 py-0.5 bg-primary/20 text-primary rounded-full">{active.length}</span>
+                        <span className="ml-1.5 rounded-full bg-foreground/10 px-1.5 py-0.5 text-foreground">{active.length}</span>
                     )}
                 </span>
                 {history.length > 0 && (
@@ -37,10 +38,10 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
                         className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                         title={t('fileBrowser.clearHistory')}
                     >
-                        <Trash2 className="w-3 h-3" />
+                        <HugeiconsIcon icon={Delete02Icon} className="w-3 h-3" />
                     </button>
                 )}
-                {expanded ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronUp className="w-3 h-3 text-muted-foreground" />}
+                {expanded ? <HugeiconsIcon icon={ArrowDown01Icon} className="w-3 h-3 text-muted-foreground" /> : <HugeiconsIcon icon={ArrowUp01Icon} className="w-3 h-3 text-muted-foreground" />}
             </div>
 
             {expanded && (
@@ -49,8 +50,8 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
                         <div key={t.id} className="flex items-center gap-2 text-xs px-1">
                             {/* Direction icon */}
                             {t.direction === 'download'
-                                ? <Download className="w-3 h-3 shrink-0 text-blue-400" />
-                                : <Upload className="w-3 h-3 shrink-0 text-emerald-400" />
+                                ? <HugeiconsIcon icon={Download01Icon} className="w-3 h-3 shrink-0 text-muted-foreground" />
+                                : <HugeiconsIcon icon={Upload01Icon} className="w-3 h-3 shrink-0 text-muted-foreground" />
                             }
                             {/* Name */}
                             <span className="flex-1 truncate text-muted-foreground" title={t.name}>{t.name}</span>
@@ -58,18 +59,15 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
                             {t.status === 'active' ? (
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-primary rounded-full transition-all duration-300"
-                                            style={{ width: `${t.progress}%` }}
-                                        />
+                                        <div className="h-full w-1/2 animate-pulse rounded-full bg-foreground/75" />
                                     </div>
-                                    <span className="text-[10px] text-muted-foreground/60 w-8 text-right tabular-nums">{t.progress}%</span>
+                                    <span className="w-8 text-right text-[10px] text-muted-foreground/60">···</span>
                                 </div>
                             ) : t.status === 'done' ? (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                             ) : (
                                 <div className="flex items-center gap-1 shrink-0" title={t.error}>
-                                    <XCircle className="w-3.5 h-3.5 text-destructive" />
+                                    <HugeiconsIcon icon={CancelCircleIcon} className="w-3.5 h-3.5 text-destructive" />
                                 </div>
                             )}
                         </div>

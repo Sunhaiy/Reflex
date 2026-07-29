@@ -1,16 +1,19 @@
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
 import { Button } from './button';
+import { cn } from '../../lib/utils';
 
 interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     title: string;
     children: React.ReactNode;
+    size?: 'sm' | 'md' | 'lg';
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
@@ -28,19 +31,24 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
     if (!isOpen) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md animate-in fade-in duration-200">
             <div
-                className="bg-background border border-border rounded-lg shadow-lg w-full max-w-lg flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+                className={cn(
+                    'glass-panel flex max-h-[92vh] w-full flex-col rounded-[28px] shadow-2xl animate-in zoom-in-95 duration-200',
+                    size === 'sm' && 'max-w-sm',
+                    size === 'md' && 'max-w-lg',
+                    size === 'lg' && 'max-w-2xl',
+                )}
                 role="dialog"
                 aria-modal="true"
             >
-                <div className="flex items-center justify-between p-4 border-b border-border">
-                    <h2 className="text-lg font-semibold">{title}</h2>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-                        <X className="w-4 h-4" />
+                <div className="flex items-center justify-between px-6 pb-2 pt-6">
+                    <h2 className="text-base font-semibold tracking-[-0.02em]">{title}</h2>
+                    <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-xl">
+                        <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4" />
                     </Button>
                 </div>
-                <div className="p-4 overflow-y-auto">
+                <div className="overflow-y-auto px-6 pb-6 pt-2">
                     {children}
                 </div>
             </div>

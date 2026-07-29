@@ -1,243 +1,118 @@
-
 import { create } from 'zustand';
 import {
-  BaseThemeId,
-  AccentColorId,
-  TerminalTheme,
-  TerminalThemeId,
-  baseThemes,
   accentColors,
+  type AccentColorId,
+  type AppearanceMode,
+  type ResolvedAppearance,
+  type TerminalTheme,
   terminalThemes,
-  ThemeColors
 } from '../shared/themes';
 
 interface ThemeState {
-  baseThemeId: BaseThemeId;
+  appearance: AppearanceMode;
+  resolvedAppearance: ResolvedAppearance;
   accentColorId: AccentColorId;
-  currentTerminalThemeId: TerminalThemeId;
-
-  // Computed theme for compatibility and usage
-  theme: {
-    type: 'light' | 'dark';
-    colors: ThemeColors;
-  };
-
   terminalTheme: TerminalTheme;
   opacity: number;
-
-  setBaseTheme: (id: BaseThemeId) => void;
-  setAccentColor: (id: AccentColorId) => void;
-  setTerminalTheme: (id: TerminalThemeId) => void;
+  setAppearance: (appearance: AppearanceMode) => void;
+  setAccentColor: (accent: AccentColorId) => void;
   setOpacity: (opacity: number) => void;
   initTheme: () => Promise<void>;
 }
 
-const curatedBaseThemes = ['coolBlack', 'coolWhite', 'blossom', 'cyberpunk'] as const;
-const curatedTerminalThemes = ['default', 'githubLight', 'taxuexunmei', 'cyberpunk'] as const;
-const legacyReflexThemeId = 'zang' + 'qing';
+function systemAppearance(): ResolvedAppearance {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
-const getDefaultTerminalTheme = (baseThemeId: BaseThemeId): TerminalThemeId => {
-  if (baseThemeId === 'coolWhite') {
-    return 'githubLight';
-  }
+function resolveAppearance(appearance: AppearanceMode): ResolvedAppearance {
+  return appearance === 'system' ? systemAppearance() : appearance;
+}
 
-  if (baseThemeId === 'blossom') {
-    return 'taxuexunmei';
-  }
-
-  if (baseThemeId === 'cyberpunk') {
-    return 'cyberpunk';
-  }
-
-  return 'default';
-};
-
-const normalizeBaseThemeId = (themeId?: string | null): BaseThemeId => {
-  if (themeId === legacyReflexThemeId) {
-    return 'reflex';
-  }
-
-  if (!themeId || !baseThemes[themeId as BaseThemeId]) {
-    return 'coolBlack';
-  }
-
-  if (curatedBaseThemes.includes(themeId as typeof curatedBaseThemes[number])) {
-    return themeId as BaseThemeId;
-  }
-
-  if (themeId === 'taxue' || themeId === 'lihua') {
-    return 'blossom';
-  }
-
-  return baseThemes[themeId as BaseThemeId].type === 'light' ? 'coolWhite' : 'coolBlack';
-};
-
-const normalizeTerminalThemeId = (themeId: unknown, baseThemeId: BaseThemeId): TerminalThemeId => {
-  if (themeId === legacyReflexThemeId) {
-    return 'reflex';
-  }
-
-  if (typeof themeId === 'string' && curatedTerminalThemes.includes(themeId as typeof curatedTerminalThemes[number])) {
-    return themeId as TerminalThemeId;
-  }
-
-  if (typeof themeId === 'string' && terminalThemes[themeId as TerminalThemeId]) {
-    const theme = terminalThemes[themeId as TerminalThemeId];
-
-    if (themeId === 'taxuexunmei') {
-      return 'taxuexunmei';
-    }
-
-    return theme.category === 'light' ? 'githubLight' : 'default';
-  }
-
-  return getDefaultTerminalTheme(baseThemeId);
-};
-
-// Helper to generate full theme colors
-const generateThemeColors = (baseId: BaseThemeId, accentId: AccentColorId): ThemeColors => {
-  const base = baseThemes[baseId];
-  const accent = accentColors[accentId];
-  const useAccentOverride = Boolean(base.allowAccentOverride);
-
-  return {
-    ...base.colors,
-    primary: useAccentOverride ? accent.color : (base.colorOverrides?.primary ?? accent.color),
-    primaryForeground: useAccentOverride ? accent.foreground : (base.colorOverrides?.primaryForeground ?? accent.foreground),
-    ring: useAccentOverride ? accent.color : (base.colorOverrides?.ring ?? accent.color),
-    // Use accent color for accent tokens as well for consistency in this design
-    accent: base.colorOverrides?.accent ?? base.colors.secondary, // Keep secondary as accent background usually
-    accentForeground: base.colorOverrides?.accentForeground ?? base.colors.secondaryForeground,
-
-    // We can also make 'accent' token use the color if we want colored accents, 
-    // but usually 'accent' in shadcn/tailwind is for hover states of list items.
-    // Hoppscotch uses the primary color for active states.
-
-    destructive: base.colorOverrides?.destructive ?? "0 84.2% 60.2%", // Standard red
-    destructiveForeground: base.colorOverrides?.destructiveForeground ?? "0 0% 98%",
-  };
-};
-
-// Helper to apply theme to DOM
-const applyTheme = (baseId: BaseThemeId, accentId: AccentColorId) => {
+function applyAppearance(resolved: ResolvedAppearance, accentId: AccentColorId) {
   const root = document.documentElement;
-  const base = baseThemes[baseId];
-  const colors = generateThemeColors(baseId, accentId);
+  const accent = accentColors[accentId];
+  root.classList.toggle('dark', resolved === 'dark');
+  root.dataset.appearance = resolved;
+  root.style.setProperty('--primary', accent.color);
+  root.style.setProperty('--primary-foreground', accent.foreground);
+  root.style.setProperty('--ring', accent.color);
+  root.style.setProperty('--glow', accent.color);
+}
 
-  // Set class for dark/light mode
-  if (base.type === 'dark') {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
+function normalizeAppearance(value: unknown, legacyTheme: unknown): AppearanceMode {
+  if (value === 'system' || value === 'light' || value === 'dark') return value;
+  if (typeof legacyTheme === 'string') {
+    const legacyLightThemes = ['light', 'coolWhite', 'taxue', 'lihua', 'aurora', 'ocean', 'sunset', 'twilight', 'blossom'];
+    return legacyLightThemes.includes(legacyTheme) ? 'light' : 'dark';
   }
+  return 'dark';
+}
 
-  // Set CSS variables
-  Object.entries(colors).forEach(([key, value]) => {
-    root.style.setProperty(`--${key}`, value);
-  });
-};
+let mediaListenerAttached = false;
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  baseThemeId: 'coolBlack',
-  accentColorId: 'teal',
-  currentTerminalThemeId: 'default',
+  appearance: 'dark',
+  resolvedAppearance: 'dark',
+  accentColorId: 'blue',
+  terminalTheme: terminalThemes.dark,
+  opacity: 1,
 
-  theme: {
-    type: 'dark',
-    colors: generateThemeColors('coolBlack', 'teal')
+  setAppearance: (appearance) => {
+    const resolvedAppearance = resolveAppearance(appearance);
+    applyAppearance(resolvedAppearance, get().accentColorId);
+    set({ appearance, resolvedAppearance, terminalTheme: terminalThemes[resolvedAppearance] });
+    void window.electron.storeSet('appearance', appearance);
   },
 
-  terminalTheme: terminalThemes['default'],
-  opacity: 0.9,
-
-  setBaseTheme: (id: BaseThemeId) => {
-    set((state) => {
-      const newColors = generateThemeColors(id, state.accentColorId);
-      applyTheme(id, state.accentColorId);
-      (window as any).electron.storeSet('baseTheme', id);
-
-      // Auto-switch terminal theme to match light/dark mode
-      const currentTerminalThemeId = normalizeTerminalThemeId(state.currentTerminalThemeId, id);
-      const currentTermCat = terminalThemes[currentTerminalThemeId]?.category;
-      const preferredTerminalThemeId = getDefaultTerminalTheme(id);
-      const isCuratedTerminalTheme = curatedTerminalThemes.includes(currentTerminalThemeId as typeof curatedTerminalThemes[number]);
-      const shouldSyncTerminalTheme =
-        isCuratedTerminalTheme ||
-        currentTermCat !== baseThemes[id].type;
-
-      if (shouldSyncTerminalTheme) {
-        setTimeout(() => get().setTerminalTheme(preferredTerminalThemeId), 0);
-      }
-
-      return {
-        baseThemeId: id,
-        theme: {
-          type: baseThemes[id].type,
-          colors: newColors
-        }
-      };
-    });
+  setAccentColor: (accentColorId) => {
+    applyAppearance(get().resolvedAppearance, accentColorId);
+    set({ accentColorId });
+    void window.electron.storeSet('accentColor', accentColorId);
   },
 
-  setAccentColor: (id: AccentColorId) => {
-    set((state) => {
-      const newColors = generateThemeColors(state.baseThemeId, id);
-      applyTheme(state.baseThemeId, id);
-      (window as any).electron.storeSet('accentColor', id);
-      return {
-        accentColorId: id,
-        theme: {
-          ...state.theme,
-          colors: newColors
-        }
-      };
-    });
-  },
-
-  setTerminalTheme: (id: TerminalThemeId) => {
-    const terminalTheme = terminalThemes[id];
-    set({ currentTerminalThemeId: id, terminalTheme });
-    (window as any).electron.storeSet('terminalTheme', id);
-  },
-
-  setOpacity: (opacity: number) => {
-    set({ opacity });
-    const root = document.getElementById('root');
-    if (root) {
-      root.style.setProperty('--app-opacity', opacity.toString());
-    }
-    (window as any).electron.storeSet('opacity', opacity);
+  setOpacity: (opacity) => {
+    const normalized = Math.min(1, Math.max(0.88, opacity));
+    document.documentElement.style.setProperty('--app-opacity', String(normalized));
+    set({ opacity: normalized });
+    void window.electron.storeSet('opacity', normalized);
   },
 
   initTheme: async () => {
-    const savedBaseTheme = await (window as any).electron.storeGet('baseTheme') as BaseThemeId;
-    const savedAccentColor = await (window as any).electron.storeGet('accentColor') as AccentColorId;
-    const savedTerminalThemeId = await (window as any).electron.storeGet('terminalTheme');
-    const savedOpacity = await (window as any).electron.storeGet('opacity');
+    const [savedAppearance, legacyTheme, savedAccent, savedOpacity] = await Promise.all([
+      window.electron.storeGet('appearance'),
+      window.electron.storeGet('baseTheme'),
+      window.electron.storeGet('accentColor'),
+      window.electron.storeGet('opacity'),
+    ]);
 
-    // Default values
-    let baseTheme: BaseThemeId = 'coolBlack';
-    let accentColor: AccentColorId = 'teal';
+    const appearance = normalizeAppearance(savedAppearance, legacyTheme);
+    const accentColorId = typeof savedAccent === 'string' && savedAccent in accentColors
+      ? savedAccent as AccentColorId
+      : 'blue';
+    const resolvedAppearance = resolveAppearance(appearance);
+    const opacity = typeof savedOpacity === 'number' && Number.isFinite(savedOpacity)
+      ? Math.min(1, Math.max(0.88, savedOpacity))
+      : 1;
 
-    // Legacy migration or load
-    baseTheme = normalizeBaseThemeId(savedBaseTheme);
+    applyAppearance(resolvedAppearance, accentColorId);
+    document.documentElement.style.setProperty('--app-opacity', String(opacity));
+    set({
+      appearance,
+      resolvedAppearance,
+      accentColorId,
+      terminalTheme: terminalThemes[resolvedAppearance],
+      opacity,
+    });
 
-    if (savedAccentColor && accentColors[savedAccentColor]) {
-      accentColor = savedAccentColor;
+    if (!mediaListenerAttached) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        const state = get();
+        if (state.appearance !== 'system') return;
+        const next = systemAppearance();
+        applyAppearance(next, state.accentColorId);
+        set({ resolvedAppearance: next, terminalTheme: terminalThemes[next] });
+      });
+      mediaListenerAttached = true;
     }
-
-    // Apply initial theme
-    get().setBaseTheme(baseTheme);
-    get().setAccentColor(accentColor);
-
-    // Terminal Theme
-    get().setTerminalTheme(normalizeTerminalThemeId(savedTerminalThemeId, baseTheme));
-
-    // Opacity — default is now 1.0 (fully opaque). Reset old 0.9 default to 1.0.
-    if (savedOpacity && parseFloat(savedOpacity) > 0.9) {
-      get().setOpacity(parseFloat(savedOpacity));
-    } else {
-      get().setOpacity(1.0);
-    }
-  }
+  },
 }));

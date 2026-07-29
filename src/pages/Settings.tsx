@@ -1,70 +1,171 @@
-import { useState } from 'react';
-import { useEffect } from 'react';
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import {
-  ArrowUpRight,
-  ArrowLeft,
-  Bug,
-  Check,
-  Github,
-  GitPullRequest,
-  Palette,
-  Smartphone,
-  Star,
-  Terminal,
-} from 'lucide-react';
+  ArrowDown01Icon,
+  ArrowUpRight01Icon,
+  ComputerTerminal01Icon,
+  ComputerIcon,
+  GithubIcon,
+  Moon02Icon,
+  PaintBoardIcon,
+  Settings01Icon,
+  Sun03Icon,
+  Tick01Icon,
+} from '@hugeicons/core-free-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
-import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
+import {
+  TERMINAL_FONT_OPTIONS,
+  UI_FONT_OPTIONS,
+  type FontCategory,
+  type FontOption,
+} from '../shared/fontStacks';
+import type { Language } from '../shared/locales';
+import { accentColors, type AccentColorId, type AppearanceMode } from '../shared/themes';
 import { useSettingsStore } from '../store/settingsStore';
 import { useThemeStore } from '../store/themeStore';
-import {
-  HOPPSCOTCH_MONO_FONT_STACK,
-  HOPPSCOTCH_UI_FONT_STACK,
-} from '../shared/fontStacks';
-import { Language } from '../shared/locales';
-import { accentColors, baseThemes, BaseThemeId, terminalThemes, TerminalThemeId } from '../shared/themes';
-import logoUrl from '../assets/logo.png';
-
-interface SettingsProps {
-  onBack: () => void;
-}
 
 type SettingsTab = 'app' | 'appearance' | 'terminal';
 
-function ToggleSwitch({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
+const categoryLabels: Record<FontCategory, string> = {
+  sans: 'Sans',
+  mono: 'Mono',
+  serif: 'Serif',
+};
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
   return (
-    <label className="relative inline-flex cursor-pointer items-center">
-      <input
-        type="checkbox"
-        className="sr-only peer"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <div className="h-5 w-9 rounded-full bg-input transition-colors peer-checked:bg-primary peer-checked:after:translate-x-full after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all" />
-    </label>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'relative h-6 w-11 rounded-full border transition-colors',
+        checked ? 'border-primary/50 bg-primary' : 'border-border bg-foreground/10',
+      )}
+    >
+      <span className={cn(
+        'absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform',
+        checked ? 'translate-x-[21px]' : 'translate-x-0.5',
+      )} />
+    </button>
   );
 }
 
-export function Settings({ onBack }: SettingsProps) {
+function FontPicker({ value, options, onChange }: {
+  value: string;
+  options: FontOption[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((font) => font.value === value) ?? options[0];
+  const groups = useMemo(() => ['sans', 'mono', 'serif']
+    .map((category) => ({
+      category: category as FontCategory,
+      fonts: options.filter((font) => font.category === category),
+    }))
+    .filter((group) => group.fonts.length > 0), [options]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          'flex h-11 w-full items-center justify-between rounded-xl border border-input bg-background/55 px-3.5 text-left transition-all',
+          'hover:border-foreground/20 hover:bg-background/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+          open && 'border-primary/45 ring-2 ring-primary/15',
+        )}
+      >
+        <span className="truncate text-sm font-medium" style={{ fontFamily: selected.value }}>{selected.label}</span>
+        <HugeiconsIcon icon={ArrowDown01Icon} className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="glass-panel absolute left-0 right-0 top-[calc(100%+8px)] z-40 max-h-[340px] overflow-y-auto rounded-2xl p-2 shadow-2xl">
+          {groups.map((group) => (
+            <div key={group.category} className="mb-2 last:mb-0">
+              <div className="px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+                {categoryLabels[group.category]}
+              </div>
+              <div className="space-y-0.5">
+                {group.fonts.map((font) => {
+                  const active = font.value === value;
+                  return (
+                    <button
+                      key={font.label}
+                      type="button"
+                      onClick={() => {
+                        onChange(font.value);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
+                        active ? 'bg-primary/12 text-primary' : 'hover:bg-foreground/[0.055]',
+                      )}
+                    >
+                      <span className="flex-1 text-[15px] font-medium" style={{ fontFamily: font.value }}>{font.label}</span>
+                      {active && <HugeiconsIcon icon={Tick01Icon} className="h-4 w-4" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettingsCard({ title, description, children }: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="glass-panel overflow-visible rounded-3xl">
+      <div className="border-b border-border/55 px-6 py-5">
+        <h3 className="text-[15px] font-semibold tracking-tight">{title}</h3>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      <div className="space-y-5 p-6">{children}</div>
+    </section>
+  );
+}
+
+function FieldLabel({ title, description }: { title: string; description?: string }) {
+  return (
+    <div>
+      <div className="text-sm font-medium">{title}</div>
+      {description && <div className="mt-1 text-xs leading-5 text-muted-foreground">{description}</div>}
+    </div>
+  );
+}
+
+export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
-  const [appVersion, setAppVersion] = useState('1.0.8');
+  const [appVersion, setAppVersion] = useState('1.0.12');
 
   const {
-    baseThemeId,
+    appearance,
+    resolvedAppearance,
     accentColorId,
-    setBaseTheme,
+    setAppearance,
     setAccentColor,
-    currentTerminalThemeId,
-    setTerminalTheme,
   } = useThemeStore();
 
   const {
@@ -96,610 +197,317 @@ export function Settings({ onBack }: SettingsProps) {
     setAutoReconnect,
   } = useSettingsStore();
 
-  const { t } = useTranslation();
   const isZh = language === 'zh';
-  const repoUrl = 'https://github.com/Sunhaiy/Reflex';
-  const issuesUrl = 'https://github.com/Sunhaiy/Reflex/issues';
-  const pullsUrl = 'https://github.com/Sunhaiy/Reflex/pulls';
-  const text = {
-    appearanceDesc: isZh ? '主题和终端偏好都在这里统一调整。' : 'Theme and terminal preferences are adjusted here.',
-    officialThemeDesc: isZh ? '官方主题和主色统一管理，切换成本更低。' : 'Official themes and accent colors are managed together.',
-    accentTitle: isZh ? '主题主色' : 'Accent color',
-    accentDesc: isZh ? '夜间主题不再固定蓝色。炫酷黑和炫酷白支持自定义主色，赛博朋克主题保留自己的专属配色。' : 'Dark themes no longer force blue. Cool Black and Cool White support custom accents; Cyberpunk keeps its own palette.',
-    accentDefault: isZh ? '默认推荐' : 'Default choice',
-    accentUsage: isZh ? '可用于强调按钮、状态和进度' : 'Used for buttons, status, and progress',
-    accentLocked: isZh ? '当前主题使用固定主色。你选中的颜色会保留，在切回炫酷黑或炫酷白时自动生效。' : 'The current theme uses a fixed accent. Your selection is saved and will apply when switching back to Cool Black or Cool White.',
-    terminalPresetDesc: isZh ? '终端预设与 UI 主题一一对应，避免再出现一大屏主题列表。' : 'Terminal presets map to UI themes to keep this page compact.',
-    brightBoldDesc: isZh ? '亮色字符自动加粗' : 'Render bright text as bold.',
-    aboutTitle: isZh ? '关于 Reflex' : 'About Reflex',
-    aboutLead: isZh ? '一个以终端为中心的现代远程工作台。' : 'A modern remote workspace built around the terminal.',
-    aboutSummary: isZh
-      ? 'Reflex 把多会话 SSH、SFTP、Docker 和系统监控整合进一个轻量桌面应用。'
-      : 'Reflex brings multi-session SSH, SFTP, Docker, and system monitoring into one lightweight desktop app.',
-    aboutBuiltWith: isZh ? '基于 Electron、React 和 Shadcn UI 构建。' : 'Built with Electron, React, and Shadcn UI.',
-    repoLabel: isZh ? '项目仓库' : 'Project repository',
-    repoHint: isZh ? '查看源码、发布版本和开发进展。' : 'Browse the source, releases, and project progress.',
-    communityLabel: isZh ? '社区与贡献' : 'Community and contribution',
-    communityHint: isZh
-      ? '欢迎提交 Issue、Pull Request、功能建议和文档改进，一起把 Reflex 打磨得更好。'
-      : 'Issues, pull requests, feature ideas, and docs improvements are all welcome.',
-    openRepo: isZh ? '打开仓库' : 'Open repository',
-    openIssues: isZh ? '提交 Issue' : 'Open issues',
-    openPulls: isZh ? '查看 PR' : 'Pull requests',
-    thanksTitle: isZh ? '欢迎一起参与' : 'Welcome aboard',
-    thanksBody: isZh
-      ? '如果你在使用过程中发现 Bug、体验问题，或者有新的工作流想法，都可以在 GitHub 上告诉我们。'
-      : 'If you hit a bug, spot rough edges, or have a workflow idea, tell us on GitHub.',
-    versionLabel: isZh ? '当前版本' : 'Current version',
+  const copy = {
+    title: isZh ? '设置' : 'Settings',
+    subtitle: isZh ? '让 Reflex 更符合你的工作方式' : 'Make Reflex feel like your own workspace',
+    app: isZh ? '应用' : 'Application',
+    appDesc: isZh ? '行为与项目信息' : 'Behavior and project',
+    appearance: isZh ? '外观' : 'Appearance',
+    appearanceDesc: isZh ? '界面、字体与配色' : 'Interface, type, and color',
+    terminal: isZh ? '终端' : 'Terminal',
+    terminalDesc: isZh ? '显示、光标与性能' : 'Display, cursor, and performance',
   };
 
   useEffect(() => {
-    window.electron.getVersion()
-      .then((version) => {
-        if (version) {
-          setAppVersion(version);
-        }
-      })
-      .catch(() => undefined);
+    window.electron.getVersion().then(setAppVersion).catch(() => undefined);
   }, []);
 
-  const uiFontOptions = [
+  const tabs: Array<{ id: SettingsTab; label: string; description: string; icon: IconSvgElement }> = [
+    { id: 'app', label: copy.app, description: copy.appDesc, icon: Settings01Icon },
+    { id: 'appearance', label: copy.appearance, description: copy.appearanceDesc, icon: PaintBoardIcon },
+    { id: 'terminal', label: copy.terminal, description: copy.terminalDesc, icon: ComputerTerminal01Icon },
+  ];
+
+  const tabGroups: Array<{ label: string; items: typeof tabs }> = [
     {
-      label: isZh ? 'Inter Variable（Hoppscotch）' : 'Inter Variable (Hoppscotch)',
-      value: HOPPSCOTCH_UI_FONT_STACK,
+      label: isZh ? '常规' : 'Overview',
+      items: tabs.filter((tab) => tab.id !== 'terminal'),
+    },
+    {
+      label: isZh ? '工作区' : 'Workspace',
+      items: tabs.filter((tab) => tab.id === 'terminal'),
     },
   ];
-
-  const terminalFontOptions = [
-    {
-      label: isZh ? 'Roboto Mono Variable（Hoppscotch）' : 'Roboto Mono Variable (Hoppscotch)',
-      value: HOPPSCOTCH_MONO_FONT_STACK,
-    },
-  ];
-
-  const curatedThemes: Array<{ id: BaseThemeId; label: string; description: string }> = [
-    { id: 'coolBlack', label: isZh ? '炫酷黑' : 'Cool Black', description: isZh ? '深色高对比，聚焦内容和终端。' : 'High-contrast dark UI focused on content and terminals.' },
-    { id: 'coolWhite', label: isZh ? '炫酷白' : 'Cool White', description: isZh ? '清爽纯白，适合白天和演示。' : 'Clean light UI for daytime work and demos.' },
-    { id: 'blossom', label: isZh ? '落樱' : 'Blossom', description: isZh ? '柔和樱粉，保留一点轻盈氛围。' : 'Soft sakura palette with a light touch.' },
-    { id: 'cyberpunk', label: isZh ? '赛博朋克 2077' : 'Cyberpunk 2077', description: isZh ? '高对比霓虹夜景，保留专属黄青配色。' : 'Neon night contrast with a dedicated yellow/cyan palette.' },
-  ];
-
-  const curatedTerminalThemes: Array<{ id: TerminalThemeId; label: string; description: string }> = [
-    { id: 'default', label: isZh ? '黑域终端' : 'Dark Terminal', description: isZh ? '适配炫酷黑的深色终端。' : 'Dark terminal preset for Cool Black.' },
-    { id: 'githubLight', label: isZh ? '白域终端' : 'Light Terminal', description: isZh ? '适配炫酷白的浅色终端。' : 'Light terminal preset for Cool White.' },
-    { id: 'taxuexunmei', label: isZh ? '落樱终端' : 'Blossom Terminal', description: isZh ? '适配落樱的柔和浅色终端。' : 'Soft terminal preset for Blossom.' },
-    { id: 'cyberpunk', label: isZh ? '赛博终端' : 'Cyber Terminal', description: isZh ? '适配赛博朋克 2077 的黄青终端。' : 'Yellow/cyan terminal preset for Cyberpunk 2077.' },
-  ];
-
-  const accentOptions = Object.values(accentColors);
-  const accentSelectionEnabled = Boolean(baseThemes[baseThemeId].allowAccentOverride);
 
   const languageOptions = [
-    { label: 'English', value: 'en' },
-    { label: 'Italiano', value: 'it' },
     { label: '中文', value: 'zh' },
+    { label: 'English', value: 'en' },
     { label: '日本語', value: 'ja' },
     { label: '한국어', value: 'ko' },
+    { label: 'Italiano', value: 'it' },
   ];
 
-  const sidebarItems: { id: SettingsTab; icon: any; label: string }[] = [
-    { id: 'app', icon: Smartphone, label: t('settings.tabs.app') },
-    { id: 'appearance', icon: Palette, label: t('settings.tabs.appearance') },
-    { id: 'terminal', icon: Terminal, label: t('settings.tabs.terminal') },
-  ];
-
-  const cardClass = 'border-border/70 bg-card/70 backdrop-blur-xl';
-  const sectionClass = 'rounded-xl border border-border/60 bg-background/35 p-4';
-  const openExternal = (url: string) => {
-    window.electron.openExternal(url).catch(() => {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    });
-  };
-
-  const renderAppearanceThemeCard = ({
-    id,
-    label,
-    description,
-  }: {
-    id: BaseThemeId;
-    label: string;
-    description: string;
-  }) => {
-    const theme = baseThemes[id];
-    const isActive = baseThemeId === id;
-    const previewPrimary = theme.allowAccentOverride
-      ? accentColors[accentColorId].color
-      : (theme.colorOverrides?.primary ?? theme.colors.foreground);
-
-    return (
-      <button
-        key={id}
-        type="button"
-        onClick={() => setBaseTheme(id)}
-        className={cn(
-          'rounded-2xl border p-2.5 text-left transition-all',
-          isActive
-            ? 'border-primary/55 bg-primary/[0.06]'
-            : 'border-border/70 bg-background/40 hover:border-primary/40 hover:bg-accent/40'
-        )}
+  const renderAppearance = () => (
+    <div className="space-y-5">
+      <SettingsCard
+        title={isZh ? '界面外观' : 'Interface appearance'}
+        description={isZh ? '移除旧主题，使用一套统一、中性的雾面设计系统。' : 'One neutral frosted design system, without legacy themes.'}
       >
-        <div
-          className="relative h-24 overflow-hidden rounded-xl border border-border/50 px-3 py-3"
-          style={{
-            background: `hsl(${theme.colors.background})`,
-            color: `hsl(${theme.colors.foreground})`,
-          }}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-sm font-semibold tracking-wide">{label}</div>
-              <div className="mt-1 text-[11px] opacity-70">{theme.type === 'dark' ? 'Dark UI' : 'Light UI'}</div>
-            </div>
-            {isActive && (
-              <div className="rounded-full bg-primary p-1 text-primary-foreground shadow-md">
-                <Check className="h-3.5 w-3.5" />
-              </div>
-            )}
-          </div>
-          <div className="absolute inset-x-3 bottom-3 flex items-center gap-2">
-            <div
-              className="h-2.5 w-2.5 rounded-full border border-black/10"
-              style={{ background: `hsl(${previewPrimary})` }}
-            />
-            <div className="h-2.5 flex-1 rounded-full" style={{ background: `hsl(${theme.colors.secondary})` }} />
-            <div className="h-2.5 w-8 rounded-full" style={{ background: `hsl(${theme.colors.card})` }} />
-          </div>
-        </div>
-        <div className="px-1 pt-3">
-          <div className="text-sm font-medium">{label}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{description}</div>
-        </div>
-      </button>
-    );
-  };
-
-  const renderTerminalThemeCard = ({
-    id,
-    label,
-    description,
-  }: {
-    id: TerminalThemeId;
-    label: string;
-    description: string;
-  }) => {
-    const theme = terminalThemes[id];
-    const isActive = currentTerminalThemeId === id;
-
-    return (
-      <button
-        key={id}
-        type="button"
-        onClick={() => setTerminalTheme(id)}
-        className={cn(
-          'rounded-2xl border p-3 text-left transition-all',
-          isActive
-            ? 'border-primary/55 bg-primary/[0.06]'
-            : 'border-border/70 bg-background/40 hover:border-primary/40 hover:bg-accent/40'
-        )}
-      >
-        <div className="rounded-xl border border-border/50 p-3" style={{ background: theme.background, color: theme.foreground }}>
-          <div className="mb-3 flex gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full" style={{ background: theme.foreground }} />
-            <div className="h-2.5 w-2.5 rounded-full" style={{ background: theme.blue }} />
-            <div className="h-2.5 w-2.5 rounded-full" style={{ background: theme.red }} />
-            <div className="h-2.5 w-2.5 rounded-full" style={{ background: theme.green }} />
-          </div>
-          <div className="space-y-2 text-[11px]">
-            <div className="h-2.5 w-20 rounded-full bg-white/15" />
-            <div className="h-2.5 w-14 rounded-full bg-white/10" />
-          </div>
-        </div>
-        <div className="mt-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-medium">{label}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{description}</div>
-          </div>
-          {isActive && (
-            <div className="rounded-full bg-primary p-1 text-primary-foreground shadow-md">
-              <Check className="h-3.5 w-3.5" />
-            </div>
-          )}
-        </div>
-      </button>
-    );
-  };
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'app':
-        return (
-          <div className="space-y-4">
-            <Card className={cardClass}>
-              <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
-                <CardTitle className="text-base">{isZh ? '行为' : 'Behavior'}</CardTitle>
-                <CardDescription className="text-xs">
-                  {isZh ? '控制应用启动和连接行为。' : 'Control app startup and connection behavior.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-4 py-4 sm:px-5">
-                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-background/35 p-4">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{isZh ? '启动时自动重连上次会话' : 'Auto-reconnect on startup'}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {isZh ? '重启应用时自动连接上次使用的服务器。' : 'Automatically reconnect to the last used server when the app starts.'}
-                    </span>
-                  </div>
-                  <ToggleSwitch checked={autoReconnect} onChange={setAutoReconnect} />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className={cardClass}>
-            <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
-              <CardTitle className="text-base">{text.aboutTitle}</CardTitle>
-              <CardDescription className="text-xs">{text.aboutLead}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 px-4 py-4 sm:px-5">
-              <div className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-background/35 p-4 sm:flex-row sm:items-center">
-                <img src={logoUrl} alt="Reflex" className="h-16 w-16 rounded-2xl border border-border/60 object-cover" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold tracking-tight">Reflex</h3>
-                    <span className="rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-xs text-muted-foreground">
-                      {text.versionLabel} v{appVersion}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-foreground/90">{text.aboutSummary}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{text.aboutBuiltWith}</p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className={sectionClass}>
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Github className="h-4 w-4 text-primary" />
-                    {text.repoLabel}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{text.repoHint}</p>
-                  <div className="mt-3 rounded-xl border border-border/60 bg-background/55 px-3 py-2 font-mono text-xs text-foreground/90">
-                    {repoUrl}
-                  </div>
-                </div>
-
-                <div className={sectionClass}>
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Star className="h-4 w-4 text-primary" />
-                    {text.communityLabel}
-                  </div>
-                  <p className="mt-2 text-sm text-foreground/90">{text.communityHint}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{text.thanksBody}</p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <Button type="button" variant="outline" className="justify-between" onClick={() => openExternal(repoUrl)}>
-                  <span className="inline-flex items-center gap-2">
-                    <Github className="h-4 w-4" />
-                    {text.openRepo}
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { id: 'system', label: isZh ? '跟随系统' : 'System', icon: ComputerIcon },
+            { id: 'light', label: isZh ? '浅色' : 'Light', icon: Sun03Icon },
+            { id: 'dark', label: isZh ? '深色' : 'Dark', icon: Moon02Icon },
+          ] as Array<{ id: AppearanceMode; label: string; icon: IconSvgElement }>).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setAppearance(option.id)}
+              className={cn(
+                'surface-hover relative flex min-h-[112px] flex-col justify-between rounded-2xl border p-4 text-left',
+                appearance === option.id
+                  ? 'border-primary/45 bg-primary/[0.075] ring-1 ring-primary/20'
+                  : 'border-border/65 bg-background/42',
+              )}
+            >
+              <div className="flex items-start justify-between">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-border/60 bg-background/60">
+                  <HugeiconsIcon icon={option.icon} className="h-[18px] w-[18px]" />
+                </span>
+                {appearance === option.id && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <HugeiconsIcon icon={Tick01Icon} className="h-3 w-3" />
                   </span>
-                  <ArrowUpRight className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="outline" className="justify-between" onClick={() => openExternal(issuesUrl)}>
-                  <span className="inline-flex items-center gap-2">
-                    <Bug className="h-4 w-4" />
-                    {text.openIssues}
-                  </span>
-                  <ArrowUpRight className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="outline" className="justify-between" onClick={() => openExternal(pullsUrl)}>
-                  <span className="inline-flex items-center gap-2">
-                    <GitPullRequest className="h-4 w-4" />
-                    {text.openPulls}
-                  </span>
-                  <ArrowUpRight className="h-4 w-4" />
-                </Button>
+                )}
               </div>
-
-              <div className="rounded-2xl border border-dashed border-border/70 bg-background/25 px-4 py-3">
-                <div className="text-sm font-medium">{text.thanksTitle}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{text.thanksBody}</div>
-              </div>
-            </CardContent>
-          </Card>
-          </div>
-        );
-
-      case 'appearance':
-        return (
-          <Card className={cardClass}>
-            <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
-              <CardTitle className="text-base">{t('settings.appearance.title')}</CardTitle>
-              <CardDescription className="text-xs">
-                {text.officialThemeDesc}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 px-4 py-4 sm:px-5">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className={sectionClass}>
-                  <span className="text-sm font-medium">{t('settings.appearance.language')}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{t('settings.appearance.languageDesc')}</span>
-                  <Select
-                    className="mt-3 w-full"
-                    value={language}
-                    onChange={(value) => setLanguage(value as Language)}
-                    options={languageOptions}
-                  />
-                </div>
-
-                <div className={sectionClass}>
-                  <span className="text-sm font-medium">{t('settings.appearance.font')}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{t('settings.appearance.fontDesc')}</span>
-                  <Select
-                    className="mt-3 w-full"
-                    value={uiFontFamily}
-                    onChange={setUiFontFamily}
-                    options={uiFontOptions}
-                  />
-                </div>
-              </div>
-
-              <div className={sectionClass}>
-                <div className="mb-3">
-                  <span className="text-sm font-medium">{t('settings.appearance.backgroundTheme')}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {t('settings.appearance.backgroundThemeDesc')}
-                  </span>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{curatedThemes.map(renderAppearanceThemeCard)}</div>
-              </div>
-
-              <div className={sectionClass}>
-                <div className="mb-3">
-                  <span className="text-sm font-medium">{text.accentTitle}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {text.accentDesc}
-                  </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {accentOptions.map((accent) => {
-                    const isActive = accentColorId === accent.id;
-
-                    return (
-                      <button
-                        key={accent.id}
-                        type="button"
-                        onClick={() => setAccentColor(accent.id)}
-                        className={cn(
-                          'flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors',
-                          isActive
-                            ? 'border-primary/50 bg-primary/[0.06]'
-                            : 'border-border/70 bg-background/35 hover:border-primary/35 hover:bg-accent/35'
-                        )}
-                      >
-                        <span
-                          className="h-3 w-3 shrink-0 rounded-full border border-black/10"
-                          style={{ backgroundColor: `hsl(${accent.color})` }}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium">{accent.name}</span>
-                          <span className="block text-xs text-muted-foreground">
-                            {accent.id === 'teal' ? text.accentDefault : text.accentUsage}
-                          </span>
-                        </span>
-                        {isActive && (
-                          <span className="rounded-full bg-primary/12 p-1 text-primary">
-                            <Check className="h-3.5 w-3.5" />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                {!accentSelectionEnabled && (
-                  <div className="mt-3 rounded-lg border border-border/60 bg-background/35 px-3 py-2 text-xs text-muted-foreground">
-                    {text.accentLocked}
+              <div>
+                <div className="text-sm font-semibold">{option.label}</div>
+                {option.id === 'system' && (
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {isZh ? `当前为${resolvedAppearance === 'dark' ? '深色' : '浅色'}` : `Currently ${resolvedAppearance}`}
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        );
-
-      case 'terminal':
-        return (
-          <Card className={cardClass}>
-            <CardHeader className="border-b border-border/60 px-4 py-4 sm:px-5">
-              <CardTitle className="text-base">{t('settings.terminal.title')}</CardTitle>
-              <CardDescription className="text-xs">
-                {text.terminalPresetDesc}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 px-4 py-4 sm:px-5">
-              <div className={sectionClass}>
-                <div className="mb-3">
-                  <span className="text-sm font-medium">{t('settings.appearance.theme')}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{t('settings.appearance.themeDesc')}</span>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{curatedTerminalThemes.map(renderTerminalThemeCard)}</div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className={sectionClass}>
-                  <span className="text-sm font-medium">{t('settings.terminal.fontFamily')}</span>
-                  <Select
-                    className="mt-3 w-full"
-                    value={terminalFontFamily}
-                    onChange={setTerminalFontFamily}
-                    options={terminalFontOptions}
-                  />
-                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium">{t('settings.terminal.fontSize')}</span>
-                      <Input
-                        type="number"
-                        min="10"
-                        max="24"
-                        value={fontSize}
-                        onChange={(event) => setFontSize(parseInt(event.target.value, 10))}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium">{t('settings.terminal.lineHeight')}</span>
-                      <Input
-                        type="number"
-                        min="1.0"
-                        max="2.0"
-                        step="0.1"
-                        value={lineHeight}
-                        onChange={(event) => setLineHeight(parseFloat(event.target.value))}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium">{t('settings.terminal.letterSpacing')}</span>
-                      <Input
-                        type="number"
-                        min="-5"
-                        max="5"
-                        step="0.5"
-                        value={letterSpacing}
-                        onChange={(event) => setLetterSpacing(parseFloat(event.target.value))}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className={sectionClass}>
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium">{t('settings.terminal.cursorStyle')}</span>
-                      <Select
-                        value={cursorStyle}
-                        onChange={(value) => setCursorStyle(value as 'block' | 'underline' | 'bar')}
-                        options={[
-                          { label: 'Block', value: 'block' },
-                          { label: 'Underline', value: 'underline' },
-                          { label: 'Bar', value: 'bar' },
-                        ]}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/30 px-3 py-2">
-                      <span className="text-xs font-medium">{t('settings.terminal.cursorBlink')}</span>
-                      <ToggleSwitch checked={cursorBlink} onChange={setCursorBlink} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className={sectionClass}>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium">{t('settings.terminal.rendererType')}</span>
-                      <Select
-                        value={rendererType}
-                        onChange={(value) => setRendererType(value as 'canvas' | 'webgl')}
-                        options={[
-                          { label: 'Canvas', value: 'canvas' },
-                          { label: 'WebGL', value: 'webgl' },
-                        ]}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium">{t('settings.terminal.scrollback')}</span>
-                      <Input
-                        type="number"
-                        min="1000"
-                        max="100000"
-                        step="1000"
-                        value={scrollback}
-                        onChange={(event) => setScrollback(parseInt(event.target.value, 10))}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2">
-                    <div>
-                      <div className="text-sm font-medium">{t('settings.terminal.brightBold')}</div>
-                      <div className="text-xs text-muted-foreground">{text.brightBoldDesc}</div>
-                    </div>
-                    <ToggleSwitch checked={brightBold} onChange={setBrightBold} />
-                  </div>
-                </div>
-
-                <div className={sectionClass}>
-                  <span className="text-sm font-medium">{t('settings.terminal.bellStyle')}</span>
-                  <div className="mt-3 flex w-fit rounded-md border border-input bg-background/50 p-1">
-                    {[
-                      { id: 'none', label: 'Off' },
-                      { id: 'visual', label: 'Visual' },
-                      { id: 'sound', label: 'Audible' },
-                    ].map((style) => (
-                      <button
-                        key={style.id}
-                        type="button"
-                        onClick={() => setBellStyle(style.id as 'none' | 'visual' | 'sound')}
-                        className={cn(
-                          'rounded-sm px-3 py-1.5 text-xs font-medium transition-colors',
-                          bellStyle === style.id
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                        )}
-                      >
-                        {style.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="flex h-full overflow-hidden bg-transparent animate-in fade-in duration-300">
-      <div className="flex h-full w-56 flex-col border-r border-border/60 bg-card/45 backdrop-blur-xl">
-        <div className="flex items-center gap-3 border-b border-border/60 p-3.5">
-          <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <span className="font-semibold">{t('settings.title')}</span>
-        </div>
-
-        <div className="flex-1 space-y-1 overflow-y-auto p-2.5">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveTab(item.id)}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                activeTab === item.id
-                  ? 'bg-primary/10 font-medium text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              <span className="truncate">{item.label}</span>
             </button>
           ))}
         </div>
-      </div>
+      </SettingsCard>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="mx-auto max-w-3xl animate-in slide-in-from-right-4 duration-300">
-            <div className="mb-4">
-              <h2 className="text-xl font-bold tracking-tight">{sidebarItems.find((item) => item.id === activeTab)?.label}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{text.appearanceDesc}</p>
-            </div>
-            {renderContent()}
+      <SettingsCard
+        title={isZh ? '强调色' : 'Accent color'}
+        description={isZh ? '来自 shadcn/Tailwind 的基础色板，只用于状态、焦点和关键操作。' : 'A shadcn/Tailwind palette used only for state, focus, and key actions.'}
+      >
+        <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+          {(Object.values(accentColors)).map((accent) => (
+            <button
+              key={accent.id}
+              type="button"
+              onClick={() => setAccentColor(accent.id as AccentColorId)}
+              className={cn(
+                'flex min-h-[74px] flex-col items-center justify-center gap-2 rounded-2xl border transition-all',
+                accentColorId === accent.id
+                  ? 'border-foreground/25 bg-foreground/[0.065] shadow-sm'
+                  : 'border-border/60 bg-background/36 hover:border-foreground/15 hover:bg-foreground/[0.035]',
+              )}
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full shadow-sm" style={{ background: `hsl(${accent.color})` }}>
+                {accentColorId === accent.id && <HugeiconsIcon icon={Tick01Icon} className="h-3.5 w-3.5" color={`hsl(${accent.foreground})`} />}
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground">{accent.name}</span>
+            </button>
+          ))}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title={isZh ? '界面字体' : 'Interface font'}
+        description={isZh ? 'Sans、Mono 和 Serif 字体均为本地资源，离线也能完整显示。' : 'Sans, Mono, and Serif families are bundled for full offline use.'}
+      >
+        <FontPicker value={uiFontFamily} options={UI_FONT_OPTIONS} onChange={setUiFontFamily} />
+        <div className="rounded-2xl border border-border/55 bg-background/38 px-5 py-4" style={{ fontFamily: uiFontFamily }}>
+          <div className="text-lg font-semibold tracking-tight">Reflex Remote Workspace</div>
+          <div className="mt-1.5 text-sm text-muted-foreground">连接、探索、保持专注。The quick brown fox jumps over 0123456789.</div>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const renderTerminal = () => (
+    <div className="space-y-5">
+      <SettingsCard
+        title={isZh ? '字体与排版' : 'Type and rhythm'}
+        description={isZh ? '终端字体单独设置，不会影响应用界面。' : 'Terminal typography is independent from the app interface.'}
+      >
+        <FontPicker value={terminalFontFamily} options={TERMINAL_FONT_OPTIONS} onChange={setTerminalFontFamily} />
+        <div className="grid grid-cols-3 gap-3">
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">{isZh ? '字号' : 'Size'}</span>
+            <Input type="number" min={10} max={24} value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">{isZh ? '行高' : 'Line height'}</span>
+            <Input type="number" min={1} max={2} step={0.1} value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))} />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">{isZh ? '字距' : 'Spacing'}</span>
+            <Input type="number" min={-5} max={5} step={0.5} value={letterSpacing} onChange={(event) => setLetterSpacing(Number(event.target.value))} />
+          </label>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title={isZh ? '光标与渲染' : 'Cursor and rendering'}
+        description={isZh ? '调整输入反馈与长时间会话的性能。' : 'Tune input feedback and long-session performance.'}
+      >
+        <div className="flex items-center justify-between gap-6">
+          <FieldLabel title={isZh ? '光标样式' : 'Cursor style'} />
+          <div className="flex rounded-xl border border-border/60 bg-background/45 p-1">
+            {(['block', 'underline', 'bar'] as const).map((style) => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setCursorStyle(style)}
+                className={cn('rounded-lg px-3 py-1.5 text-xs capitalize transition-colors', cursorStyle === style ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')}
+              >{style}</button>
+            ))}
           </div>
         </div>
-      </div>
+        <div className="flex items-center justify-between gap-6 border-t border-border/45 pt-5">
+          <FieldLabel title={isZh ? '光标闪烁' : 'Blinking cursor'} description={isZh ? '在等待输入时保持轻微动态反馈。' : 'Keep a subtle signal while waiting for input.'} />
+          <ToggleSwitch checked={cursorBlink} onChange={setCursorBlink} />
+        </div>
+        <div className="flex items-center justify-between gap-6 border-t border-border/45 pt-5">
+          <FieldLabel title={isZh ? '高亮文字加粗' : 'Bold bright colors'} />
+          <ToggleSwitch checked={brightBold} onChange={setBrightBold} />
+        </div>
+        <div className="grid grid-cols-2 gap-3 border-t border-border/45 pt-5">
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">{isZh ? '渲染方式' : 'Renderer'}</span>
+            <Select value={rendererType} onChange={(value) => setRendererType(value as 'canvas' | 'webgl')} options={[{ label: 'Canvas', value: 'canvas' }, { label: 'WebGL', value: 'webgl' }]} />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">{isZh ? '回滚行数' : 'Scrollback'}</span>
+            <Input type="number" min={1000} max={100000} step={1000} value={scrollback} onChange={(event) => setScrollback(Number(event.target.value))} />
+          </label>
+        </div>
+        <div className="border-t border-border/45 pt-5">
+          <FieldLabel title={isZh ? '终端铃声' : 'Terminal bell'} />
+          <div className="mt-3 flex w-fit rounded-xl border border-border/60 bg-background/45 p-1">
+            {([
+              { id: 'none', label: isZh ? '关闭' : 'Off' },
+              { id: 'visual', label: isZh ? '视觉' : 'Visual' },
+              { id: 'sound', label: isZh ? '声音' : 'Sound' },
+            ] as const).map((item) => (
+              <button key={item.id} type="button" onClick={() => setBellStyle(item.id)} className={cn('rounded-lg px-3 py-1.5 text-xs transition-colors', bellStyle === item.id ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground')}>{item.label}</button>
+            ))}
+          </div>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const renderApp = () => (
+    <div className="space-y-5">
+      <SettingsCard
+        title={isZh ? '应用行为' : 'Application behavior'}
+        description={isZh ? '控制启动恢复与界面语言。' : 'Control session recovery and interface language.'}
+      >
+        <div className="flex items-center justify-between gap-6">
+          <FieldLabel title={isZh ? '自动恢复上次连接' : 'Restore last connection'} description={isZh ? '启动后自动重连最近使用的服务器。' : 'Reconnect to the most recently used server on launch.'} />
+          <ToggleSwitch checked={autoReconnect} onChange={setAutoReconnect} />
+        </div>
+        <div className="grid grid-cols-[1fr_220px] items-center gap-6 border-t border-border/45 pt-5">
+          <FieldLabel title={isZh ? '界面语言' : 'Interface language'} />
+          <Select value={language} onChange={(value) => setLanguage(value as Language)} options={languageOptions} />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Reflex"
+        description={isZh ? '轻量、专注的 SSH 工作台。' : 'A focused, lightweight SSH workspace.'}
+      >
+        <div className="flex items-center gap-4 rounded-2xl border border-border/55 bg-background/38 p-4">
+          <img src={`${import.meta.env.BASE_URL}tray-icon.png`} alt="Reflex" className="h-12 w-12 rounded-2xl border border-border/60 object-cover shadow-sm" />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">Reflex {appVersion}</div>
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">Electron · React · Shadcn tokens · Hugeicons</div>
+          </div>
+          <Button variant="outline" className="gap-2" onClick={() => window.electron.openExternal('https://github.com/Sunhaiy/Reflex')}>
+            <HugeiconsIcon icon={GithubIcon} className="h-4 w-4" />
+            GitHub
+            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+
+  const active = tabs.find((tab) => tab.id === activeTab)!;
+
+  return (
+    <div className="flex h-full min-w-0 gap-3 overflow-hidden p-3">
+      <aside className="glass-panel flex w-[232px] shrink-0 flex-col rounded-[30px] border-border/65 bg-card/72 px-3 py-4 shadow-[0_20px_60px_-36px_rgba(0,0,0,0.72)]">
+        <div className="px-3 pb-4">
+          <div className="text-[15px] font-semibold tracking-tight">{copy.title}</div>
+          <div className="mt-1 text-[11px] leading-4 text-muted-foreground">{copy.subtitle}</div>
+        </div>
+
+        <nav aria-label={copy.title}>
+          {tabGroups.map((group, groupIndex) => (
+            <div
+              key={group.label}
+              className={cn(groupIndex > 0 && 'mt-3 border-t border-border/70 pt-4')}
+            >
+              <div className="px-3 pb-2 text-[11px] font-medium tracking-[0.02em] text-muted-foreground">
+                {group.label}
+              </div>
+              <div className="space-y-1">
+                {group.items.map((tab) => {
+                  const selected = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      aria-current={selected ? 'page' : undefined}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={cn(
+                        'group flex h-11 w-full items-center gap-3 rounded-[14px] px-3.5 text-left transition-[background-color,color,transform] duration-200',
+                        selected
+                          ? 'bg-foreground/[0.09] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]'
+                          : 'text-muted-foreground hover:translate-x-0.5 hover:bg-foreground/[0.045] hover:text-foreground',
+                      )}
+                    >
+                      <HugeiconsIcon
+                        icon={tab.icon}
+                        className={cn('h-5 w-5 shrink-0 transition-colors', selected ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground')}
+                        strokeWidth={1.8}
+                      />
+                      <span className="truncate text-[14px] font-medium tracking-[-0.01em]">{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="mt-auto border-t border-border/70 px-3 pt-4 text-[10px] leading-4 text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/80 shadow-[0_0_8px_rgba(52,211,153,0.45)]" />
+            <span>{isZh ? '所有设置都会立即生效并自动保存。' : 'Changes apply instantly and save automatically.'}</span>
+          </div>
+        </div>
+      </aside>
+
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-3xl border border-border/40 bg-background/18">
+        <div className="mx-auto w-full max-w-[980px] px-8 py-7">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-[-0.025em]">{active.label}</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">{active.description}</p>
+            </div>
+            <div className="hidden items-center gap-2 rounded-full border border-border/55 bg-card/45 px-3 py-1.5 text-[10px] text-muted-foreground lg:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              {isZh ? '自动保存' : 'Autosaved'}
+            </div>
+          </div>
+          {activeTab === 'appearance' && renderAppearance()}
+          {activeTab === 'terminal' && renderTerminal()}
+          {activeTab === 'app' && renderApp()}
+          <div className="h-8" />
+        </div>
+      </main>
     </div>
   );
 }

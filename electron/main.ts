@@ -38,6 +38,14 @@ function getRuntimeAssetPath(fileName: string) {
   return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
 }
 
+async function openExternalUrl(url: string) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`Blocked unsupported external URL protocol: ${parsed.protocol}`);
+  }
+  await shell.openExternal(parsed.toString());
+}
+
 const createWindow = () => {
   const preloadPath = path.join(__dirname, 'preload.js');
   const appIconPath = getRuntimeAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
@@ -57,9 +65,21 @@ const createWindow = () => {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
   mainWindow = window;
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    void openExternalUrl(url).catch((error) => console.warn('[Main] Blocked external window:', error));
+    return { action: 'deny' };
+  });
+  window.webContents.on('will-navigate', (event, url) => {
+    const allowed = app.isPackaged ? url.startsWith('file:') : url.startsWith(DEV_SERVER_URL);
+    if (allowed) return;
+    event.preventDefault();
+    void openExternalUrl(url).catch((error) => console.warn('[Main] Blocked renderer navigation:', error));
+  });
 
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.warn(`[Main] Renderer load failed (${errorCode}): ${errorDescription} - ${validatedURL}`);
@@ -145,7 +165,7 @@ function createTrayIcon() {
     : getRuntimeAssetPath('icon.png');
   const image = nativeImage.createFromPath(iconPath);
   if (image.isEmpty()) {
-    return nativeImage.createFromPath(getRuntimeAssetPath('logo.png')).resize({ width: 16, height: 16 });
+    return nativeImage.createFromPath(getRuntimeAssetPath('tray-icon.png')).resize({ width: 16, height: 16 });
   }
   const traySize = process.platform === 'darwin' ? 18 : 16;
   return image.resize({ width: traySize, height: traySize });
@@ -181,7 +201,7 @@ function createTray() {
 
 app.whenReady().then(() => {
   setupIpcHandlers();
-  ipcMain.handle('open-external', async (_event, url: string) => shell.openExternal(url));
+  ipcMain.handle('open-external', async (_event, url: string) => openExternalUrl(url));
   createTray();
   createWindow();
 

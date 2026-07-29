@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import Editor from '@monaco-editor/react';
-import { X, Save, Loader2, FileCode, Maximize2, Minimize2 } from 'lucide-react';
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, FileScriptIcon, FloppyDiskIcon, Loading02Icon, Maximize02Icon, Minimize02Icon } from "@hugeicons/core-free-icons";
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
-import { useThemeStore } from '../store/themeStore';
-import { HOPPSCOTCH_MONO_FONT_STACK } from '../shared/fontStacks';
+import { useSettingsStore } from '../store/settingsStore';
 
 interface FileEditorProps {
     fileName: string;
@@ -13,189 +12,223 @@ interface FileEditorProps {
     onClose: () => void;
 }
 
+const EDITOR_WIDTH = 920;
+const EDITOR_HEIGHT = 620;
+
 export function FileEditor({ fileName, filePath, initialContent, onSave, onClose }: FileEditorProps) {
     const [content, setContent] = useState(initialContent);
     const [isSaving, setIsSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
-    const { baseThemeId } = useThemeStore();
+    const [saveError, setSaveError] = useState('');
+    const { terminalFontFamily, fontSize } = useSettingsStore();
 
     const windowRef = useRef<HTMLDivElement>(null);
+    const savedContentRef = useRef(initialContent);
     const isDragging = useRef(false);
     const dragStart = useRef({ mx: 0, my: 0, tx: 0, ty: 0 });
     const pos = useRef({ x: 0, y: 0 });
-    const W = 920, H = 620;
 
-    // Center window on mount via transform (GPU-accelerated, no layout reflow)
+    // Center the floating editor after its responsive size has been resolved.
     useEffect(() => {
-        const x = Math.round((window.innerWidth - W) / 2);
-        const y = Math.round((window.innerHeight - H) / 2);
+        const rect = windowRef.current?.getBoundingClientRect();
+        const width = rect?.width ?? EDITOR_WIDTH;
+        const height = rect?.height ?? EDITOR_HEIGHT;
+        const x = Math.max(0, Math.round((window.innerWidth - width) / 2));
+        const y = Math.max(0, Math.round((window.innerHeight - height) / 2));
         pos.current = { x, y };
         if (windowRef.current) {
             windowRef.current.style.transform = `translate(${x}px,${y}px)`;
         }
     }, []);
 
-    const onMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const onMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
         if (isMaximized) return;
         isDragging.current = true;
-        dragStart.current = { mx: e.clientX, my: e.clientY, tx: pos.current.x, ty: pos.current.y };
-        e.preventDefault();
+        dragStart.current = {
+            mx: event.clientX,
+            my: event.clientY,
+            tx: pos.current.x,
+            ty: pos.current.y,
+        };
+        event.preventDefault();
     }, [isMaximized]);
 
     useEffect(() => {
-        const onMove = (e: MouseEvent) => {
-            if (!isDragging.current || !windowRef.current) return;
-            const x = Math.max(0, Math.min(window.innerWidth - W, dragStart.current.tx + e.clientX - dragStart.current.mx));
-            const y = Math.max(0, Math.min(window.innerHeight - 40, dragStart.current.ty + e.clientY - dragStart.current.my));
+        const onMove = (event: MouseEvent) => {
+            const editor = windowRef.current;
+            if (!isDragging.current || !editor) return;
+
+            const x = Math.max(
+                0,
+                Math.min(
+                    window.innerWidth - editor.offsetWidth,
+                    dragStart.current.tx + event.clientX - dragStart.current.mx,
+                ),
+            );
+            const y = Math.max(
+                0,
+                Math.min(
+                    window.innerHeight - 40,
+                    dragStart.current.ty + event.clientY - dragStart.current.my,
+                ),
+            );
             pos.current = { x, y };
-            windowRef.current.style.transform = `translate(${x}px,${y}px)`;
+            editor.style.transform = `translate(${x}px,${y}px)`;
         };
         const onUp = () => { isDragging.current = false; };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
-        return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
     }, []);
 
-    const handleEditorChange = (value: string | undefined) => {
-        if (value !== undefined) {
-            setContent(value);
-            setIsDirty(value !== initialContent);
-        }
+    const handleEditorChange = (value: string) => {
+        setContent(value);
+        setIsDirty(value !== savedContentRef.current);
+        setSaveError('');
     };
 
-    const handleSave = async () => {
+    const handleSave = useCallback(async () => {
+        if (!isDirty || isSaving) return;
         setIsSaving(true);
+        setSaveError('');
         try {
             await onSave(content);
+            savedContentRef.current = content;
             setIsDirty(false);
         } catch (error) {
-            alert('Failed to save file: ' + error);
+            setSaveError(error instanceof Error ? error.message : String(error));
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [content, isDirty, isSaving, onSave]);
 
-    // Keyboard shortcut for Ctrl+S
+    const requestClose = useCallback(() => {
+        if (isDirty && !window.confirm('文件有未保存的修改，确定关闭吗？')) return;
+        onClose();
+    }, [isDirty, onClose]);
+
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                handleSave();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                void handleSave();
             }
-            if (e.key === 'Escape') onClose();
+            if (event.key === 'Escape') requestClose();
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [content]);
-
-    const getLanguage = (filename: string) => {
-        const ext = filename.split('.').pop()?.toLowerCase();
-        switch (ext) {
-            case 'js': return 'javascript';
-            case 'ts': return 'typescript';
-            case 'json': return 'json';
-            case 'html': return 'html';
-            case 'css': return 'css';
-            case 'md': return 'markdown';
-            case 'py': return 'python';
-            case 'sh': return 'shell';
-            case 'yml':
-            case 'yaml': return 'yaml';
-            case 'xml': return 'xml';
-            case 'sql': return 'sql';
-            case 'java': return 'java';
-            case 'go': return 'go';
-            case 'c':
-            case 'cpp': return 'cpp';
-            case 'conf':
-            case 'nginx': return 'shell';
-            default: return 'plaintext';
-        }
-    };
+    }, [handleSave, requestClose]);
 
     const windowStyle: React.CSSProperties = isMaximized
         ? { position: 'fixed', inset: 0, borderRadius: 0 }
-        : { position: 'fixed', left: 0, top: 0, width: W, height: H, willChange: 'transform' };
+        : {
+            position: 'fixed',
+            left: 0,
+            top: 0,
+            width: 'min(920px, calc(100vw - 32px))',
+            height: 'min(620px, calc(100vh - 32px))',
+            willChange: 'transform',
+        };
 
     return (
         <>
-            {/* Semi-transparent backdrop */}
             <div
                 className="fixed inset-0 z-[45] bg-black/25 backdrop-blur-[1px]"
-                onClick={onClose}
+                onClick={requestClose}
             />
 
-            {/* Floating Editor Window */}
             <div
                 ref={windowRef}
-                className="z-[50] flex flex-col bg-background border border-border rounded-xl shadow-2xl overflow-hidden"
+                className="z-[70] flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
                 style={windowStyle}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
             >
-                {/* Title bar (drag handle) */}
                 <div
-                    className="flex items-center justify-between px-3 py-2 bg-card border-b border-border cursor-move select-none shrink-0"
+                    className="flex min-h-14 shrink-0 cursor-move select-none items-center justify-between bg-card px-4"
                     onMouseDown={onMouseDown}
-                    onDoubleClick={() => setIsMaximized(v => !v)}
+                    onDoubleClick={() => setIsMaximized((value) => !value)}
                 >
-                    <div className="flex items-center gap-2 overflow-hidden min-w-0">
-                        <FileCode className="w-4 h-4 text-primary shrink-0" />
-                        <div className="flex flex-col min-w-0">
-                            <span className="text-xs font-medium flex items-center gap-1.5 leading-tight">
+                    <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.06]">
+                            <HugeiconsIcon icon={FileScriptIcon} className="h-4 w-4 text-foreground" />
+                        </span>
+                        <div className="flex min-w-0 flex-col">
+                            <span className="flex items-center gap-1.5 text-xs font-medium leading-tight">
                                 {fileName}
-                                {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0" title="未保存" />}
+                                {isDirty && (
+                                    <span
+                                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-yellow-500"
+                                        title="未保存"
+                                    />
+                                )}
                             </span>
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[500px] leading-tight">{filePath}</span>
+                            <span className="max-w-[500px] truncate text-[10px] leading-tight text-muted-foreground">
+                                {filePath}
+                            </span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0 ml-2" onMouseDown={e => e.stopPropagation()}>
+                    <div
+                        className="ml-2 flex shrink-0 items-center gap-1"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={handleSave}
+                            onClick={() => void handleSave()}
                             disabled={isSaving || !isDirty}
-                            className="gap-1.5 h-7 text-xs px-2"
+                            className="h-7 gap-1.5 px-2 text-xs"
                         >
-                            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                            {isSaving ? (
+                                <HugeiconsIcon icon={Loading02Icon} className="h-3 w-3 animate-spin" />
+                            ) : (
+                                <HugeiconsIcon icon={FloppyDiskIcon} className="h-3 w-3" />
+                            )}
                             保存
                         </Button>
                         <button
-                            onClick={() => setIsMaximized(v => !v)}
-                            className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                            onClick={() => setIsMaximized((value) => !value)}
+                            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                             title={isMaximized ? '还原' : '最大化'}
                         >
-                            {isMaximized ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                            {isMaximized ? (
+                                <HugeiconsIcon icon={Minimize02Icon} className="h-3.5 w-3.5" />
+                            ) : (
+                                <HugeiconsIcon icon={Maximize02Icon} className="h-3.5 w-3.5" />
+                            )}
                         </button>
                         <button
-                            onClick={onClose}
-                            className="p-1.5 rounded hover:bg-destructive/15 hover:text-destructive transition-colors text-muted-foreground"
+                            onClick={requestClose}
+                            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                            title="关闭"
                         >
-                            <X className="w-3.5 h-3.5" />
+                            <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 </div>
 
-                {/* Monaco Editor */}
-                <div className="flex-1 w-full min-h-0 relative">
-                    <Editor
-                        height="100%"
-                        defaultLanguage={getLanguage(fileName)}
-                        defaultValue={initialContent}
-                        theme={baseThemeId === 'light' ? 'light' : 'vs-dark'}
-                        value={content}
-                        onChange={handleEditorChange}
-                        options={{
-                            minimap: { enabled: false },
-                            fontSize: 13,
-                            fontFamily: HOPPSCOTCH_MONO_FONT_STACK,
-                            scrollBeyondLastLine: false,
-                            automaticLayout: true,
-                            padding: { top: 12 },
-                            lineNumbersMinChars: 3,
-                        }}
-                    />
-                </div>
+                {saveError && (
+                    <div className="mx-3 mb-2 shrink-0 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        保存失败：{saveError}
+                    </div>
+                )}
+
+                <textarea
+                    value={content}
+                    onChange={(event) => handleEditorChange(event.target.value)}
+                    aria-label={`编辑 ${fileName}`}
+                    spellCheck={false}
+                    className="m-3 mt-0 min-h-0 flex-1 resize-none rounded-xl border border-border/60 bg-foreground/[0.025] p-4 text-foreground outline-none selection:bg-foreground/20 focus:border-foreground/20"
+                    style={{
+                        fontFamily: terminalFontFamily,
+                        fontSize: Math.max(12, Math.min(fontSize, 18)),
+                        lineHeight: 1.55,
+                        tabSize: 4,
+                    }}
+                />
             </div>
         </>
     );

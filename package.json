@@ -9,7 +9,8 @@
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
     "dev:renderer": "vite",
     "dev:main": "tsc -p electron/tsconfig.json && electron .",
-    "build": "tsc -p electron/tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "npm run typecheck && tsc -p electron/tsconfig.json && vite build",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -67,17 +68,36 @@
     ]
   },
   "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/eb-garamond": "^5.3.0",
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/instrument-sans": "^5.3.0",
     "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/lora": "^5.3.0",
+    "@fontsource-variable/merriweather": "^5.3.0",
+    "@fontsource-variable/noto-sans": "^5.3.0",
     "@fontsource-variable/noto-sans-sc": "^5.2.10",
+    "@fontsource-variable/noto-serif": "^5.3.0",
+    "@fontsource-variable/nunito-sans": "^5.3.0",
+    "@fontsource-variable/outfit": "^5.3.0",
+    "@fontsource-variable/oxanium": "^5.3.0",
+    "@fontsource-variable/playfair-display": "^5.3.0",
+    "@fontsource-variable/public-sans": "^5.3.0",
+    "@fontsource-variable/raleway": "^5.3.0",
+    "@fontsource-variable/roboto": "^5.3.0",
     "@fontsource-variable/roboto-mono": "^5.2.8",
-    "@monaco-editor/react": "^4.7.0",
+    "@fontsource-variable/roboto-slab": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "@hugeicons/core-free-icons": "^4.2.3",
+    "@hugeicons/react": "^1.1.9",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^5.3.0",
     "clsx": "^2.1.0",
     "electron-store": "^8.1.0",
-    "gsap": "^3.14.2",
-    "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "recharts": "^2.12.0",
@@ -103,5 +123,17 @@
     "typescript": "^5.3.0",
     "vite": "^5.1.0",
     "wait-on": "^7.2.0"
+  },
+  "overrides": {
+    "electron-store": {
+      "conf": {
+        "ajv": "8.20.0",
+        "ajv-formats": {
+          "ajv": "8.20.0"
+        }
+      }
+    },
+    "fast-uri": "3.1.4",
+    "lodash": "4.18.1"
   }
 }

@@ -29,7 +29,7 @@ export function FileBreadcrumb({ currentPath, onNavigate }: Props) {
 
     if (isEditing) {
         return (
-            <div className="flex-1 h-7 bg-muted/30 border border-primary/40 rounded flex items-center px-2">
+            <div className="flex h-7 flex-1 items-center rounded-lg bg-foreground/[0.045] px-2 ring-1 ring-foreground/15">
                 <input
                     ref={inputRef}
                     className="flex-1 bg-transparent border-none outline-none text-xs font-mono"
@@ -53,7 +53,7 @@ export function FileBreadcrumb({ currentPath, onNavigate }: Props) {
 
     return (
         <div
-            className="flex-1 flex items-center overflow-hidden h-7 px-1 rounded hover:bg-muted/30 cursor-text transition-colors"
+            className="flex h-7 flex-1 cursor-text items-center overflow-hidden rounded-lg px-1 transition-colors hover:bg-foreground/[0.035]"
             onClick={() => setIsEditing(true)}
         >
             <div className="flex items-center text-xs text-muted-foreground whitespace-nowrap overflow-x-auto scrollbar-hide">

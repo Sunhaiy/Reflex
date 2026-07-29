@@ -1,10 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { SSHConnection, SystemStats, UsageDelta, UsageStats } from '../src/shared/types';
 
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   openFileDialog: (opts?: { title?: string; filters?: Electron.FileFilter[] }) => ipcRenderer.invoke('open-file-dialog', opts),
 
-  connectSSH: (payload: { connection: unknown; sessionId: string; profileId?: string }) => ipcRenderer.invoke('ssh-connect', payload),
+  connectSSH: (payload: { connection: SSHConnection; sessionId: string }) => ipcRenderer.invoke('ssh-connect', payload),
   onTerminalData: (callback: (event: Electron.IpcRendererEvent, payload: { id: string; data: string }) => void) => {
     const subscription = (event: Electron.IpcRendererEvent, payload: { id: string; data: string }) => callback(event, payload);
     ipcRenderer.on('terminal-data', subscription);
@@ -12,6 +13,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
   writeTerminal: (id: string, data: string) => ipcRenderer.send('term-write', { id, data }),
   sshReconnect: (id: string) => ipcRenderer.invoke('ssh-reconnect', id),
+  disconnectSSH: (id: string) => ipcRenderer.invoke('ssh-disconnect', id),
   resizeTerminal: (id: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { id, cols, rows }),
 
   sftpList: (id: string, path: string) => ipcRenderer.invoke('sftp-list', { id, path }),
@@ -29,8 +31,8 @@ contextBridge.exposeInMainWorld('electron', {
 
   startMonitoring: (id: string) => ipcRenderer.send('start-monitoring', id),
   stopMonitoring: (id: string) => ipcRenderer.send('stop-monitoring', id),
-  onStatsUpdate: (callback: (event: Electron.IpcRendererEvent, payload: { id: string; stats: unknown }) => void) => {
-    const subscription = (event: Electron.IpcRendererEvent, payload: { id: string; stats: unknown }) => callback(event, payload);
+  onStatsUpdate: (callback: (event: Electron.IpcRendererEvent, payload: { id: string; stats: SystemStats }) => void) => {
+    const subscription = (event: Electron.IpcRendererEvent, payload: { id: string; stats: SystemStats }) => callback(event, payload);
     ipcRenderer.on('stats-update', subscription);
     return () => ipcRenderer.removeListener('stats-update', subscription);
   },
@@ -38,7 +40,7 @@ contextBridge.exposeInMainWorld('electron', {
   killProcess: (id: string, pid: number) => ipcRenderer.invoke('kill-process', { id, pid }),
 
   getDockerContainers: (id: string) => ipcRenderer.invoke('docker-list', id),
-  dockerAction: (id: string, containerId: string, action: string) => ipcRenderer.invoke('docker-action', { id, containerId, action }),
+  dockerAction: (id: string, containerId: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove') => ipcRenderer.invoke('docker-action', { id, containerId, action }),
   dockerLogs: (id: string, containerId: string, lines = 200) => ipcRenderer.invoke('docker-logs', { id, containerId, lines }),
   dockerImages: (id: string) => ipcRenderer.invoke('docker-images', id),
   dockerRemoveImage: (id: string, imageId: string) => ipcRenderer.invoke('docker-remove-image', { id, imageId }),
@@ -56,5 +58,12 @@ contextBridge.exposeInMainWorld('electron', {
   storeGet: (key: string) => ipcRenderer.invoke('store-get', key),
   storeSet: (key: string, value: unknown) => ipcRenderer.invoke('store-set', key, value),
   storeDelete: (key: string) => ipcRenderer.invoke('store-delete', key),
+  usageGet: (): Promise<UsageStats> => ipcRenderer.invoke('usage-get'),
+  usageRecord: (delta: UsageDelta) => ipcRenderer.send('usage-record', delta),
+  onUsageStats: (callback: (stats: UsageStats) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, stats: UsageStats) => callback(stats);
+    ipcRenderer.on('usage-stats-updated', subscription);
+    return () => ipcRenderer.removeListener('usage-stats-updated', subscription);
+  },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 });

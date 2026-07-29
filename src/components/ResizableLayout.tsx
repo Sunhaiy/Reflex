@@ -12,8 +12,8 @@ export function ResizableLayout({
     leftContent,
     middleContent,
     rightContent,
-    defaultLeftWidth = 250,
-    defaultRightWidth = 300
+    defaultLeftWidth = 270,
+    defaultRightWidth = 320
 }: ResizableLayoutProps) {
     const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
     const [rightWidth, setRightWidth] = useState(defaultRightWidth);
@@ -75,35 +75,30 @@ export function ResizableLayout({
     };
 
     return (
-        <div ref={layoutRef} className="flex h-full w-full overflow-hidden">
-            {/* Left Panel */}
-            <div style={{ width: leftWidth, padding: 'var(--panel-gap)' }} className="flex-shrink-0 flex flex-col min-w-0 overflow-hidden">
+        <div ref={layoutRef} className="flex h-full w-full overflow-hidden bg-transparent p-2">
+            <div style={{ width: leftWidth }} className="glass-panel flex min-w-0 flex-shrink-0 flex-col overflow-hidden rounded-2xl">
                 {leftContent}
             </div>
 
-            {/* Left Resizer */}
             <div
-                className="w-px cursor-col-resize relative z-10 group"
+                className="group relative z-20 w-2 shrink-0 cursor-col-resize"
                 onMouseDown={startResizeLeft}
             >
-                <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-primary/30 transition-colors" />
+                <div className="absolute inset-y-3 left-[3px] w-0.5 rounded-full transition-colors group-hover:bg-primary/35" />
             </div>
 
-            {/* Middle Panel (Flexible) */}
-            <div className="flex-1 min-w-0 h-full flex flex-col overflow-hidden" style={{ padding: 'var(--panel-gap)' }}>
+            <div className="glass-panel flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-2xl bg-background/48">
                 {middleContent}
             </div>
 
-            {/* Right Resizer */}
             <div
-                className="w-px cursor-col-resize relative z-10 group"
+                className="group relative z-20 w-2 shrink-0 cursor-col-resize"
                 onMouseDown={startResizeRight}
             >
-                <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-primary/30 transition-colors" />
+                <div className="absolute inset-y-3 left-[3px] w-0.5 rounded-full transition-colors group-hover:bg-primary/35" />
             </div>
 
-            {/* Right Panel */}
-            <div style={{ width: rightWidth, padding: 'var(--panel-gap)' }} className="flex-shrink-0 flex flex-col min-w-0 overflow-hidden">
+            <div style={{ width: rightWidth }} className="glass-panel flex min-w-0 flex-shrink-0 flex-col overflow-hidden rounded-2xl">
                 {rightContent}
             </div>
         </div>
