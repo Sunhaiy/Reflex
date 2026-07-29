@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { TerminalContextMenu } from './TerminalContextMenu';
-import { AIPopover } from './AIPopover';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -14,15 +12,7 @@ interface TerminalViewProps {
 export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const { aiEnabled, rendererType } = useSettingsStore();
-
-  // Context Menu State
-  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const [selectionText, setSelectionText] = useState('');
-  const [hasSelection, setHasSelection] = useState(false);
-
-  // AI Popover State
-  const [aiPopover, setAiPopover] = useState<{ x: number; y: number; text: string; type: 'explain' | 'fix' } | null>(null);
+  const { rendererType } = useSettingsStore();
 
   // Effect to handle initialization
   useEffect(() => {
@@ -141,19 +131,6 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         }
       };
 
-      const handleNativeContextMenu = (e: MouseEvent) => {
-        if (containerRef.current?.contains(e.target as Node)) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-
-          const selection = term.getSelection();
-          setSelectionText(selection || '');
-          setHasSelection(!!selection && selection.length > 0);
-          setMenuPos({ x: e.clientX, y: e.clientY });
-        }
-      };
-      window.addEventListener('contextmenu', handleNativeContextMenu, true);
-
       const resizeObserver = new ResizeObserver(() => {
         handleResize();
       });
@@ -162,7 +139,6 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       return () => {
         unsubTheme();
         unsubSettings();
-        window.removeEventListener('contextmenu', handleNativeContextMenu, true);
         window.removeEventListener('terminal-refresh', handleTermRefresh);
         try {
           cleanup();
@@ -200,49 +176,9 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
   // Theme/settings live updates are handled by store.subscribe() inside
   // initTerminal() above, not here. This ensures `term` is always valid.
 
-  const handleCopy = () => {
-    console.log('handleCopy called, selection:', selectionText);
-    if (selectionText) {
-      (window as any).electron.clipboardWriteText(selectionText);
-    }
-  };
-
-  const handlePaste = async () => {
-    try {
-      const text = await (window as any).electron.clipboardReadText();
-      if (text) {
-        (window as any).electron.writeTerminal(connectionId, text);
-      }
-    } catch (err) {
-      console.error('Failed to read clipboard:', err);
-    }
-  };
-
-  const handleExplain = () => {
-    if (selectionText && menuPos) {
-      setAiPopover({
-        x: menuPos.x,
-        y: menuPos.y,
-        text: selectionText,
-        type: 'explain'
-      });
-    }
-  };
-
-  const handleFix = () => {
-    if (selectionText && menuPos) {
-      setAiPopover({
-        x: menuPos.x,
-        y: menuPos.y,
-        text: selectionText,
-        type: 'fix'
-      });
-    }
-  };
-
-    return (
+  return (
     <div
-      className="agent-terminal-canvas relative h-full w-full"
+      className="relative h-full w-full"
       onMouseDown={() => {
         // Ensure terminal gets focus when clicking anywhere in its container
         termRef.current?.focus();
@@ -253,34 +189,6 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         className="h-full w-full"
         style={{ background: 'transparent' }}
       />
-
-      {menuPos && (
-        <TerminalContextMenu
-          x={menuPos.x}
-          y={menuPos.y}
-          hasSelection={hasSelection}
-          aiEnabled={aiEnabled}
-          onCopy={handleCopy}
-          onPaste={handlePaste}
-          onExplain={handleExplain}
-          onFix={handleFix}
-          onClose={() => setMenuPos(null)}
-        />
-      )}
-
-      {aiPopover && (
-        <AIPopover
-          x={aiPopover.x}
-          y={aiPopover.y}
-          text={aiPopover.text}
-          type={aiPopover.type}
-          onClose={() => setAiPopover(null)}
-          onApplyFix={(cmd) => {
-            const command = cmd.endsWith('\n') ? cmd : `${cmd}\n`;
-            (window as any).electron?.writeTerminal(connectionId, command);
-          }}
-        />
-      )}
     </div>
   );
 }

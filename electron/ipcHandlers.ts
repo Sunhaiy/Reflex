@@ -1,31 +1,30 @@
-import { ipcMain, BrowserWindow, dialog, clipboard, type WebContents } from 'electron';
-import { SSHManager } from './ssh/sshManager.js';
-import { SSHConnection } from '../src/shared/types.js';
-import { AIProviderProfile } from '../src/shared/aiTypes.js';
-import { LLMProfile } from './llm.js';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import Store from 'electron-store';
 import fs from 'fs';
 import path from 'path';
-import type { DeploymentManager } from './deploy/deploymentManager.js';
-import type { AgentManager } from './agent/manager.js';
+import type { SSHConnection } from '../src/shared/types.js';
+import { SSHManager } from './ssh/sshManager.js';
 
 const store = new Store();
+const sshManager = new SSHManager(store);
 const LEGACY_STORE_DIR_NAMES = ['zangqing', 'Zangqing'];
 const MIGRATED_STORE_KEYS = [
   'connections',
   'lastConnection',
-  'agentSessions',
-  'aiProfiles',
-  'activeProfileId',
-  'deployProfiles',
-  'deployRuns',
   'terminalFontFamily',
-  'agentControlMode',
   'uiFontFamily',
   'language',
-  'aiPrivacyMode',
-  'aiSendShortcut',
+  'fontSize',
+  'lineHeight',
   'letterSpacing',
+  'cursorStyle',
+  'cursorBlink',
+  'rendererType',
+  'scrollback',
+  'brightBold',
+  'bellStyle',
+  'autoReconnect',
+  'bookmarks',
   'baseTheme',
   'accentColor',
   'terminalTheme',
@@ -48,22 +47,19 @@ function readJsonFile(filePath: string): Record<string, unknown> | null {
   }
 }
 
-function migrateLegacyStore(targetStore: any) {
-  const targetPath = targetStore.path as string | undefined;
+function migrateLegacyStore(targetStore: Store) {
+  const targetPath = targetStore.path;
   if (!targetPath) return;
 
   const appDataRoot = path.dirname(path.dirname(targetPath));
   for (const legacyDirName of LEGACY_STORE_DIR_NAMES) {
-    const legacyConfigPath = path.join(appDataRoot, legacyDirName, 'config.json');
-    const legacyConfig = readJsonFile(legacyConfigPath);
+    const legacyConfig = readJsonFile(path.join(appDataRoot, legacyDirName, 'config.json'));
     if (!legacyConfig) continue;
 
     const migratedKeys: string[] = [];
     for (const key of MIGRATED_STORE_KEYS) {
-      const currentValue = targetStore.get(key);
-      const legacyValue = legacyConfig[key];
-      if (isEmptyValue(currentValue) && !isEmptyValue(legacyValue)) {
-        targetStore.set(key, legacyValue);
+      if (isEmptyValue(targetStore.get(key)) && !isEmptyValue(legacyConfig[key])) {
+        targetStore.set(key, legacyConfig[key]);
         migratedKeys.push(key);
       }
     }
@@ -76,215 +72,32 @@ function migrateLegacyStore(targetStore: any) {
 }
 
 migrateLegacyStore(store);
-const sshManager = new SSHManager(store);
-let deploymentManager: DeploymentManager | null = null;
-let agentManager: AgentManager | null = null;
-
-async function getDeploymentManager() {
-  if (!deploymentManager) {
-    const module = await import('./deploy/deploymentManager.js');
-    deploymentManager = new module.DeploymentManager(sshManager, store);
-  }
-  return deploymentManager;
-}
-
-async function getAgentManager() {
-  if (!agentManager) {
-    const module = await import('./agent/manager.js');
-    agentManager = new module.AgentManager(sshManager, store);
-  }
-  return agentManager;
-}
-
-const getSessions = () => (store.get('agentSessions') as any[] | undefined) || [];
-const setSessions = (sessions: any[]) => {
-  store.set('agentSessions', sessions);
-};
-const upsertSession = (session: any) => {
-  const all = getSessions().filter((item: any) => item.id !== session.id);
-  setSessions([...all, session]);
-};
-
-function resolveBackgroundLlmProfile(runtime?: any): LLMProfile | null {
-  const profiles = (store.get('aiProfiles') as AIProviderProfile[] | undefined) || [];
-  const runtimeProfileId = runtime?.agentProfileId as string | undefined;
-  const activeProfileId = (store.get('activeProfileId') as string | undefined) || '';
-  const selected = profiles.find((profile) => profile.id === (runtimeProfileId || activeProfileId));
-
-  if (selected?.provider && selected.baseUrl && selected.model && (selected.apiKey || selected.provider === 'ollama')) {
-    return {
-      provider: selected.provider,
-      apiKey: selected.apiKey,
-      baseUrl: selected.baseUrl,
-      model: selected.model,
-    };
-  }
-
-  const provider = (store.get('aiProvider') as string | undefined) || '';
-  const apiKey = (store.get('aiApiKey') as string | undefined) || '';
-  const baseUrl = (store.get('aiBaseUrl') as string | undefined) || '';
-  const model = (store.get('aiModel') as string | undefined) || '';
-  if (!provider || !baseUrl || !model || (!apiKey && provider !== 'ollama')) {
-    return null;
-  }
-  return { provider, apiKey, baseUrl, model };
-}
-
-export function restoreBackgroundAgentSessions(webContents: WebContents) {
-  const sessions = getSessions();
-  const connections = (store.get('connections') as SSHConnection[] | undefined) || [];
-  const recoverable = sessions.filter((session: any) => {
-    const status = session?.runtime?.activeTaskRun?.status;
-    return Boolean(
-      session?.id
-      && session?.runtime?.activeTaskRun?.goal
-      && ['retryable_paused', 'running', 'repairing'].includes(status),
-    );
-  });
-
-  recoverable.forEach((session: any, index: number) => {
-    const connectionProfile = connections.find((item) => item.id === session.profileId);
-    const llmProfile = resolveBackgroundLlmProfile(session.runtime);
-    if (!connectionProfile || !llmProfile) {
-      return;
-    }
-
-    const backgroundConnectionId = `agent-bg-${session.id}`;
-    sshManager.registerPersistentSession(backgroundConnectionId, connectionProfile, webContents, session.profileId);
-
-    const nextRuntime = {
-      ...(session.runtime || {}),
-      planStatus: 'executing',
-      activeTaskRun: session.runtime?.activeTaskRun
-        ? {
-            ...session.runtime.activeTaskRun,
-            status: 'running',
-            phase: session.runtime.activeTaskRun.phase === 'paused' ? 'act' : session.runtime.activeTaskRun.phase,
-            nextAutoRetryAt: undefined,
-            currentAction: 'Background agent restored in the main process and resumed automatically.',
-          }
-        : session.runtime?.activeTaskRun,
-    };
-    upsertSession({
-      ...session,
-      runtime: nextRuntime,
-      updatedAt: Date.now(),
-    });
-
-    setTimeout(async () => {
-      try {
-        const manager = await getAgentManager();
-        manager.resume(session.id, {
-          sessionId: session.id,
-          connectionId: backgroundConnectionId,
-          userInput: 'continue',
-          profile: llmProfile,
-          sshHost: session.host,
-          threadMessages: session.messages,
-          restoredRuntime: nextRuntime,
-        }, webContents);
-      } catch (error) {
-        console.warn('[Agent] Failed to restore background session', session.id, error);
-      }
-    }, 1500 * index);
-  });
-}
 
 export function setupIpcHandlers() {
-  // ── Universal AI fetch proxy (bypasses renderer CORS) ────────────────────────
-  // Non-streaming: returns { ok, status, body }
-  ipcMain.handle('ai-fetch', async (_event, { url, method, headers, body }: {
-    url: string; method: string; headers: Record<string, string>; body: string;
-  }) => {
-    try {
-      const res = await fetch(url, { method, headers, body });
-      const text = await res.text();
-      return { ok: res.ok, status: res.status, body: text };
-    } catch (err: any) {
-      return { ok: false, status: 0, body: err?.message ?? String(err) };
-    }
-  });
+  ipcMain.handle('store-get', (_event, key: string) => store.get(key));
+  ipcMain.handle('store-set', (_event, key: string, value: unknown) => store.set(key, value));
+  ipcMain.handle('store-delete', (_event, key: string) => store.delete(key));
 
-  // Streaming: sends chunks back via 'ai-fetch-stream-chunk' events on the sender
-  ipcMain.handle('ai-fetch-stream', async (event, { url, method, headers, body, streamId }: {
-    url: string; method: string; headers: Record<string, string>; body: string; streamId: string;
-  }) => {
-    try {
-      const res = await fetch(url, { method, headers, body });
-      if (!res.ok || !res.body) {
-        const text = await res.text();
-        event.sender.send('ai-fetch-stream-chunk', { streamId, error: text, done: true });
-        return;
-      }
-      const reader = (res.body as any).getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          event.sender.send('ai-fetch-stream-chunk', { streamId, chunk: '', done: true });
-          break;
-        }
-        const chunk = decoder.decode(value, { stream: true });
-        event.sender.send('ai-fetch-stream-chunk', { streamId, chunk, done: false });
-      }
-    } catch (err: any) {
-      event.sender.send('ai-fetch-stream-chunk', { streamId, error: err?.message ?? String(err), done: true });
-    }
-  });
-
-  // Store
-  ipcMain.handle('store-get', (event, key) => store.get(key));
-  ipcMain.handle('store-set', (event, key, value) => store.set(key, value));
-  ipcMain.handle('store-delete', (event, key) => store.delete(key as any));
-
-  // Agent Session persistence
-  ipcMain.handle('agent-session-list', (_event, profileId: string) =>
-    getSessions().filter((s: any) => s.profileId === profileId)
-      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)
-  );
-  ipcMain.handle('agent-session-save', (_event, session: any) => {
-    upsertSession(session);
-  });
-  ipcMain.handle('agent-session-load', (_event, id: string) =>
-    getSessions().find((s: any) => s.id === id) || null
-  );
-  ipcMain.handle('agent-session-delete', (_event, id: string) =>
-    setSessions(getSessions().filter((s: any) => s.id !== id))
-  );
-  ipcMain.handle('agent-session-set-title', (_event, id: string, title: string) => {
-    setSessions(getSessions().map((s: any) =>
-      s.id === id ? { ...s, title, updatedAt: Date.now() } : s
-    ));
-  });
-
-  ipcMain.handle('open-file-dialog', async (event, opts?: { title?: string; filters?: any[] }) => {
+  ipcMain.handle('open-file-dialog', async (event, opts?: { title?: string; filters?: Electron.FileFilter[] }) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    const result = await dialog.showOpenDialog(win!, {
+    const options: Electron.OpenDialogOptions = {
       title: opts?.title || '选择文件',
       properties: ['openFile'],
       filters: opts?.filters || [
         { name: 'SSH 私钥', extensions: ['pem', 'key', 'ppk', 'rsa', 'ed25519', 'ecdsa', ''] },
         { name: '所有文件', extensions: ['*'] },
       ],
-    });
+    };
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
     return result.canceled ? null : result.filePaths[0];
   });
 
-  ipcMain.handle('open-directory-dialog', async (event, opts?: { title?: string }) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const result = await dialog.showOpenDialog(win!, {
-      title: opts?.title || 'Select project directory',
-      properties: ['openDirectory'],
-    });
-    return result.canceled ? null : result.filePaths[0];
-  });
-
-  ipcMain.handle('ssh-connect', async (event, { connection, sessionId, profileId }: { connection: SSHConnection, sessionId: string, profileId?: string }) => {
+  ipcMain.handle('ssh-connect', async (event, payload: { connection: SSHConnection; sessionId: string; profileId?: string }) => {
     try {
-      await sshManager.connect(connection, event.sender, sessionId, profileId);
+      await sshManager.connect(payload.connection, event.sender, payload.sessionId, payload.profileId);
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 
@@ -292,215 +105,51 @@ export function setupIpcHandlers() {
     try {
       await sshManager.reconnect(sessionId);
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  ipcMain.on('term-write', (event, { id, data }) => {
-    sshManager.write(id, data);
-  });
+  ipcMain.on('term-write', (_event, { id, data }: { id: string; data: string }) => sshManager.write(id, data));
+  ipcMain.on('term-resize', (_event, { id, cols, rows }: { id: string; cols: number; rows: number }) => sshManager.resize(id, cols, rows));
 
-  ipcMain.on('term-resize', (event, { id, cols, rows }) => {
-    sshManager.resize(id, cols, rows);
-  });
-
-  // Inject text directly to xterm display (NOT PTY stdin — avoids pager issues)
-  // Used by Agent mode to echo exec commands and their output in the terminal view.
-  ipcMain.on('terminal-inject', (event, { id, text }) => {
-    event.sender.send('terminal-data', { id, data: text });
-  });
-
-  ipcMain.handle('ssh-exec', async (event, { id, command, timeoutMs }: { id: string; command: string; timeoutMs?: number }) => {
-    return sshManager.exec(id, command, timeoutMs);
-  });
-
-  ipcMain.handle('sftp-list', (event, { id, path }) => {
-    console.log(`[IPC] sftp-list: id=${id}, path=${path}`);
-    return sshManager.listFiles(id, path);
-  });
-
-  ipcMain.handle('sftp-upload', async (event, { id, localPath, remotePath }) => {
-    console.log(`[IPC] sftp-upload: id=${id}`);
-    return sshManager.uploadFile(id, localPath, remotePath);
-  });
-
-  ipcMain.handle('sftp-download', async (event, { id, remotePath, localPath }) => {
-    console.log(`[IPC] sftp-download: id=${id}`);
-    return sshManager.downloadFile(id, remotePath, localPath);
-  });
-
-  ipcMain.handle('sftp-delete', async (event, { id, path }) => {
-    console.log(`[IPC] sftp-delete: id=${id}, path=${path}`);
-    return sshManager.deleteFile(id, path);
-  });
-
-  ipcMain.handle('sftp-mkdir', async (event, { id, path }) => {
-    console.log(`[IPC] sftp-mkdir: id=${id}, path=${path}`);
-    return sshManager.createFolder(id, path);
-  });
-
-  ipcMain.handle('sftp-rename', async (event, { id, oldPath, newPath }) => {
-    console.log(`[IPC] sftp-rename: id=${id}`);
-    return sshManager.renameFile(id, oldPath, newPath);
-  });
-
-  ipcMain.handle('sftp-read-file', async (event, { id, path }) => {
-    console.log(`[IPC] sftp-read-file: id=${id}, path=${path}`);
-    return sshManager.readFile(id, path);
-  });
-
-  ipcMain.handle('sftp-write-file', async (event, { id, path, content }) => {
-    console.log(`[IPC] sftp-write-file: id=${id}, path=${path}`);
-    return sshManager.writeFile(id, path, content);
-  });
-
-  ipcMain.handle('get-pwd', async (event, id) => {
-    console.log(`[IPC] get-pwd: id=${id}`);
-    return sshManager.getPwd(id);
-  });
+  ipcMain.handle('sftp-list', (_event, { id, path: remotePath }) => sshManager.listFiles(id, remotePath));
+  ipcMain.handle('sftp-upload', (_event, { id, localPath, remotePath }) => sshManager.uploadFile(id, localPath, remotePath));
+  ipcMain.handle('sftp-download', (_event, { id, remotePath, localPath }) => sshManager.downloadFile(id, remotePath, localPath));
+  ipcMain.handle('sftp-delete', (_event, { id, path: remotePath }) => sshManager.deleteFile(id, remotePath));
+  ipcMain.handle('sftp-mkdir', (_event, { id, path: remotePath }) => sshManager.createFolder(id, remotePath));
+  ipcMain.handle('sftp-rename', (_event, { id, oldPath, newPath }) => sshManager.renameFile(id, oldPath, newPath));
+  ipcMain.handle('sftp-read-file', (_event, { id, path: remotePath }) => sshManager.readFile(id, remotePath));
+  ipcMain.handle('sftp-write-file', (_event, { id, path: remotePath, content }) => sshManager.writeFile(id, remotePath, content));
+  ipcMain.handle('get-pwd', (_event, id: string) => sshManager.getPwd(id));
 
   ipcMain.handle('dialog-open', async () => {
     const result = await dialog.showOpenDialog({ properties: ['openFile'] });
-    return result.filePaths[0];
+    return result.canceled ? undefined : result.filePaths[0];
   });
-
-  ipcMain.handle('dialog-open-directory', async () => {
-    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-    return result.filePaths[0];
-  });
-
-  ipcMain.handle('dialog-save', async (event, defaultName) => {
+  ipcMain.handle('dialog-save', async (_event, defaultName: string) => {
     const result = await dialog.showSaveDialog({ defaultPath: defaultName });
-    return result.filePath;
+    return result.canceled ? undefined : result.filePath;
   });
 
-  ipcMain.on('start-monitoring', (event, id) => {
-    sshManager.startMonitoring(id, event.sender);
-  });
+  ipcMain.on('start-monitoring', (event, id: string) => sshManager.startMonitoring(id, event.sender));
+  ipcMain.on('stop-monitoring', (_event, id: string) => sshManager.stopMonitoring(id));
+  ipcMain.handle('get-processes', (_event, id: string) => sshManager.getProcesses(id));
+  ipcMain.handle('kill-process', (_event, { id, pid }: { id: string; pid: number }) => sshManager.killProcess(id, pid));
 
-  ipcMain.on('stop-monitoring', (event, id) => {
-    sshManager.stopMonitoring(id);
-  });
+  ipcMain.handle('docker-list', (_event, id: string) => sshManager.getDockerContainers(id));
+  ipcMain.handle('docker-action', (_event, { id, containerId, action }) => sshManager.dockerAction(id, containerId, action));
+  ipcMain.handle('docker-logs', (_event, { id, containerId, lines }) => sshManager.dockerLogs(id, containerId, lines));
+  ipcMain.handle('docker-images', (_event, id: string) => sshManager.dockerImages(id));
+  ipcMain.handle('docker-remove-image', (_event, { id, imageId }) => sshManager.dockerRemoveImage(id, imageId));
+  ipcMain.handle('docker-prune', (_event, { id, type }) => sshManager.dockerPrune(id, type));
+  ipcMain.handle('docker-disk-usage', (_event, id: string) => sshManager.dockerDiskUsage(id));
 
-  ipcMain.handle('get-processes', async (event, id) => {
-    return sshManager.getProcesses(id);
-  });
-
-  ipcMain.handle('kill-process', async (event, { id, pid }) => {
-    return sshManager.killProcess(id, pid);
-  });
-
-  ipcMain.handle('docker-list', async (event, id) => {
-    return sshManager.getDockerContainers(id);
-  });
-
-  ipcMain.handle('docker-action', async (event, { id, containerId, action }) => {
-    return sshManager.dockerAction(id, containerId, action);
-  });
-
-  ipcMain.handle('docker-logs', async (event, { id, containerId, lines }) => {
-    return sshManager.dockerLogs(id, containerId, lines);
-  });
-
-  ipcMain.handle('docker-images', async (event, id) => {
-    return sshManager.dockerImages(id);
-  });
-
-  ipcMain.handle('docker-remove-image', async (event, { id, imageId }) => {
-    return sshManager.dockerRemoveImage(id, imageId);
-  });
-
-  ipcMain.handle('docker-prune', async (event, { id, type }) => {
-    return sshManager.dockerPrune(id, type);
-  });
-
-  ipcMain.handle('docker-disk-usage', async (event, id) => {
-    return sshManager.dockerDiskUsage(id);
-  });
-
-  // Deployment workflow
-  ipcMain.handle('deploy-analyze-project', async (_event, { projectRoot }) => {
-    const manager = await getDeploymentManager();
-    return manager.analyzeProject(projectRoot);
-  });
-
-  ipcMain.handle('deploy-probe-server', async (_event, { sessionId, host }) => {
-    const manager = await getDeploymentManager();
-    return manager.probeServer(sessionId, host);
-  });
-
-  ipcMain.handle('deploy-create-draft', async (_event, payload) => {
-    const manager = await getDeploymentManager();
-    return manager.createDraft(payload.sessionId, payload);
-  });
-
-  ipcMain.handle('deploy-start', async (event, payload) => {
-    const manager = await getDeploymentManager();
-    manager.start(payload.sessionId, event.sender, payload);
-    return { success: true };
-  });
-
-  ipcMain.on('deploy-cancel', (_event, { sessionId }) => {
-    void getDeploymentManager().then((manager) => manager.cancel(sessionId));
-  });
-
-  ipcMain.handle('deploy-list-runs', async (_event, { serverProfileId }) => {
-    const manager = await getDeploymentManager();
-    return manager.listRuns(serverProfileId);
-  });
-
-  ipcMain.handle('deploy-get-run', async (_event, { runId }) => {
-    const manager = await getDeploymentManager();
-    return manager.getRun(runId);
-  });
-
-
-  // Window Controls
-  ipcMain.on('window-minimize', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    win?.minimize();
-  });
-
+  ipcMain.on('window-minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize());
   ipcMain.on('window-maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (win?.isMaximized()) {
-      win.unmaximize();
-    } else {
-      win?.maximize();
-    }
+    if (win?.isMaximized()) win.unmaximize();
+    else win?.maximize();
   });
-
-  ipcMain.on('window-close', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    win?.close();
-  });
-
-  // Clipboard
-  ipcMain.on('clipboard-write', (event, text) => {
-    clipboard.writeText(text);
-  });
-
-  ipcMain.handle('clipboard-read', () => {
-    return clipboard.readText();
-  });
-
-  // ── Agent Plan Mode (main-process brain) ────────────────────────────────────
-  ipcMain.handle('agent-plan-start', async (event, payload) => {
-    const manager = await getAgentManager();
-    manager.startPlan(payload.sessionId, payload, event.sender);
-  });
-
-  ipcMain.on('agent-plan-stop', (_event, { sessionId }) => {
-    void getAgentManager().then((manager) => manager.stop(sessionId));
-  });
-
-  ipcMain.handle('agent-plan-resume', async (event, payload) => {
-    const manager = await getAgentManager();
-    manager.resume(payload.sessionId, payload, event.sender);
-  });
-
-  ipcMain.on('agent-session-close', (_event, { sessionId }) => {
-    void getAgentManager().then((manager) => manager.cleanup(sessionId));
-  });
+  ipcMain.on('window-close', (event) => BrowserWindow.fromWebContents(event.sender)?.close());
 }

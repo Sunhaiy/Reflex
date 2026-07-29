@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { restoreBackgroundAgentSessions, setupIpcHandlers } from './ipcHandlers';
+import { setupIpcHandlers } from './ipcHandlers';
 
 // Prevent third-party crashes from killing the whole Electron process.
 process.on('uncaughtException', (err) => {
@@ -15,7 +15,9 @@ process.on('unhandledRejection', (reason) => {
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
-let backgroundRestoreScheduled = false;
+const DEV_SERVER_URL = 'http://127.0.0.1:3002';
+const DEV_SERVER_RETRY_COUNT = 40;
+const DEV_SERVER_RETRY_DELAY_MS = 250;
 
 app.setName('Reflex');
 if (process.platform === 'win32') {
@@ -39,15 +41,17 @@ function getRuntimeAssetPath(fileName: string) {
 const createWindow = () => {
   const preloadPath = path.join(__dirname, 'preload.js');
   const appIconPath = getRuntimeAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  const supportsTransparency = process.platform === 'darwin';
 
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     frame: false,
     titleBarStyle: 'hidden',
-    transparent: true,
-    backgroundColor: '#00000000',
-    vibrancy: 'fullscreen-ui',
+    transparent: supportsTransparency,
+    backgroundColor: supportsTransparency ? '#00000000' : '#080808',
+    vibrancy: supportsTransparency ? 'fullscreen-ui' : undefined,
     icon: appIconPath,
     webPreferences: {
       preload: preloadPath,
@@ -55,35 +59,85 @@ const createWindow = () => {
       nodeIntegration: false,
     },
   });
+  mainWindow = window;
 
-  if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:3002');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
-  }
-  mainWindow.maximize();
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.warn(`[Main] Renderer load failed (${errorCode}): ${errorDescription} - ${validatedURL}`);
+  });
 
-  mainWindow.on('close', (event) => {
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Main] Renderer process exited:', details.reason);
+  });
+
+  window.on('unresponsive', () => {
+    console.error('[Main] Window became unresponsive');
+  });
+
+  window.webContents.once('did-finish-load', () => {
+    revealWindow(window);
+  });
+
+  void loadRenderer(window).catch((error) => {
+    console.error('[Main] Unable to load renderer:', error);
+    revealWindow(window);
+  });
+
+  window.on('close', (event) => {
     if (isQuitting) return;
     event.preventDefault();
-    mainWindow?.setSkipTaskbar(true);
-    mainWindow?.hide();
+    window.setSkipTaskbar(true);
+    window.hide();
   });
 
-  mainWindow.on('show', () => {
-    mainWindow?.setSkipTaskbar(false);
+  window.on('show', () => {
+    window.setSkipTaskbar(false);
   });
 
-  mainWindow.webContents.once('did-finish-load', () => {
-    if (backgroundRestoreScheduled) return;
-    backgroundRestoreScheduled = true;
-    setTimeout(() => {
-      if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
-        restoreBackgroundAgentSessions(mainWindow.webContents);
-      }
-    }, 1500);
+  window.on('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
   });
 };
+
+function revealWindow(window: BrowserWindow) {
+  if (window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.setSkipTaskbar(false);
+  if (process.platform === 'win32') {
+    // Windows can reject focus requests from a process spawned behind a terminal.
+    // Briefly promote the window, then immediately restore normal z-order behavior.
+    window.setAlwaysOnTop(true);
+  }
+  window.maximize();
+  window.show();
+  app.focus();
+  window.focus();
+  window.moveTop();
+  if (process.platform === 'win32') {
+    setTimeout(() => {
+      if (!window.isDestroyed()) window.setAlwaysOnTop(false);
+    }, 300);
+  }
+}
+
+async function loadRenderer(window: BrowserWindow) {
+  if (app.isPackaged) {
+    await window.loadFile(path.join(__dirname, '../../dist/index.html'));
+    return;
+  }
+
+  for (let attempt = 1; attempt <= DEV_SERVER_RETRY_COUNT; attempt += 1) {
+    if (window.isDestroyed()) return;
+    try {
+      await window.loadURL(DEV_SERVER_URL);
+      return;
+    } catch (error) {
+      if (attempt === DEV_SERVER_RETRY_COUNT) throw error;
+      await new Promise((resolve) => setTimeout(resolve, DEV_SERVER_RETRY_DELAY_MS));
+    }
+  }
+}
 
 function createTrayIcon() {
   const iconPath = process.platform === 'win32'
@@ -102,12 +156,7 @@ function showMainWindow() {
     createWindow();
     return;
   }
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
-  }
-  mainWindow.setSkipTaskbar(false);
-  mainWindow.show();
-  mainWindow.focus();
+  revealWindow(mainWindow);
 }
 
 function createTray() {
@@ -148,5 +197,5 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Keep the app and background agent alive even when every window is hidden.
+  // Keep the tray app alive when every window is hidden.
 });

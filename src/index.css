@@ -143,42 +143,6 @@
   background-color: transparent !important;
 }
 
-.agent-terminal-shell {
-  position: relative;
-  isolation: isolate;
-  background: hsl(var(--background));
-}
-
-.agent-terminal-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border: 1px solid hsl(var(--border));
-  border-radius: 12px;
-}
-
-.agent-terminal-shell::after {
-  content: none;
-}
-
-.agent-terminal-shell .xterm {
-  padding: 16px;
-}
-
-.agent-terminal-shell .xterm-cursor-layer .xterm-cursor {
-  box-shadow: none;
-}
-
-.agent-terminal-shell .xterm-rows {
-  font-variant-ligatures: contextual;
-}
-
-.agent-terminal-canvas {
-  position: relative;
-  z-index: 1;
-}
-
 /* Remove focus outlines on buttons globally */
 button:focus,
 button:focus-visible {

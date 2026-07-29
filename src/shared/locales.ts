@@ -6,7 +6,6 @@ export const translations = {
                 app: 'App',
                 appearance: 'Appearance',
                 terminal: 'Terminal',
-                ai: 'AI Assistant'
             },
             appearance: {
                 title: 'Appearance',
@@ -40,24 +39,6 @@ export const translations = {
                 brightBoldDesc: 'Render bold text in bright colors.',
                 sound: 'Sound',
                 bellStyle: 'Terminal Bell'
-            },
-            ai: {
-                title: 'AI Assistant',
-                desc: 'Configure AI services to enable natural language to command, error analysis, and more.',
-                enable: 'Enable AI',
-                enableDesc: 'Show AI chat box below the terminal.',
-                provider: 'AI Provider',
-                providerDesc: 'Select your AI API provider.',
-                apiKey: 'API Key',
-                apiKeyDesc: 'Enter your API Key (stored securely locally).',
-                baseUrl: 'Custom Base URL',
-                baseUrlDesc: 'Enter your API endpoint URL.',
-                model: 'Model (Optional)',
-                modelDesc: 'Leave empty to use default model:',
-                privacy: 'Privacy Mode',
-                privacyDesc: 'Automatically mask sensitive info like IPs and passwords.',
-                shortcut: 'Send Shortcut',
-                shortcutDesc: 'Choose the shortcut to send messages.'
             },
             about: {
                 title: 'About',
@@ -124,17 +105,6 @@ export const translations = {
                 confirm: 'Confirm'
             }
         },
-        agent: {
-            thinking: 'Thinking...',
-            placeholder: 'Tell AI what to do, e.g. Check CPU load...',
-            newSession: 'New Session',
-            sessionHistory: 'Chat History',
-            terminalView: 'Terminal View',
-            noHistory: 'No chat history',
-            noHistoryHint: 'Start a conversation to see history here',
-            justNow: 'Just now',
-            messages: 'msgs',
-        },
         fileBrowser: {
             title: 'File Browser',
             upload: 'Upload',
@@ -146,7 +116,6 @@ export const translations = {
             loading: 'Loading...',
             confirmDelete: 'Delete',
             emptyFolder: 'Empty folder',
-            root: 'Root',
             name: 'Name',
             date: 'Date',
             size: 'Size',
@@ -159,12 +128,6 @@ export const translations = {
             favorites: 'Favorites',
             noBookmarks: 'No bookmarks',
             uploadFile: 'Upload file',
-            directoryTree: 'Directories',
-            showDirectoryTree: 'Show directory tree',
-            hideDirectoryTree: 'Hide directory tree',
-            refreshTree: 'Refresh directory tree',
-            subdirectories: 'Subdirectories',
-            treeLoadFailed: 'Unable to load directory',
             transfers: 'Transfers',
             clearHistory: 'Clear history',
             zoomOut: 'Zoom out',
@@ -215,7 +178,6 @@ export const translations = {
                 app: 'Applicazione',
                 appearance: 'Aspetto',
                 terminal: 'Terminale',
-                ai: 'Assistente AI'
             },
             appearance: {
                 title: 'Aspetto',
@@ -249,24 +211,6 @@ export const translations = {
                 brightBoldDesc: 'Mostra il testo in grassetto con colori più luminosi.',
                 sound: 'Audio',
                 bellStyle: 'Segnale acustico del terminale'
-            },
-            ai: {
-                title: 'Assistente AI',
-                desc: 'Configura i servizi AI per usare un linguaggio naturale nei comandi, nell\'analisi degli errori e altro.',
-                enable: 'Abilita AI',
-                enableDesc: 'Mostra la chat AI sotto il terminale.',
-                provider: 'Provider AI',
-                providerDesc: 'Seleziona il provider API per l\'AI.',
-                apiKey: 'Chiave API',
-                apiKeyDesc: 'Inserisci la chiave API (salvata localmente in modo sicuro).',
-                baseUrl: 'URL base personalizzato',
-                baseUrlDesc: 'Inserisci l\'URL dell\'endpoint API.',
-                model: 'Modello (opzionale)',
-                modelDesc: 'Lascia vuoto per usare il modello predefinito:',
-                privacy: 'Modalità privacy',
-                privacyDesc: 'Oscura automaticamente informazioni sensibili come IP e password.',
-                shortcut: 'Scorciatoia di invio',
-                shortcutDesc: 'Scegli la scorciatoia per inviare i messaggi.'
             },
             about: {
                 title: 'Informazioni',
@@ -333,17 +277,6 @@ export const translations = {
                 confirm: 'Conferma'
             }
         },
-        agent: {
-            thinking: 'Sto pensando...',
-            placeholder: 'Di\' all\'AI cosa fare, es. Controlla il carico CPU...',
-            newSession: 'Nuova sessione',
-            sessionHistory: 'Cronologia chat',
-            terminalView: 'Vista terminale',
-            noHistory: 'Nessuna cronologia chat',
-            noHistoryHint: 'Inizia una conversazione per vedere la cronologia qui',
-            justNow: 'Proprio ora',
-            messages: 'messaggi',
-        },
         fileBrowser: {
             title: 'Esplora file',
             upload: 'Carica',
@@ -355,7 +288,6 @@ export const translations = {
             loading: 'Caricamento...',
             confirmDelete: 'Conferma',
             emptyFolder: 'Cartella vuota',
-            root: 'Root',
             name: 'Nome',
             date: 'Data',
             size: 'Dimensione',
@@ -368,12 +300,6 @@ export const translations = {
             favorites: 'Preferiti',
             noBookmarks: 'Nessun segnalibro',
             uploadFile: 'Carica file',
-            directoryTree: 'Cartelle',
-            showDirectoryTree: 'Mostra albero delle cartelle',
-            hideDirectoryTree: 'Nascondi albero delle cartelle',
-            refreshTree: 'Aggiorna albero delle cartelle',
-            subdirectories: 'Sottocartelle',
-            treeLoadFailed: 'Impossibile caricare la cartella',
             transfers: 'Trasferimenti',
             clearHistory: 'Cancella cronologia',
             zoomOut: 'Rimpicciolisci',
@@ -424,7 +350,6 @@ export const translations = {
                 app: '应用',
                 appearance: '外观',
                 terminal: '终端',
-                ai: 'AI 智能'
             },
             appearance: {
                 title: '外观设置',
@@ -458,24 +383,6 @@ export const translations = {
                 brightBoldDesc: '以高亮颜色渲染粗体文本。',
                 sound: '声音',
                 bellStyle: '终端铃声'
-            },
-            ai: {
-                title: 'AI 智能助手',
-                desc: '配置 AI 服务以启用自然语言转指令、智能报错分析等功能。',
-                enable: '启用 AI 功能',
-                enableDesc: '开启后在终端下方显示 AI 对话框。',
-                provider: 'AI 服务商',
-                providerDesc: '选择您的 AI API 提供商。',
-                apiKey: 'API Key',
-                apiKeyDesc: '填入您的 API 密钥 (将安全存储在本地)。',
-                baseUrl: '自定义 Base URL',
-                baseUrlDesc: '输入您的 API 端点地址。',
-                model: '模型 (可选)',
-                modelDesc: '留空使用默认模型:',
-                privacy: '隐私模式',
-                privacyDesc: '开启后将自动脱敏 IP、密码等敏感信息。',
-                shortcut: '发送快捷键',
-                shortcutDesc: '选择生成指令时使用的快捷键方式。'
             },
             about: {
                 title: '关于',
@@ -542,17 +449,6 @@ export const translations = {
                 confirm: '确认'
             }
         },
-        agent: {
-            thinking: '正在思考...',
-            placeholder: '告诉 AI 你想做什么，例如：检查 CPU 负载...',
-            newSession: '新建对话',
-            sessionHistory: '历史对话',
-            terminalView: '终端观察',
-            noHistory: '还没有历史对话',
-            noHistoryHint: '开始对话后历史记录将显示在这里',
-            justNow: '刚刚',
-            messages: '条',
-        },
         fileBrowser: {
             title: '文件浏览器',
             upload: '上传',
@@ -564,7 +460,6 @@ export const translations = {
             loading: '加载中...',
             confirmDelete: '确认删除',
             emptyFolder: '空文件夹',
-            root: '根目录',
             name: '名称',
             date: '日期',
             size: '大小',
@@ -577,12 +472,6 @@ export const translations = {
             favorites: '收藏夹',
             noBookmarks: '暂无书签',
             uploadFile: '上传文件',
-            directoryTree: '目录树',
-            showDirectoryTree: '显示目录树',
-            hideDirectoryTree: '隐藏目录树',
-            refreshTree: '刷新目录树',
-            subdirectories: '子目录',
-            treeLoadFailed: '无法加载目录',
             transfers: '传输',
             clearHistory: '清除历史',
             zoomOut: '缩小',
@@ -633,7 +522,6 @@ export const translations = {
                 app: 'アプリ',
                 appearance: '外観',
                 terminal: 'ターミナル',
-                ai: 'AI'
             },
             appearance: {
                 title: '外観',
@@ -667,24 +555,6 @@ export const translations = {
                 brightBoldDesc: '太字テキストを明るい色でレンダリングします。',
                 sound: 'サウンド',
                 bellStyle: 'ターミナルベル'
-            },
-            ai: {
-                title: 'AIアシスタント',
-                desc: '自然言語コマンドやエラー分析などを有効にするためにAIサービスを設定します。',
-                enable: 'AIを有効にする',
-                enableDesc: 'ターミナルの下にAIチャットボックスを表示します。',
-                provider: 'AIプロバイダー',
-                providerDesc: 'AI APIプロバイダーを選択してください。',
-                apiKey: 'APIキー',
-                apiKeyDesc: 'APIキーを入力してください（ローカルに安全に保存されます）。',
-                baseUrl: 'カスタムBase URL',
-                baseUrlDesc: 'APIエンドポイントのURLを入力してください。',
-                model: 'モデル (オプション)',
-                modelDesc: 'デフォルトモデルを使用する場合は空欄にしてください:',
-                privacy: 'プライバシーモード',
-                privacyDesc: 'IPやパスワードなどの機密情報を自動的にマスクします。',
-                shortcut: '送信ショートカット',
-                shortcutDesc: 'メッセージを送信するショートカットを選択してください。'
             },
             about: {
                 title: '詳細',
@@ -751,17 +621,6 @@ export const translations = {
                 confirm: '確認'
             }
         },
-        agent: {
-            thinking: '考え中...',
-            placeholder: 'AIに作業を指示してください。例：CPU負荷を確認する',
-            newSession: '新しいセッション',
-            sessionHistory: '履歴',
-            terminalView: 'ターミナルビュー',
-            noHistory: '履歴なし',
-            noHistoryHint: '会話を開始すると履歴が表示されます',
-            justNow: 'たった今',
-            messages: '件',
-        },
         fileBrowser: {
             title: 'ファイルブラウザ',
             upload: 'アップロード',
@@ -773,7 +632,6 @@ export const translations = {
             loading: '読み込み中...',
             confirmDelete: '削除確認',
             emptyFolder: '空のフォルダ',
-            root: 'ルート',
             name: '名前',
             date: '日付',
             size: 'サイズ',
@@ -786,12 +644,6 @@ export const translations = {
             favorites: 'お気に入り',
             noBookmarks: 'ブックマークなし',
             uploadFile: 'ファイルをアップロード',
-            directoryTree: 'ディレクトリ',
-            showDirectoryTree: 'ディレクトリツリーを表示',
-            hideDirectoryTree: 'ディレクトリツリーを隠す',
-            refreshTree: 'ディレクトリツリーを更新',
-            subdirectories: 'サブディレクトリ',
-            treeLoadFailed: 'ディレクトリを読み込めません',
             transfers: '転送',
             clearHistory: '履歴を消去',
             zoomOut: '縮小',
@@ -842,7 +694,6 @@ export const translations = {
                 app: '앱',
                 appearance: '모양',
                 terminal: '터미널',
-                ai: 'AI'
             },
             appearance: {
                 title: '모양',
@@ -876,24 +727,6 @@ export const translations = {
                 brightBoldDesc: '굵은 텍스트를 밝은 색상으로 렌더링합니다.',
                 sound: '소리',
                 bellStyle: '터미널 벨'
-            },
-            ai: {
-                title: 'AI 도우미',
-                desc: '자연어 명령, 오류 분석 등의 기능을 활성화하려면 AI 서비스를 구성하세요.',
-                enable: 'AI 활성화',
-                enableDesc: '터미널 아래에 AI 채팅 상자를 표시합니다.',
-                provider: 'AI 공급자',
-                providerDesc: 'AI API 공급자를 선택하세요.',
-                apiKey: 'API 키',
-                apiKeyDesc: 'API 키를 입력하세요 (로컬에 안전하게 저장됨).',
-                baseUrl: '사용자 지정 Base URL',
-                baseUrlDesc: 'API 엔드포인트 URL을 입력하세요.',
-                model: '모델 (선택 사항)',
-                modelDesc: '기본 모델을 사용하려면 비워 두세요:',
-                privacy: '개인 정보 보호 모드',
-                privacyDesc: 'IP 및 비밀번호와 같은 민감한 정보를 자동으로 마스킹합니다.',
-                shortcut: '전송 단축키',
-                shortcutDesc: '메시지를 전송할 단축키를 선택하세요.'
             },
             about: {
                 title: '정보',
@@ -960,17 +793,6 @@ export const translations = {
                 confirm: '확인'
             }
         },
-        agent: {
-            thinking: '생각 중...',
-            placeholder: 'AI에게 작업을 지시하세요. 예: CPU 부하 확인',
-            newSession: '새 세션',
-            sessionHistory: '대화 기록',
-            terminalView: '터미널 뷰',
-            noHistory: '기록 없음',
-            noHistoryHint: '대화를 시작하면 기록이 나타납니다',
-            justNow: '방금',
-            messages: '개',
-        },
         fileBrowser: {
             title: '파일 브라우저',
             upload: '업로드',
@@ -982,7 +804,6 @@ export const translations = {
             loading: '로딩 중...',
             confirmDelete: '삭제 확인',
             emptyFolder: '빈 폴더',
-            root: '루트',
             name: '이름',
             date: '날짜',
             size: '크기',
@@ -995,12 +816,6 @@ export const translations = {
             favorites: '즐겨찾기',
             noBookmarks: '북마크 없음',
             uploadFile: '파일 업로드',
-            directoryTree: '디렉터리',
-            showDirectoryTree: '디렉터리 트리 표시',
-            hideDirectoryTree: '디렉터리 트리 숨기기',
-            refreshTree: '디렉터리 트리 새로고침',
-            subdirectories: '하위 디렉터리',
-            treeLoadFailed: '디렉터리를 불러올 수 없음',
             transfers: '전송',
             clearHistory: '기록 지우기',
             zoomOut: '축소',

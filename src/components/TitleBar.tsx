@@ -1,10 +1,8 @@
-import { Bot, Minus, Square, X, Settings, Terminal, Home, Plus } from "lucide-react";
+import { Minus, Square, X, Settings, Home, Plus } from "lucide-react";
 import { cn } from '../lib/utils';
 import { SSHConnection } from '../shared/types';
 import { useTranslation } from '../hooks/useTranslation';
 import logoUrl from '../assets/logo.png';
-
-export type WorkspaceMode = 'normal' | 'agent';
 
 interface SessionInfo {
   uniqueId: string;
@@ -15,9 +13,6 @@ interface SessionInfo {
 interface TitleBarProps {
   onSettings?: () => void;
   onHome?: () => void;
-  mode?: WorkspaceMode;
-  onModeChange?: (mode: WorkspaceMode) => void;
-  showModeSwitch?: boolean;
   showHome?: boolean;
   sessions?: SessionInfo[];
   activeSessionId?: string | null;
@@ -50,9 +45,6 @@ function getStatusMeta(status: SessionInfo['status']) {
 export function TitleBar({
   onSettings,
   onHome,
-  mode = 'normal',
-  onModeChange,
-  showModeSwitch = false,
   showHome = false,
   sessions = [],
   activeSessionId,
@@ -95,34 +87,6 @@ export function TitleBar({
             </button>
           )}
 
-          {showModeSwitch && (
-            <div className="flex h-7 items-center rounded-lg border border-border bg-card p-0.5">
-              <button
-                onClick={() => onModeChange?.('normal')}
-                className={cn(
-                  "flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors",
-                  mode === 'normal'
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <Terminal className="h-3.5 w-3.5" />
-                {t('connection.terminal')}
-              </button>
-              <button
-                onClick={() => onModeChange?.('agent')}
-                className={cn(
-                  "flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors",
-                  mode === 'agent'
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <Bot className="h-3.5 w-3.5" />
-                Agent
-              </button>
-            </div>
-          )}
         </div>
 
         {hasSessions && (

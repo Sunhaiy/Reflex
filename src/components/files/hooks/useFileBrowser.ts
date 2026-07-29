@@ -26,7 +26,6 @@ export function useFileBrowser(connectionId: string) {
     const [hasLoaded, setHasLoaded] = useState(false);
     const [openFile, setOpenFile] = useState<FileOpenResult | null>(null);
     const [toasts, setToasts] = useState<Toast[]>([]);
-    const [directoryRevision, setDirectoryRevision] = useState(0);
 
     const pathCacheRef = useRef<Record<string, FileEntry[]>>({});
     const transferQueue = useTransferQueue();
@@ -52,11 +51,6 @@ export function useFileBrowser(connectionId: string) {
         return entries;
     }, [connectionId]);
 
-    const listDirectories = useCallback(async (path: string, force = false): Promise<FileEntry[]> => {
-        const entries = await fetchDirectory(path, force);
-        return entries.filter(entry => entry.type === 'd' && entry.name !== '.' && entry.name !== '..');
-    }, [fetchDirectory]);
-
     const loadFiles = useCallback(async (path: string, force = false) => {
         const el = window as any;
 
@@ -70,7 +64,6 @@ export function useFileBrowser(connectionId: string) {
             const newFiles = await fetchDirectory(resolvedPath, force);
             setFiles(newFiles);
             setCurrentPath(resolvedPath);
-            if (force) setDirectoryRevision(revision => revision + 1);
         } catch (err: any) {
             pushToast(`无法加载目录: ${err?.message ?? err}`);
             setFiles([]);
@@ -257,11 +250,10 @@ export function useFileBrowser(connectionId: string) {
     return {
         // State
         currentPath, files, loading, openingFile, hasLoaded, openFile, toasts,
-        directoryRevision,
         transfers: transferQueue.transfers,
         activeTransferCount: transferQueue.activeCount,
         // File ops
-        loadFiles, listDirectories, refresh, navigateTo, navigateUp, navigateInto,
+        loadFiles, refresh, navigateTo, navigateUp, navigateInto,
         openFileEntry, closeFile, saveFile,
         createFolder, createFile,
         deleteEntry, renameEntry,

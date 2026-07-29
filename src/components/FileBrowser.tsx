@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { FileEntry } from '../shared/types';
 import { useFileBrowser } from './files/hooks/useFileBrowser';
 import { FileToolbar } from './files/FileToolbar';
-import { DirectoryTree } from './files/DirectoryTree';
 import { FileList } from './files/FileList';
 import { FileContextMenu } from './files/FileContextMenu';
 import { TransferPanel } from './files/TransferPanel';
@@ -46,7 +45,6 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
   const [filterQuery, setFilterQuery] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
-  const [treeVisible, setTreeVisible] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -139,36 +137,23 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
         onRefresh={fb.refresh}
         onUpload={(file) => fb.uploadFile(file)}
         onNavigate={fb.navigateTo}
-        treeVisible={treeVisible}
-        onToggleTree={() => setTreeVisible(visible => !visible)}
       />
 
-      {/* Directory tree + file list */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {treeVisible && (
-          <DirectoryTree
-            key={connectionId}
-            currentPath={fb.currentPath}
-            revision={fb.directoryRevision}
-            loadDirectories={fb.listDirectories}
-            onNavigate={fb.navigateTo}
-          />
-        )}
-        <div className="flex-1 min-w-0 overflow-hidden" onContextMenu={e => openContextMenu(e)}>
-          <FileList
-            files={fb.files}
-            loading={fb.loading}
-            hasLoaded={fb.hasLoaded}
-            isCompact={isCompact}
-            sortField={sortField}
-            sortOrder={sortOrder}
-            filterQuery={filterQuery}
-            onToggleSort={toggleSort}
-            onFileClick={handleSingleClick}
-            onFileDoubleClick={handleDoubleClick}
-            onContextMenu={openContextMenu}
-          />
-        </div>
+      {/* File list */}
+      <div className="flex-1 min-w-0 overflow-hidden" onContextMenu={e => openContextMenu(e)}>
+        <FileList
+          files={fb.files}
+          loading={fb.loading}
+          hasLoaded={fb.hasLoaded}
+          isCompact={isCompact}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          filterQuery={filterQuery}
+          onToggleSort={toggleSort}
+          onFileClick={handleSingleClick}
+          onFileDoubleClick={handleDoubleClick}
+          onContextMenu={openContextMenu}
+        />
       </div>
 
       {/* Transfer panel */}

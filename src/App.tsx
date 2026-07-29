@@ -1,14 +1,12 @@
 import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { TitleBar, WorkspaceMode } from './components/TitleBar';
+import { TitleBar } from './components/TitleBar';
 import { ConnectionManager } from './pages/ConnectionManager';
 import { SSHConnection } from './shared/types';
 import { ResizableLayout } from './components/ResizableLayout';
 import { useThemeStore } from './store/themeStore';
 import { useSettingsStore } from './store/settingsStore';
-import type { AgentMessage } from './components/AIChatPanel';
-import { TerminalSlotProvider, TerminalSlotConsumer } from './components/TerminalSlot';
-import { PanelSlotProvider, PanelSlotConsumer } from './components/PanelSlot';
+import { TerminalView } from './components/TerminalView';
 import { Modal } from './components/ui/modal';
 import { ConnectionForm } from './components/ConnectionForm';
 import { TerminalConnecting } from './components/ConnectingOverlay';
@@ -16,8 +14,7 @@ import { ThemeBackground } from './components/ThemeBackground';
 
 const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
 const RightPanel = lazy(() => import('./components/RightPanel').then((module) => ({ default: module.RightPanel })));
-const AICommandInput = lazy(() => import('./components/AICommandInput').then((module) => ({ default: module.AICommandInput })));
-const AgentLayout = lazy(() => import('./components/AgentLayout').then((module) => ({ default: module.AgentLayout })));
+const FileBrowser = lazy(() => import('./components/FileBrowser').then((module) => ({ default: module.FileBrowser })));
 
 interface AppSession {
   uniqueId: string;
@@ -37,27 +34,11 @@ function App() {
   // Multi-session state
   const [sessions, setSessions] = useState<AppSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const { aiEnabled } = useSettingsStore();
 
   // Global new-connection modal
   const [showNewConnModal, setShowNewConnModal] = useState(false);
   // Inline connection error — replaces alert() which breaks focus in Electron
   const [connError, setConnError] = useState<string | null>(null);
-
-  // Workspace mode: normal or agent
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('normal');
-
-  // Per-session agent chat history keyed by sessionId — useState ensures
-  // React properly detects changes and re-renders the AgentLayout with fresh messages.
-  const [agentMessages, setAgentMessagesState] = useState<Record<string, AgentMessage[]>>({});
-
-  const getAgentMessages = (sessionId: string): AgentMessage[] => {
-    return agentMessages[sessionId] || [];
-  };
-
-  const setAgentMessages = (sessionId: string, messages: AgentMessage[]) => {
-    setAgentMessagesState(prev => ({ ...prev, [sessionId]: messages }));
-  };
 
   const activeSessionIdx = sessions.findIndex(s => s.uniqueId === activeSessionId);
 
@@ -151,13 +132,6 @@ function App() {
   const handleCloseSession = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
-    // Clean up agent messages for this session
-    setAgentMessagesState(prev => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-
     setSessions(prev => {
       const newSessions = prev.filter(s => s.uniqueId !== id);
       if (newSessions.length === 0) {
@@ -170,13 +144,10 @@ function App() {
       return newSessions;
     });
 
-    // Notify main process to clean up agent runtime state for this session
-    (window as any).electron?.agentSessionClose?.(id);
   };
 
   const handleCloseAllSessions = () => {
     if (sessions.length === 0) return;
-    setAgentMessagesState({});
     setSessions([]);
     setActiveSessionId(null);
     setPage('connections');
@@ -191,9 +162,6 @@ function App() {
         <TitleBar
           onSettings={() => setPage('settings')}
           onHome={() => setPage('connections')}
-          mode={workspaceMode}
-          onModeChange={setWorkspaceMode}
-          showModeSwitch={page === 'workspace' && sessions.length > 0}
           showHome={true}
           sessions={sessions}
           activeSessionId={activeSessionId}
@@ -264,88 +232,43 @@ function App() {
                     height: '100%'
                   }}
                 >
-                  {/* TerminalSlotProvider wraps both layouts so the single TerminalView
-                      instance can be physically moved (via DOM appendChild) to whichever
-                      layout is currently active, without ever re-mounting it. */}
-                  <TerminalSlotProvider
-                    connectionId={session.uniqueId}
-                    isVisible={session.uniqueId === activeSessionId}
-                  >
-                    <PanelSlotProvider
-                      connectionId={session.uniqueId}
-                      isConnected={session.status === 'connected'}
-                      connection={session.connection}
-                    >
-                      {/* Normal Mode Layout */}
-                      <div
-                        className="absolute inset-0"
-                        style={{ visibility: workspaceMode === 'normal' ? 'visible' : 'hidden', height: '100%' }}
-                      >
-                        <ResizableLayout
-                          leftContent={
-                            <div className="h-full flex flex-col bg-card rounded-lg border border-border overflow-hidden">
-                              <PanelSlotConsumer panel="files" active={workspaceMode === 'normal'} />
-                            </div>
-                          }
-                          middleContent={
-                            <div className="h-full bg-card rounded-lg border border-border flex flex-col overflow-hidden relative">
-                              <div className="flex-1 min-h-0 relative overflow-hidden">
-                                {/* TerminalSlotConsumer: placeholder that adopts the stable terminal div */}
-                                {workspaceMode === 'normal' && <TerminalSlotConsumer />}
-                              </div>
-                              {/* Connecting overlay */}
-                              {session.status === 'connecting' && (
-                                <TerminalConnecting
-                                  host={session.connection.host}
-                                  username={session.connection.username || 'root'}
-                                />
-                              )}
-                              {aiEnabled && (
-                                <div className="flex-shrink-0 border-t border-border p-1.5 bg-card">
-                                  <Suspense fallback={null}>
-                                    <AICommandInput
-                                      onCommandGenerated={(cmd) => {
-                                        const eWindow = window as any;
-                                        eWindow.electron?.writeTerminal(session.uniqueId, cmd);
-                                      }}
-                                    />
-                                  </Suspense>
-                                </div>
-                              )}
-                            </div>
-                          }
-                          rightContent={
-                            <div className="h-full bg-card rounded-lg border border-border overflow-hidden">
-                              <ErrorBoundary name="RightPanel">
-                                <Suspense fallback={null}>
-                                  <RightPanel connectionId={session.uniqueId} isConnected={session.status === 'connected'} isActive={workspaceMode === 'normal'} />
-                                </Suspense>
-                              </ErrorBoundary>
-                            </div>
-                          }
-                        />
-                      </div>
-
-                      {/* Agent Mode Layout */}
-                      <div
-                        className="absolute inset-0"
-                        style={{ visibility: workspaceMode === 'agent' ? 'visible' : 'hidden', height: '100%' }}
-                      >
-                        <Suspense fallback={null}>
-                          <AgentLayout
-                            connectionId={session.uniqueId}
-                            profileId={session.connection.id || ''}
-                            messages={getAgentMessages(session.uniqueId)}
-                            onMessagesChange={(msgs) => setAgentMessages(session.uniqueId, msgs)}
-                            isActive={workspaceMode === 'agent'}
-                            sessionStatus={session.status}
-                            host={session.connection.host}
-                            username={session.connection.username || 'root'}
-                          />
-                        </Suspense>
-                      </div>
-                    </PanelSlotProvider>
-                  </TerminalSlotProvider>
+                  <div className="absolute inset-0 h-full">
+                    <ResizableLayout
+                      leftContent={
+                        <div className="h-full flex flex-col bg-card rounded-lg border border-border overflow-hidden">
+                          <ErrorBoundary name="FileBrowser">
+                            <Suspense fallback={null}>
+                              <FileBrowser connectionId={session.uniqueId} isConnected={session.status === 'connected'} />
+                            </Suspense>
+                          </ErrorBoundary>
+                        </div>
+                      }
+                      middleContent={
+                        <div className="h-full bg-card rounded-lg border border-border flex flex-col overflow-hidden relative">
+                          <div className="flex-1 min-h-0 relative overflow-hidden">
+                            <ErrorBoundary name="Terminal">
+                              <TerminalView connectionId={session.uniqueId} />
+                            </ErrorBoundary>
+                          </div>
+                          {session.status === 'connecting' && (
+                            <TerminalConnecting
+                              host={session.connection.host}
+                              username={session.connection.username || 'root'}
+                            />
+                          )}
+                        </div>
+                      }
+                      rightContent={
+                        <div className="h-full bg-card rounded-lg border border-border overflow-hidden">
+                          <ErrorBoundary name="RightPanel">
+                            <Suspense fallback={null}>
+                              <RightPanel connectionId={session.uniqueId} />
+                            </Suspense>
+                          </ErrorBoundary>
+                        </div>
+                      }
+                    />
+                  </div>
                 </div>
               ))}
             </div>

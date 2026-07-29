@@ -1,4 +1,4 @@
-import { ArrowUp, RefreshCw, Upload, Star, Bookmark, X, FolderOpen, PanelLeft } from 'lucide-react';
+import { ArrowUp, RefreshCw, Upload, Star, Bookmark, X, FolderOpen } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
@@ -14,8 +14,6 @@ interface Props {
     onRefresh: () => void;
     onUpload: (file?: File) => void;
     onNavigate: (path: string) => void;
-    treeVisible: boolean;
-    onToggleTree: () => void;
 }
 
 export function FileToolbar({
@@ -26,8 +24,6 @@ export function FileToolbar({
     onRefresh,
     onUpload,
     onNavigate,
-    treeVisible,
-    onToggleTree,
 }: Props) {
     const { t } = useTranslation();
     const { bookmarks, toggleBookmark } = useSettingsStore();
@@ -65,13 +61,6 @@ export function FileToolbar({
                 </button>
                 <button onClick={onHome} className={btn} title={t('fileBrowser.home')}>
                     <FolderOpen className="w-3.5 h-3.5" />
-                </button>
-                <button
-                    onClick={onToggleTree}
-                    className={cn(btn, treeVisible && 'bg-accent text-accent-foreground')}
-                    title={treeVisible ? t('fileBrowser.hideDirectoryTree') : t('fileBrowser.showDirectoryTree')}
-                >
-                    <PanelLeft className="w-3.5 h-3.5" />
                 </button>
                 <div className="w-px h-4 bg-border mx-1 shrink-0" />
                 <button
