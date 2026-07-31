@@ -52,10 +52,16 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      // Every step is the previous fixed value multiplied by --radius-scale, so the
+      // appearance setting rounds the whole UI at once without shifting proportions.
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        DEFAULT: "calc(0.25rem * var(--radius-scale))",
+        sm: "calc(0.75rem * var(--radius-scale))",
+        md: "calc(0.875rem * var(--radius-scale))",
+        lg: "calc(1rem * var(--radius-scale))",
+        xl: "calc(0.75rem * var(--radius-scale))",
+        "2xl": "calc(1rem * var(--radius-scale))",
+        "3xl": "calc(1.5rem * var(--radius-scale))",
       },
       keyframes: {
         "accordion-down": {
@@ -66,10 +72,20 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "caret-blink": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+        flow: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "caret-blink": "caret-blink 1.1s step-end infinite",
+        flow: "flow 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
       },
       fontSize: {
         'tiny': '0.625rem', // 10px

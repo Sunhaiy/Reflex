@@ -8,18 +8,40 @@ export interface SSHConnection {
   password?: string;
   privateKeyPath?: string;
   passphrase?: string;
-  jumpHost?: string;
-  jumpPort?: number;
-  jumpUsername?: string;
-  jumpPassword?: string;
-  jumpPrivateKeyPath?: string;
-  tags?: string[];
+  /** Optional IDC/cloud provider console link, stored as typed (the scheme is optional). */
+  providerUrl?: string;
   os?: string;
+}
+
+export type ActivityLevel = 'cmd' | 'info' | 'ok' | 'dim' | 'error';
+
+/** Which loading surface a progress line belongs to. */
+export type ActivityScope = 'session' | 'monitor';
+
+/** One real progress line emitted while a long-running operation runs. */
+export interface ActivityLine {
+  id: number;
+  text: string;
+  level: ActivityLevel;
+  at: number;
+}
+
+export type TextFileEncoding =
+  | 'utf-8'
+  | 'gb18030'
+  | 'big5'
+  | 'shift_jis'
+  | 'windows-1252'
+  | 'utf-16le'
+  | 'utf-16be';
+
+export interface RemoteFilePayload {
+  base64: string;
+  size: number;
 }
 
 export interface ConnectionDraft {
   data: Partial<SSHConnection>;
-  step: 1 | 2;
   savedAt: number;
 }
 

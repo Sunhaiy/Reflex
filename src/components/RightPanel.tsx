@@ -26,7 +26,7 @@ export function RightPanel({ connectionId }: RightPanelProps) {
           className={cn(
             workspaceTabClass,
             'whitespace-nowrap',
-            activeTab === 'monitor' && 'bg-foreground/[0.09] text-foreground shadow-sm'
+            activeTab === 'monitor' && 'bg-foreground/[0.09] text-foreground'
           )}
         >
           <HugeiconsIcon icon={ComputerIcon} className="h-3.5 w-3.5" />
@@ -38,7 +38,7 @@ export function RightPanel({ connectionId }: RightPanelProps) {
           className={cn(
             workspaceTabClass,
             'whitespace-nowrap',
-            activeTab === 'docker' && 'bg-foreground/[0.09] text-foreground shadow-sm'
+            activeTab === 'docker' && 'bg-foreground/[0.09] text-foreground'
           )}
         >
           <HugeiconsIcon icon={ContainerIcon} className="h-3.5 w-3.5" />

@@ -30,7 +30,7 @@ interface Props {
 }
 
 const iconButtonClass = 'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/25';
-const actionButtonClass = 'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[10px] text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/25';
+const actionButtonClass = 'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[10px] text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground/25 disabled:pointer-events-none disabled:opacity-30';
 
 export function FileToolbar({
     currentPath,
@@ -126,7 +126,7 @@ export function FileToolbar({
 
                 {!isCompact && (
                     <span className="shrink-0 px-1 text-[9px] tabular-nums text-muted-foreground/65">
-                        {fileCount} {language === 'zh' ? '项' : 'items'}
+                        {fileCount} {t('files.items')}
                     </span>
                 )}
                 <div className="flex shrink-0 items-center rounded-xl bg-foreground/[0.035] p-0.5">
@@ -139,36 +139,35 @@ export function FileToolbar({
                 </div>
             </div>
 
-            {selectedFile && (
-                <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl bg-foreground/[0.045] px-1.5 py-0.5">
-                    <span className="min-w-0 flex-1 truncate px-1.5 text-[10px] font-medium text-foreground/85" title={selectedFile.name}>
-                        {selectedFile.name}
+            <div className="flex h-8 min-w-0 items-center gap-1 rounded-xl border border-border/45 bg-foreground/[0.035] px-1.5">
+                    <span
+                        className={cn('min-w-0 flex-1 truncate px-1.5 text-[10px] font-medium', selectedFile ? 'text-foreground/85' : 'text-muted-foreground/55')}
+                        title={selectedFile?.name}
+                    >
+                        {selectedFile?.name ?? t('files.noSelection')}
                     </span>
-                    <button className={actionButtonClass} onClick={onOpenSelected}>
-                        {selectedFile.type === 'd'
+                    <button className={actionButtonClass} onClick={onOpenSelected} disabled={!selectedFile} title={selectedFile ? t(selectedFile.type === 'd' ? 'fileBrowser.open' : 'fileBrowser.preview') : undefined}>
+                        {selectedFile?.type === 'd'
                             ? <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5" />
                             : <HugeiconsIcon icon={ViewIcon} className="h-3.5 w-3.5" />}
-                        {!isCompact && <span>{t(selectedFile.type === 'd' ? 'fileBrowser.open' : 'fileBrowser.preview')}</span>}
+                        {!isCompact && <span>{t(selectedFile?.type === 'd' ? 'fileBrowser.open' : 'fileBrowser.preview')}</span>}
                     </button>
-                    {selectedFile.type !== 'd' && (
-                        <button className={actionButtonClass} onClick={onDownloadSelected} title={t('fileBrowser.download')}>
-                            <HugeiconsIcon icon={Download01Icon} className="h-3.5 w-3.5" />
-                        </button>
-                    )}
-                    <button className={actionButtonClass} onClick={onRenameSelected} title={t('fileBrowser.rename')}>
+                    <button className={actionButtonClass} onClick={onDownloadSelected} disabled={!selectedFile || selectedFile.type === 'd'} title={t('fileBrowser.download')}>
+                        <HugeiconsIcon icon={Download01Icon} className="h-3.5 w-3.5" />
+                    </button>
+                    <button className={actionButtonClass} onClick={onRenameSelected} disabled={!selectedFile} title={t('fileBrowser.rename')}>
                         <HugeiconsIcon icon={PencilIcon} className="h-3.5 w-3.5" />
                     </button>
-                    <button className={cn(actionButtonClass, 'hover:bg-destructive/10 hover:text-destructive')} onClick={onDeleteSelected} title={t('fileBrowser.delete')}>
+                    <button className={cn(actionButtonClass, 'hover:bg-destructive/10 hover:text-destructive')} onClick={onDeleteSelected} disabled={!selectedFile} title={t('fileBrowser.delete')}>
                         <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
                     </button>
                 </div>
-            )}
 
             {showBookmarks && createPortal(
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowBookmarks(false)} />
                     <div
-                        className="fixed z-50 w-60 rounded-xl border border-border/70 bg-popover p-1.5 shadow-2xl animate-in fade-in zoom-in-95"
+                        className="fixed z-50 w-60 rounded-xl border border-border/70 bg-popover/95 p-1.5 backdrop-blur-xl animate-in fade-in zoom-in-95"
                         style={(() => {
                             const rect = bookmarkButtonRef.current?.getBoundingClientRect();
                             return rect

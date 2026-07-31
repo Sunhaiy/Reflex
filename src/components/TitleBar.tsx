@@ -1,6 +1,7 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Add01Icon, Cancel01Icon, Home01Icon, MinusSignIcon, Settings01Icon, SquareIcon } from '@hugeicons/core-free-icons';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../hooks/useTranslation';
 import type { SSHConnection } from '../shared/types';
 
 const logoUrl = `${import.meta.env.BASE_URL}tray-icon.png`;
@@ -23,13 +24,17 @@ interface TitleBarProps {
 }
 
 function statusClass(status: SessionTab['status']) {
-  if (status === 'connected') return 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.55)]';
+  if (status === 'connected') return 'bg-emerald-400';
   if (status === 'connecting') return 'animate-pulse bg-amber-400';
   return 'bg-rose-400';
 }
 
 const tabClass = 'group relative flex h-9 min-w-0 items-center gap-2 rounded-xl border px-3 text-xs transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25';
 const windowButtonClass = 'flex h-8 w-9 items-center justify-center rounded-xl text-muted-foreground transition-all hover:bg-foreground/[0.065] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25';
+
+// Only interactive controls opt out of the drag region, so every gap in the bar stays draggable.
+const dragStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties;
+const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
 
 export function TitleBar({
   page,
@@ -41,33 +46,33 @@ export function TitleBar({
   onNewSession,
   onSettings,
 }: TitleBarProps) {
+  const { t } = useTranslation();
+
   return (
     <header
       className="relative z-30 flex h-12 shrink-0 select-none items-center border-b border-border/45 bg-background/48 px-2 backdrop-blur-2xl"
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      style={dragStyle}
     >
       <div className="flex w-[116px] shrink-0 items-center gap-2.5 px-2">
-        <img src={logoUrl} alt="Reflex" className="h-7 w-7 rounded-xl border border-border/55 object-cover shadow-sm" />
+        <img src={logoUrl} alt="Reflex" className="h-7 w-7 rounded-xl border border-border/55 object-cover" />
         <span className="text-[13px] font-semibold tracking-[-0.02em]">Reflex</span>
       </div>
 
-      <div
-        className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1.5"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-      >
+      <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1.5">
         <button
           type="button"
           onClick={onHome}
+          style={noDragStyle}
           className={cn(
             tabClass,
             'w-[128px] shrink-0',
             page === 'connections'
-              ? 'border-border/65 bg-card/72 text-foreground shadow-sm backdrop-blur-xl'
+              ? 'border-border/65 bg-card/72 text-foreground backdrop-blur-xl'
               : 'border-transparent text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground',
           )}
         >
           <HugeiconsIcon icon={Home01Icon} className="h-4 w-4 shrink-0" />
-          <span className="truncate font-medium">主界面</span>
+          <span className="truncate font-medium">{t('shell.home')}</span>
         </button>
 
         {sessions.map((session) => {
@@ -84,11 +89,12 @@ export function TitleBar({
                   onSwitchSession(session.uniqueId);
                 }
               }}
+              style={noDragStyle}
               className={cn(
                 tabClass,
                 'w-[174px] shrink-0 cursor-default',
                 active
-                  ? 'border-border/65 bg-card/72 text-foreground shadow-sm backdrop-blur-xl'
+                  ? 'border-border/65 bg-card/72 text-foreground backdrop-blur-xl'
                   : 'border-transparent text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground',
               )}
               title={`${session.connection.name} · ${session.connection.username}@${session.connection.host}`}
@@ -105,7 +111,7 @@ export function TitleBar({
                   'flex h-5 w-5 shrink-0 items-center justify-center rounded-lg text-muted-foreground/70 transition-all hover:bg-foreground/10 hover:text-foreground',
                   !active && 'opacity-0 group-hover:opacity-100',
                 )}
-                title="关闭会话"
+                title={t('shell.closeSession')}
               >
                 <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
               </button>
@@ -116,30 +122,31 @@ export function TitleBar({
         <button
           type="button"
           onClick={onNewSession}
+          style={noDragStyle}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-transparent text-muted-foreground transition-all hover:border-border/55 hover:bg-card/55 hover:text-foreground"
-          title="新建连接"
+          title={t('shell.newConnection')}
         >
           <HugeiconsIcon icon={Add01Icon} className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5 pl-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      <div className="flex shrink-0 items-center gap-0.5 pl-2" style={noDragStyle}>
         <button
           type="button"
           onClick={onSettings}
           className={cn(windowButtonClass, page === 'settings' && 'bg-foreground/[0.075] text-foreground')}
-          title="设置"
+          title={t('shell.settings')}
         >
           <HugeiconsIcon icon={Settings01Icon} className="h-4 w-4" />
         </button>
         <div className="mx-1.5 h-4 w-px bg-border/55" />
-        <button type="button" onClick={() => window.electron.minimize()} className={windowButtonClass} aria-label="最小化">
+        <button type="button" onClick={() => window.electron.minimize()} className={windowButtonClass} aria-label={t('shell.minimize')}>
           <HugeiconsIcon icon={MinusSignIcon} className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => window.electron.maximize()} className={windowButtonClass} aria-label="最大化">
+        <button type="button" onClick={() => window.electron.maximize()} className={windowButtonClass} aria-label={t('shell.maximize')}>
           <HugeiconsIcon icon={SquareIcon} className="h-3.5 w-3.5" />
         </button>
-        <button type="button" onClick={() => window.electron.close()} className={cn(windowButtonClass, 'hover:bg-rose-500/15 hover:text-rose-400')} aria-label="关闭">
+        <button type="button" onClick={() => window.electron.close()} className={cn(windowButtonClass, 'hover:bg-rose-500/15 hover:text-rose-400')} aria-label={t('shell.close')}>
           <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
         </button>
       </div>

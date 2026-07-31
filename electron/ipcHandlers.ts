@@ -1,10 +1,11 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import Store from 'electron-store';
 import fs from 'fs';
 import path from 'path';
 import type { SSHConnection, UsageDelta, UsageStats } from '../src/shared/types.js';
 import { mergeUsageDelta, normalizeUsageStats } from '../src/shared/usage.js';
 import { SSHManager } from './ssh/sshManager.js';
+import { getLogDirectory, getLogFilePath, readRecentLog, writeLog, type LogLevel } from './logger.js';
 
 const store = new Store();
 const sshManager = new SSHManager();
@@ -25,13 +26,13 @@ const MIGRATED_STORE_KEYS = [
   'rendererType',
   'scrollback',
   'brightBold',
-  'bellStyle',
   'autoReconnect',
   'bookmarks',
   'baseTheme',
   'accentColor',
   'terminalTheme',
   'opacity',
+  'radiusScale',
   'usageStats',
 ];
 const ALLOWED_STORE_KEYS = new Set(MIGRATED_STORE_KEYS);
@@ -55,6 +56,25 @@ async function trackServerOperation<T>(sender: Electron.WebContents, operation: 
   const result = await operation();
   recordUsage({ serverOperations: 1, activity }, sender);
   return result;
+}
+
+function transferProgress(sender: Electron.WebContents, transferId: string) {
+  let lastProgress = -1;
+  let lastSentAt = 0;
+  return (transferred: number, total: number) => {
+    if (sender.isDestroyed()) return;
+    const progress = total > 0 ? Math.min(100, Math.round((transferred / total) * 100)) : 0;
+    const now = Date.now();
+    if (progress !== 100 && (progress === lastProgress || now - lastSentAt < 100)) return;
+    lastProgress = progress;
+    lastSentAt = now;
+    sender.send('sftp-transfer-progress', {
+      transferId,
+      transferred,
+      total,
+      progress,
+    });
+  };
 }
 
 function isEmptyValue(value: unknown) {
@@ -160,13 +180,15 @@ export function setupIpcHandlers() {
   ipcMain.on('term-resize', (_event, { id, cols, rows }: { id: string; cols: number; rows: number }) => sshManager.resize(id, cols, rows));
 
   ipcMain.handle('sftp-list', (_event, { id, path: remotePath }) => sshManager.listFiles(id, remotePath));
-  ipcMain.handle('sftp-upload', (event, { id, localPath, remotePath }) => trackServerOperation(event.sender, () => sshManager.uploadFile(id, localPath, remotePath), 6));
-  ipcMain.handle('sftp-download', (event, { id, remotePath, localPath }) => trackServerOperation(event.sender, () => sshManager.downloadFile(id, remotePath, localPath), 6));
+  ipcMain.handle('sftp-upload', (event, { id, localPath, remotePath, transferId }) => trackServerOperation(event.sender, () => sshManager.uploadFile(id, localPath, remotePath, transferProgress(event.sender, transferId)), 6));
+  ipcMain.handle('sftp-download', (event, { id, remotePath, localPath, transferId }) => trackServerOperation(event.sender, () => sshManager.downloadFile(id, remotePath, localPath, transferProgress(event.sender, transferId)), 6));
+  ipcMain.handle('sftp-upload-resume', (event, { id, localPath, remotePath, transferId }) => trackServerOperation(event.sender, () => sshManager.resumeUploadFile(id, localPath, remotePath, transferProgress(event.sender, transferId)), 6));
+  ipcMain.handle('sftp-download-resume', (event, { id, remotePath, localPath, transferId }) => trackServerOperation(event.sender, () => sshManager.resumeDownloadFile(id, remotePath, localPath, transferProgress(event.sender, transferId)), 6));
   ipcMain.handle('sftp-delete', (event, { id, path: remotePath }) => trackServerOperation(event.sender, () => sshManager.deleteFile(id, remotePath)));
   ipcMain.handle('sftp-mkdir', (event, { id, path: remotePath }) => trackServerOperation(event.sender, () => sshManager.createFolder(id, remotePath)));
   ipcMain.handle('sftp-rename', (event, { id, oldPath, newPath }) => trackServerOperation(event.sender, () => sshManager.renameFile(id, oldPath, newPath)));
   ipcMain.handle('sftp-read-file', (_event, { id, path: remotePath }) => sshManager.readFile(id, remotePath));
-  ipcMain.handle('sftp-write-file', (event, { id, path: remotePath, content }) => trackServerOperation(event.sender, () => sshManager.writeFile(id, remotePath, content), 5));
+  ipcMain.handle('sftp-write-file', (event, { id, path: remotePath, content, encoding }) => trackServerOperation(event.sender, () => sshManager.writeFile(id, remotePath, content, encoding), 5));
   ipcMain.handle('get-pwd', (_event, id: string) => sshManager.getPwd(id));
 
   ipcMain.handle('dialog-open', async () => {
@@ -177,6 +199,7 @@ export function setupIpcHandlers() {
     const result = await dialog.showSaveDialog({ defaultPath: defaultName });
     return result.canceled ? undefined : result.filePath;
   });
+  ipcMain.handle('show-item-in-folder', (_event, filePath: string) => shell.showItemInFolder(filePath));
 
   ipcMain.on('start-monitoring', (event, id: string) => sshManager.startMonitoring(id, event.sender));
   ipcMain.on('stop-monitoring', (_event, id: string) => sshManager.stopMonitoring(id));
@@ -198,4 +221,12 @@ export function setupIpcHandlers() {
     else win?.maximize();
   });
   ipcMain.on('window-close', (event) => BrowserWindow.fromWebContents(event.sender)?.close());
+
+  ipcMain.on('log-write', (_event, { level, message, detail }: { level: LogLevel; message: string; detail?: unknown }) => {
+    const safeLevel: LogLevel = level === 'error' || level === 'warn' ? level : 'info';
+    writeLog(safeLevel, 'renderer', String(message).slice(0, 2000), detail);
+  });
+  ipcMain.handle('log-reveal', () => shell.openPath(getLogDirectory()));
+  ipcMain.handle('log-path', () => getLogFilePath());
+  ipcMain.handle('log-read', (_event, maxLines?: number) => readRecentLog(maxLines));
 }

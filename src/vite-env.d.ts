@@ -1,10 +1,13 @@
 /// <reference types="vite/client" />
 import type {
+  ActivityLine,
+  ActivityScope,
   DockerAction,
   DockerContainer,
   DockerImage,
   DockerPruneType,
   FileEntry,
+  RemoteFilePayload,
   RemoteProcess,
   SSHConnection,
   SystemStats,
@@ -24,17 +27,21 @@ declare global {
       disconnectSSH: (id: string) => Promise<void>;
       resizeTerminal: (id: string, cols: number, rows: number) => void;
       sftpList: (id: string, path: string) => Promise<FileEntry[]>;
-      sftpUpload: (id: string, localPath: string, remotePath: string) => Promise<void>;
-      sftpDownload: (id: string, remotePath: string, localPath: string) => Promise<void>;
+      sftpUpload: (id: string, localPath: string, remotePath: string, transferId: string) => Promise<void>;
+      sftpDownload: (id: string, remotePath: string, localPath: string, transferId: string) => Promise<void>;
+      sftpResumeUpload: (id: string, localPath: string, remotePath: string, transferId: string) => Promise<void>;
+      sftpResumeDownload: (id: string, remotePath: string, localPath: string, transferId: string) => Promise<void>;
+      onSftpTransferProgress: (callback: (payload: { transferId: string; transferred: number; total: number; progress: number }) => void) => () => void;
       sftpDelete: (id: string, path: string) => Promise<void>;
       sftpMkdir: (id: string, path: string) => Promise<void>;
       sftpRename: (id: string, oldPath: string, newPath: string) => Promise<void>;
-      sftpReadFile: (id: string, path: string) => Promise<string>;
-      sftpWriteFile: (id: string, path: string, content: string) => Promise<void>;
+      sftpReadFile: (id: string, path: string) => Promise<RemoteFilePayload>;
+      sftpWriteFile: (id: string, path: string, content: string, encoding?: string) => Promise<void>;
       getPathForFile: (file: File) => string;
       getPwd: (id: string) => Promise<string>;
       openDialog: () => Promise<string | undefined>;
       saveDialog: (defaultName: string) => Promise<string | undefined>;
+      showItemInFolder: (filePath: string) => Promise<void>;
       startMonitoring: (id: string) => void;
       stopMonitoring: (id: string) => void;
       onStatsUpdate: (callback: (event: unknown, payload: { id: string; stats: SystemStats }) => void) => () => void;
@@ -48,6 +55,7 @@ declare global {
       dockerPrune: (id: string, type: DockerPruneType) => Promise<string>;
       dockerDiskUsage: (id: string) => Promise<string>;
       onSSHStatus: (callback: (event: unknown, payload: { id: string; status: string }) => void) => () => void;
+      onSSHActivity: (callback: (payload: { id: string; scope: ActivityScope; line: ActivityLine }) => void) => () => void;
       minimize: () => void;
       maximize: () => void;
       close: () => void;
@@ -58,6 +66,10 @@ declare global {
       usageRecord: (delta: UsageDelta) => void;
       onUsageStats: (callback: (stats: UsageStats) => void) => () => void;
       openExternal: (url: string) => Promise<void>;
+      logWrite: (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) => void;
+      logReveal: () => Promise<string>;
+      logPath: () => Promise<string>;
+      logRead: (maxLines?: number) => Promise<string>;
     };
   }
 }

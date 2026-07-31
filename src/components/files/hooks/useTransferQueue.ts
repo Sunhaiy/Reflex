@@ -12,6 +12,10 @@ export interface TransferItem {
     error?: string;
     startedAt: number;
     completedAt?: number;
+    localPath: string;
+    remotePath: string;
+    transferred: number;
+    total: number;
 }
 
 let _id = 0;
@@ -22,17 +26,17 @@ const MAX_HISTORY = 20;
 export function useTransferQueue() {
     const [transfers, setTransfers] = useState<TransferItem[]>([]);
 
-    const addTransfer = useCallback((name: string, direction: TransferDirection): string => {
+    const addTransfer = useCallback((name: string, direction: TransferDirection, localPath: string, remotePath: string): string => {
         const id = nextId();
         setTransfers(prev => [
-            { id, name, direction, status: 'active', progress: 0, startedAt: Date.now() },
+            { id, name, direction, status: 'active', progress: 0, startedAt: Date.now(), localPath, remotePath, transferred: 0, total: 0 },
             ...prev,
         ]);
         return id;
     }, []);
 
-    const updateProgress = useCallback((id: string, progress: number) => {
-        setTransfers(prev => prev.map(t => t.id === id ? { ...t, progress } : t));
+    const updateProgress = useCallback((id: string, progress: number, transferred: number, total: number) => {
+        setTransfers(prev => prev.map(t => t.id === id ? { ...t, progress, transferred, total } : t));
     }, []);
 
     const markDone = useCallback((id: string) => {
@@ -53,11 +57,21 @@ export function useTransferQueue() {
         ));
     }, []);
 
+    const restart = useCallback((id: string) => {
+        setTransfers(prev => prev.map(t => t.id === id ? {
+            ...t,
+            status: 'active' as const,
+            error: undefined,
+            completedAt: undefined,
+            startedAt: Date.now(),
+        } : t));
+    }, []);
+
     const clearHistory = useCallback(() => {
         setTransfers(prev => prev.filter(t => t.status === 'active'));
     }, []);
 
     const activeCount = transfers.filter(t => t.status === 'active').length;
 
-    return { transfers, activeCount, addTransfer, updateProgress, markDone, markError, clearHistory };
+    return { transfers, activeCount, addTransfer, updateProgress, markDone, markError, restart, clearHistory };
 }

@@ -2,14 +2,15 @@ import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell } from 'ele
 import fs from 'fs';
 import path from 'path';
 import { setupIpcHandlers } from './ipcHandlers';
+import { flushLogSync, logger } from './logger';
 
 // Prevent third-party crashes from killing the whole Electron process.
 process.on('uncaughtException', (err) => {
-  console.error('[Main] Uncaught exception (non-fatal):', err.message);
+  logger.error('[Main] Uncaught exception (non-fatal)', err);
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('[Main] Unhandled rejection (non-fatal):', reason);
+  logger.error('[Main] Unhandled rejection (non-fatal)', reason);
 });
 
 let mainWindow: BrowserWindow | null = null;
@@ -82,19 +83,19 @@ const createWindow = () => {
   });
 
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-    console.warn(`[Main] Renderer load failed (${errorCode}): ${errorDescription} - ${validatedURL}`);
+    logger.warn(`[Main] Renderer load failed (${errorCode}): ${errorDescription} - ${validatedURL}`);
   });
 
   window.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[Main] Renderer process exited:', details.reason);
+    logger.error('[Main] Renderer process exited', details);
   });
 
   window.on('unresponsive', () => {
-    console.error('[Main] Window became unresponsive');
+    logger.error('[Main] Window became unresponsive');
   });
 
   window.webContents.once('did-finish-load', () => {
-    revealWindow(window);
+    revealWindow(window, { maximize: true });
   });
 
   void loadRenderer(window).catch((error) => {
@@ -120,7 +121,9 @@ const createWindow = () => {
   });
 };
 
-function revealWindow(window: BrowserWindow) {
+// Re-maximizing on every reveal would strand the user with an undraggable window,
+// because a maximized frameless window ignores the title bar drag region.
+function revealWindow(window: BrowserWindow, { maximize = false } = {}) {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   window.setSkipTaskbar(false);
@@ -129,7 +132,7 @@ function revealWindow(window: BrowserWindow) {
     // Briefly promote the window, then immediately restore normal z-order behavior.
     window.setAlwaysOnTop(true);
   }
-  window.maximize();
+  if (maximize) window.maximize();
   window.show();
   app.focus();
   window.focus();
@@ -214,6 +217,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  flushLogSync();
 });
 
 app.on('window-all-closed', () => {

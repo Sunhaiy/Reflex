@@ -34,7 +34,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md animate-in fade-in duration-200">
             <div
                 className={cn(
-                    'glass-panel flex max-h-[92vh] w-full flex-col rounded-[28px] shadow-2xl animate-in zoom-in-95 duration-200',
+                    'glass-panel flex max-h-[92vh] w-full flex-col rounded-[calc(28px*var(--radius-scale))] animate-in zoom-in-95 duration-200',
                     size === 'sm' && 'max-w-sm',
                     size === 'md' && 'max-w-lg',
                     size === 'lg' && 'max-w-2xl',

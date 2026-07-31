@@ -7,7 +7,7 @@ import {
     normalizeUiFont,
 } from '../shared/fontStacks';
 
-interface SettingsState {
+export interface SettingsState {
     language: Language;
     uiFontFamily: string;
     terminalFontFamily: string;
@@ -19,7 +19,6 @@ interface SettingsState {
     rendererType: 'canvas' | 'webgl';
     scrollback: number;
     brightBold: boolean;
-    bellStyle: 'none' | 'visual' | 'sound';
     autoReconnect: boolean;
     bookmarks: string[];
 
@@ -34,7 +33,6 @@ interface SettingsState {
     setRendererType: (renderer: 'canvas' | 'webgl') => void;
     setScrollback: (lines: number) => void;
     setBrightBold: (enabled: boolean) => void;
-    setBellStyle: (style: 'none' | 'visual' | 'sound') => void;
     setAutoReconnect: (enabled: boolean) => void;
     toggleBookmark: (path: string) => void;
     initSettings: () => Promise<void>;
@@ -69,7 +67,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     rendererType: 'canvas',
     scrollback: 5000,
     brightBold: true,
-    bellStyle: 'none',
     autoReconnect: false,
     bookmarks: [],
 
@@ -121,10 +118,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         set({ brightBold });
         persist('brightBold', brightBold);
     },
-    setBellStyle: (bellStyle) => {
-        set({ bellStyle });
-        persist('bellStyle', bellStyle);
-    },
     setAutoReconnect: (autoReconnect) => {
         set({ autoReconnect });
         persist('autoReconnect', autoReconnect);
@@ -151,7 +144,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             rendererType,
             scrollback,
             brightBold,
-            bellStyle,
             bookmarks,
             autoReconnect,
         ] = await Promise.all([
@@ -166,7 +158,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             window.electron.storeGet('rendererType'),
             window.electron.storeGet('scrollback'),
             window.electron.storeGet('brightBold'),
-            window.electron.storeGet('bellStyle'),
             window.electron.storeGet('bookmarks'),
             window.electron.storeGet('autoReconnect'),
         ]);
@@ -183,7 +174,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
             rendererType: (rendererType as SettingsState['rendererType']) || 'canvas',
             scrollback: normalizeSettingNumber(scrollback, 5000, 1000, 100000, 1000),
             brightBold: typeof brightBold === 'boolean' ? brightBold : true,
-            bellStyle: (bellStyle as SettingsState['bellStyle']) || 'none',
             bookmarks: Array.isArray(bookmarks) ? bookmarks : [],
             autoReconnect: typeof autoReconnect === 'boolean' ? autoReconnect : false,
         });

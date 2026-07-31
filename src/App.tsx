@@ -9,9 +9,11 @@ import { ServerHome } from './components/ServerHome';
 import { ThemeBackground } from './components/ThemeBackground';
 import { TitleBar } from './components/TitleBar';
 import { Modal } from './components/ui/modal';
+import { clearActivity, startActivityCapture } from './lib/activityStore';
 import { flushUsage, queueUsage, startUsageTracking } from './lib/usageTracker';
 import type { ConnectionDraft, SSHConnection } from './shared/types';
 import { useSettingsStore } from './store/settingsStore';
+import { useTranslation } from './hooks/useTranslation';
 import { useThemeStore } from './store/themeStore';
 
 const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
@@ -60,11 +62,6 @@ function connectionTransportChanged(previous: SSHConnection, next: SSHConnection
     'password',
     'privateKeyPath',
     'passphrase',
-    'jumpHost',
-    'jumpPort',
-    'jumpUsername',
-    'jumpPassword',
-    'jumpPrivateKeyPath',
   ];
   return transportFields.some((field) => previous[field] !== next[field]);
 }
@@ -80,6 +77,7 @@ function App() {
   const autoConnectedRef = useRef(false);
   const connectedSinceRef = useRef(new Map<string, number>());
 
+  const { t } = useTranslation();
   const initTheme = useThemeStore((state) => state.initTheme);
   const { initSettings, uiFontFamily, terminalFontFamily, language } = useSettingsStore();
 
@@ -96,6 +94,7 @@ function App() {
   };
 
   useEffect(() => startUsageTracking(), []);
+  useEffect(() => startActivityCapture(), []);
 
   useEffect(() => {
     const finalizeSessions = () => {
@@ -114,12 +113,8 @@ function App() {
       window.electron.storeGet('connectionDraft'),
     ]).then(([storedConnections, storedDraft]) => {
       if (Array.isArray(storedConnections)) setConnections(storedConnections as SSHConnection[]);
-      if (
-        storedDraft
-        && typeof storedDraft === 'object'
-        && 'data' in storedDraft
-        && 'step' in storedDraft
-      ) {
+      // Drafts saved by the old two-step wizard carry an extra `step` field, which is simply ignored.
+      if (storedDraft && typeof storedDraft === 'object' && 'data' in storedDraft) {
         setConnectionDraft(storedDraft as ConnectionDraft);
       }
     }).catch(() => undefined);
@@ -193,7 +188,7 @@ function App() {
     setSessions((current) => current.filter((session) => session.uniqueId !== uniqueId));
     setActiveSessionId(null);
     setPage('connections');
-    setConnError(`连接失败，已重试 ${CONNECTION_RETRY_ATTEMPTS} 次：${result.error || 'Unknown error'}`);
+    setConnError(t('shell.connectFailedRetry', { count: CONNECTION_RETRY_ATTEMPTS, error: result.error || 'Unknown error' }));
   };
 
   const handleReconnect = async (sessionId: string) => {
@@ -211,7 +206,7 @@ function App() {
       setSessions((current) => current.map((session) =>
         session.uniqueId === sessionId ? { ...session, status: 'disconnected', connectedAt: undefined } : session
       ));
-      setConnError(`重新连接失败：${result.error || 'Unknown error'}`);
+      setConnError(t('shell.reconnectFailed', { error: result.error || 'Unknown error' }));
     }
   };
 
@@ -231,6 +226,7 @@ function App() {
   const handleCloseSession = async (id: string) => {
     await window.electron.disconnectSSH(id).catch(() => undefined);
     finishConnectionUsage(id);
+    clearActivity(id);
     const remaining = sessions.filter((session) => session.uniqueId !== id);
     setSessions(remaining);
 
@@ -277,8 +273,8 @@ function App() {
     ));
   };
 
-  const handleSaveConnectionDraft = async (data: Partial<SSHConnection>, step: 1 | 2) => {
-    const draft: ConnectionDraft = { data, step, savedAt: Date.now() };
+  const handleSaveConnectionDraft = async (data: Partial<SSHConnection>) => {
+    const draft: ConnectionDraft = { data, savedAt: Date.now() };
     setConnectionDraft(draft);
     await window.electron.storeSet('connectionDraft', draft);
     setEditingConnection(null);
@@ -330,9 +326,9 @@ function App() {
 
         <div className="relative z-10 min-h-0 flex-1 overflow-hidden bg-background/12">
             {connError && (
-              <div className="glass-panel absolute left-1/2 top-4 z-40 flex max-w-[680px] -translate-x-1/2 items-start gap-3 rounded-2xl border-rose-500/25 px-4 py-3 shadow-xl">
+              <div className="glass-panel absolute left-1/2 top-4 z-40 flex max-w-[680px] -translate-x-1/2 items-start gap-3 rounded-2xl border-rose-500/25 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-medium text-rose-400">连接失败</div>
+                  <div className="text-[11px] font-medium text-rose-400">{t('shell.connectFailed')}</div>
                   <div className="mt-0.5 break-all text-[10px] leading-4 text-muted-foreground">{connError}</div>
                 </div>
                 <button
@@ -397,10 +393,7 @@ function App() {
                             </ErrorBoundary>
                           </div>
                           {session.status === 'connecting' && (
-                            <TerminalConnecting
-                              host={session.connection.host}
-                              username={session.connection.username || 'root'}
-                            />
+                            <TerminalConnecting connectionId={session.uniqueId} />
                           )}
                         </div>
                       }
@@ -424,7 +417,7 @@ function App() {
       <Modal
         isOpen={editingConnection !== null}
         onClose={() => setEditingConnection(null)}
-        title={editingConnection?.id ? '编辑连接' : '新建连接'}
+        title={editingConnection?.id ? t('shell.editConnection') : t('shell.newConnection')}
         size="lg"
       >
         <ConnectionForm

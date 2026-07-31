@@ -1,7 +1,8 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import * as React from "react"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 
 export interface SelectOption {
@@ -22,7 +23,11 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
     const [isOpen, setIsOpen] = useState(false)
     const [highlightedIndex, setHighlightedIndex] = useState(-1)
     const containerRef = useRef<HTMLDivElement>(null)
+    const triggerRef = useRef<HTMLButtonElement>(null)
+    const menuRef = useRef<HTMLDivElement>(null)
     const listRef = useRef<HTMLDivElement>(null)
+    const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({})
+    const [openAbove, setOpenAbove] = useState(false)
 
     const selectedOption = options.find(o => o.value === value)
 
@@ -30,13 +35,44 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
     useEffect(() => {
         if (!isOpen) return
         const handleClick = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+            const target = e.target as Node
+            if (!containerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
                 setIsOpen(false)
             }
         }
         document.addEventListener("mousedown", handleClick)
         return () => document.removeEventListener("mousedown", handleClick)
     }, [isOpen])
+
+    const updateMenuPosition = useCallback(() => {
+        const rect = triggerRef.current?.getBoundingClientRect()
+        if (!rect) return
+
+        const viewportGap = 12
+        const menuGap = 8
+        const availableBelow = window.innerHeight - rect.bottom - viewportGap - menuGap
+        const availableAbove = rect.top - viewportGap - menuGap
+        const openAbove = availableBelow < 180 && availableAbove > availableBelow
+        const maxHeight = Math.max(140, Math.min(260, openAbove ? availableAbove : availableBelow))
+        const width = Math.min(rect.width, window.innerWidth - viewportGap * 2)
+        const left = Math.min(Math.max(viewportGap, rect.left), window.innerWidth - width - viewportGap)
+
+        setOpenAbove(openAbove)
+        setMenuStyle(openAbove
+            ? { left, width, maxHeight, bottom: window.innerHeight - rect.top + menuGap }
+            : { left, width, maxHeight, top: rect.bottom + menuGap })
+    }, [])
+
+    useLayoutEffect(() => {
+        if (!isOpen) return
+        updateMenuPosition()
+        window.addEventListener("resize", updateMenuPosition)
+        window.addEventListener("scroll", updateMenuPosition, true)
+        return () => {
+            window.removeEventListener("resize", updateMenuPosition)
+            window.removeEventListener("scroll", updateMenuPosition, true)
+        }
+    }, [isOpen, updateMenuPosition])
 
     // Scroll highlighted item into view
     useEffect(() => {
@@ -95,6 +131,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
         <div ref={containerRef} className={cn("relative", className)}>
             {/* Trigger */}
             <button
+                ref={triggerRef}
                 type="button"
                 role="combobox"
                 aria-expanded={isOpen}
@@ -120,14 +157,20 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
             </button>
 
             {/* Dropdown */}
-            {isOpen && (
+            {isOpen && createPortal(
                 <div
+                    ref={menuRef}
                     className={cn(
-                        "glass-panel absolute z-50 mt-2 w-full min-w-[8rem] overflow-hidden rounded-2xl shadow-xl",
-                        "animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150"
+                        "glass-panel fixed z-[100] min-w-[8rem] overflow-hidden rounded-2xl border-border/80 bg-popover/95 backdrop-blur-2xl",
+                        "animate-in fade-in-0 zoom-in-95 duration-150 ease-out",
+                        // Grow away from the trigger, so the menu reads as unfolding from it.
+                        openAbove
+                            ? "origin-bottom slide-in-from-bottom-2"
+                            : "origin-top slide-in-from-top-2",
                     )}
+                    style={menuStyle}
                 >
-                    <div ref={listRef} role="listbox" className="max-h-60 overflow-y-auto p-1">
+                    <div ref={listRef} role="listbox" className="max-h-[inherit] overflow-y-auto p-1">
                         {options.map((option, index) => {
                             const isSelected = option.value === value
                             const isHighlighted = index === highlightedIndex
@@ -159,7 +202,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                         })}
                     </div>
                 </div>
-            )}
+            , document.body)}
         </div>
     )
 }

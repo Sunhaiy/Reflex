@@ -41,7 +41,8 @@ export const TERMINAL_FONT_OPTIONS: FontOption[] = [
 ];
 
 export const DEFAULT_UI_FONT_STACK = UI_FONT_OPTIONS[0].value;
-export const DEFAULT_TERMINAL_FONT_STACK = TERMINAL_FONT_OPTIONS[0].value;
+export const DEFAULT_TERMINAL_FONT_STACK =
+  TERMINAL_FONT_OPTIONS.find((font) => font.label === 'JetBrains Mono')!.value;
 
 // Kept as aliases so older imports and stored settings migrate cleanly.
 export const HOPPSCOTCH_UI_FONT_STACK = DEFAULT_UI_FONT_STACK;

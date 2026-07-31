@@ -26,7 +26,7 @@ export function InputDialog({ title, placeholder, defaultValue = '', onConfirm, 
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 backdrop-blur-sm animate-in fade-in">
-            <div className="w-72 rounded-2xl border border-border/70 bg-card p-5 shadow-2xl animate-in zoom-in-95">
+            <div className="w-72 rounded-2xl border border-border/70 bg-card p-5 animate-in zoom-in-95">
                 <h3 className="text-sm font-semibold mb-4">{title}</h3>
                 <input
                     ref={inputRef}

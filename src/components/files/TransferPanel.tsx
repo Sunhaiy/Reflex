@@ -1,5 +1,5 @@
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon, ArrowUp01Icon, CancelCircleIcon, CheckmarkCircle02Icon, Delete02Icon, Download01Icon, Upload01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowUp01Icon, CancelCircleIcon, CheckmarkCircle02Icon, Delete02Icon, Download01Icon, FolderOpenIcon, Refresh01Icon, Upload01Icon } from "@hugeicons/core-free-icons";
 import { useState } from 'react';
 import { TransferItem } from './hooks/useTransferQueue';
 import { cn } from '../../lib/utils';
@@ -8,9 +8,11 @@ import { useTranslation } from '../../hooks/useTranslation';
 interface Props {
     transfers: TransferItem[];
     onClearHistory: () => void;
+    onOpenLocation: (transfer: TransferItem) => void;
+    onRetry: (transfer: TransferItem) => void;
 }
 
-export function TransferPanel({ transfers, onClearHistory }: Props) {
+export function TransferPanel({ transfers, onClearHistory, onOpenLocation, onRetry }: Props) {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState(true);
 
@@ -20,10 +22,10 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
     const history = transfers.filter(t => t.status !== 'active');
 
     return (
-        <div className="mx-1.5 mb-1.5 shrink-0 overflow-hidden rounded-xl bg-foreground/[0.035]">
+        <div className="mx-1.5 mb-1.5 shrink-0 overflow-hidden rounded-xl border border-border/45 bg-foreground/[0.025]">
             {/* Header */}
             <div
-                className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                className="flex cursor-pointer select-none items-center gap-2 px-3 py-1.5 transition-colors hover:bg-muted/30"
                 onClick={() => setExpanded(v => !v)}
             >
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex-1">
@@ -45,33 +47,59 @@ export function TransferPanel({ transfers, onClearHistory }: Props) {
             </div>
 
             {expanded && (
-                <div className="max-h-36 overflow-y-auto px-2 pb-2 space-y-1">
-                    {transfers.map(t => (
-                        <div key={t.id} className="flex items-center gap-2 text-xs px-1">
+                <div className="max-h-40 space-y-1 overflow-y-auto px-1.5 pb-1.5">
+                    {transfers.map(transfer => {
+                        const canOpen = transfer.direction === 'download' && transfer.status === 'done';
+                        return (
+                        <div
+                            key={transfer.id}
+                            role={canOpen ? 'button' : undefined}
+                            tabIndex={canOpen ? 0 : undefined}
+                            className={cn(
+                                'flex min-h-8 items-center gap-2 rounded-lg px-2 text-xs transition-colors',
+                                canOpen && 'cursor-pointer hover:bg-foreground/[0.055]',
+                            )}
+                            onClick={() => { if (canOpen) onOpenLocation(transfer); }}
+                            onKeyDown={(event) => {
+                                if (canOpen && (event.key === 'Enter' || event.key === ' ')) onOpenLocation(transfer);
+                            }}
+                            title={canOpen ? t('fileBrowser.openInFolder') : transfer.error}
+                        >
                             {/* Direction icon */}
-                            {t.direction === 'download'
+                            {transfer.direction === 'download'
                                 ? <HugeiconsIcon icon={Download01Icon} className="w-3 h-3 shrink-0 text-muted-foreground" />
                                 : <HugeiconsIcon icon={Upload01Icon} className="w-3 h-3 shrink-0 text-muted-foreground" />
                             }
                             {/* Name */}
-                            <span className="flex-1 truncate text-muted-foreground" title={t.name}>{t.name}</span>
+                            <span className="min-w-0 flex-1 truncate text-foreground/80" title={transfer.name}>{transfer.name}</span>
                             {/* Status */}
-                            {t.status === 'active' ? (
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
-                                        <div className="h-full w-1/2 animate-pulse rounded-full bg-foreground/75" />
+                            {transfer.status === 'active' ? (
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                    <div className="h-1.5 w-14 overflow-hidden rounded-full bg-secondary">
+                                        <div className="h-full rounded-full bg-foreground/75 transition-[width]" style={{ width: `${transfer.progress}%` }} />
                                     </div>
-                                    <span className="w-8 text-right text-[10px] text-muted-foreground/60">···</span>
+                                    <span className="w-7 text-right text-[9px] tabular-nums text-muted-foreground">{transfer.progress}%</span>
                                 </div>
-                            ) : t.status === 'done' ? (
-                                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            ) : transfer.status === 'done' ? (
+                                <span className="flex shrink-0 items-center gap-1 text-emerald-500">
+                                    <HugeiconsIcon icon={CheckmarkCircle02Icon} className="h-3.5 w-3.5" />
+                                    {canOpen && <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5 text-muted-foreground" />}
+                                </span>
                             ) : (
-                                <div className="flex items-center gap-1 shrink-0" title={t.error}>
-                                    <HugeiconsIcon icon={CancelCircleIcon} className="w-3.5 h-3.5 text-destructive" />
+                                <div className="flex shrink-0 items-center gap-1" title={transfer.error}>
+                                    <HugeiconsIcon icon={CancelCircleIcon} className="h-3.5 w-3.5 text-destructive" />
+                                    <button
+                                        type="button"
+                                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground"
+                                        onClick={(event) => { event.stopPropagation(); onRetry(transfer); }}
+                                        title={t('fileBrowser.resumeTransfer')}
+                                    >
+                                        <HugeiconsIcon icon={Refresh01Icon} className="h-3.5 w-3.5" />
+                                    </button>
                                 </div>
                             )}
                         </div>
-                    ))}
+                    );})}
                 </div>
             )}
         </div>

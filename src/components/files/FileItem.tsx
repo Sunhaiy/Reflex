@@ -2,13 +2,11 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight01Icon, File01Icon, FileCorruptIcon, FileScriptIcon, Folder01Icon, Image01Icon } from "@hugeicons/core-free-icons";
 import { memo } from 'react';
 import { FileEntry } from '../../shared/types';
-import { getFileKind, formatSize } from './utils/fileUtils';
-import { format } from 'date-fns';
+import { getFileKind } from './utils/fileUtils';
 import { cn } from '../../lib/utils';
 
 interface Props {
     file: FileEntry;
-    isCompact: boolean;
     isSelected: boolean;
     onClick: (file: FileEntry) => void;
     onDoubleClick: (file: FileEntry) => void;
@@ -27,14 +25,14 @@ function getIcon(file: FileEntry) {
     }
 }
 
-export const FileItem = memo(function FileItem({ file, isCompact, isSelected, onClick, onDoubleClick, onContextMenu }: Props) {
+export const FileItem = memo(function FileItem({ file, isSelected, onClick, onDoubleClick, onContextMenu }: Props) {
     return (
         <div
             role="button"
             tabIndex={0}
             aria-selected={isSelected}
             className={cn(
-                'group mx-1 flex cursor-default select-none items-center rounded-lg px-2 py-1.5 text-xs outline-none transition-colors',
+                'group mx-1 grid cursor-default select-none grid-cols-[24px_minmax(0,1fr)] items-center rounded-lg px-2 py-1.5 text-xs outline-none transition-colors',
                 isSelected
                     ? 'bg-foreground/[0.09] text-foreground'
                     : 'hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.055]',
@@ -51,10 +49,10 @@ export const FileItem = memo(function FileItem({ file, isCompact, isSelected, on
             }}
         >
             {/* Icon */}
-            <div className="w-6 flex justify-center shrink-0">{getIcon(file)}</div>
+            <div className="flex justify-center">{getIcon(file)}</div>
 
             {/* Name */}
-            <div className="flex-1 min-w-0 flex items-center gap-1 pl-1">
+            <div className="flex min-w-0 items-center gap-1 pl-1">
                 <span className="truncate font-medium text-foreground/90 group-hover:text-foreground">
                     {file.name}
                 </span>
@@ -63,19 +61,6 @@ export const FileItem = memo(function FileItem({ file, isCompact, isSelected, on
                 )}
             </div>
 
-            {/* Date */}
-            {!isCompact && (
-                <div className="w-28 shrink-0 text-right text-muted-foreground/50 font-mono text-[10px] tabular-nums">
-                    {file.date ? format(new Date(file.date), 'MM-dd HH:mm') : '—'}
-                </div>
-            )}
-
-            {/* Size */}
-            {!isCompact && (
-                <div className="w-16 shrink-0 text-right text-muted-foreground/50 font-mono text-[10px] tabular-nums">
-                    {file.type === 'd' ? '—' : formatSize(file.size)}
-                </div>
-            )}
         </div>
     );
 });

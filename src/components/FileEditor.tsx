@@ -1,13 +1,17 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, FileScriptIcon, FloppyDiskIcon, Loading02Icon, Maximize02Icon, Minimize02Icon } from "@hugeicons/core-free-icons";
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from './ui/button';
 import { useSettingsStore } from '../store/settingsStore';
+import { useTranslation } from '../hooks/useTranslation';
+import type { TextFileEncoding } from '../shared/types';
 
 interface FileEditorProps {
     fileName: string;
     filePath: string;
     initialContent: string;
+    encoding: TextFileEncoding;
     onSave: (content: string) => Promise<void>;
     onClose: () => void;
 }
@@ -15,7 +19,8 @@ interface FileEditorProps {
 const EDITOR_WIDTH = 920;
 const EDITOR_HEIGHT = 620;
 
-export function FileEditor({ fileName, filePath, initialContent, onSave, onClose }: FileEditorProps) {
+export function FileEditor({ fileName, filePath, initialContent, encoding, onSave, onClose }: FileEditorProps) {
+    const { t } = useTranslation();
     const [content, setContent] = useState(initialContent);
     const [isSaving, setIsSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
@@ -107,7 +112,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
     }, [content, isDirty, isSaving, onSave]);
 
     const requestClose = useCallback(() => {
-        if (isDirty && !window.confirm('文件有未保存的修改，确定关闭吗？')) return;
+        if (isDirty && !window.confirm(t('editor.confirmClose'))) return;
         onClose();
     }, [isDirty, onClose]);
 
@@ -134,7 +139,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
             willChange: 'transform',
         };
 
-    return (
+    return createPortal(
         <>
             <div
                 className="fixed inset-0 z-[45] bg-black/25 backdrop-blur-[1px]"
@@ -143,7 +148,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
 
             <div
                 ref={windowRef}
-                className="z-[70] flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
+                className="z-[70] flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-background"
                 style={windowStyle}
                 onClick={(event) => event.stopPropagation()}
             >
@@ -162,12 +167,12 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
                                 {isDirty && (
                                     <span
                                         className="h-1.5 w-1.5 shrink-0 rounded-full bg-yellow-500"
-                                        title="未保存"
+                                        title={t('editor.unsaved')}
                                     />
                                 )}
                             </span>
                             <span className="max-w-[500px] truncate text-[10px] leading-tight text-muted-foreground">
-                                {filePath}
+                                {filePath} · {encoding.toUpperCase()}
                             </span>
                         </div>
                     </div>
@@ -187,12 +192,12 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
                             ) : (
                                 <HugeiconsIcon icon={FloppyDiskIcon} className="h-3 w-3" />
                             )}
-                            保存
+                            {t('editor.save')}
                         </Button>
                         <button
                             onClick={() => setIsMaximized((value) => !value)}
                             className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            title={isMaximized ? '还原' : '最大化'}
+                            title={isMaximized ? t('editor.restore') : t('editor.maximize')}
                         >
                             {isMaximized ? (
                                 <HugeiconsIcon icon={Minimize02Icon} className="h-3.5 w-3.5" />
@@ -203,7 +208,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
                         <button
                             onClick={requestClose}
                             className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
-                            title="关闭"
+                            title={t('editor.close')}
                         >
                             <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
                         </button>
@@ -212,14 +217,14 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
 
                 {saveError && (
                     <div className="mx-3 mb-2 shrink-0 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                        保存失败：{saveError}
+                        {t('editor.saveFailed')}: {saveError}
                     </div>
                 )}
 
                 <textarea
                     value={content}
                     onChange={(event) => handleEditorChange(event.target.value)}
-                    aria-label={`编辑 ${fileName}`}
+                    aria-label={t('editor.editAria', { name: fileName })}
                     spellCheck={false}
                     className="m-3 mt-0 min-h-0 flex-1 resize-none rounded-xl border border-border/60 bg-foreground/[0.025] p-4 text-foreground outline-none selection:bg-foreground/20 focus:border-foreground/20"
                     style={{
@@ -230,6 +235,7 @@ export function FileEditor({ fileName, filePath, initialContent, onSave, onClose
                     }}
                 />
             </div>
-        </>
+        </>,
+        document.body,
     );
 }

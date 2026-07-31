@@ -35,7 +35,7 @@ export function FileContextMenu({
         <>
             <div className="fixed inset-0 z-40" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose(); }} />
             <div
-                className="fixed z-50 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-2xl animate-in fade-in zoom-in-95"
+                className="fixed z-50 w-48 rounded-xl border border-border/70 bg-popover p-1.5 animate-in fade-in zoom-in-95"
                 style={{ top, left }}
                 onClick={onClose}
             >

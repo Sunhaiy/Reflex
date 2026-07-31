@@ -24,7 +24,10 @@ import '@fontsource-variable/playfair-display'
 import '@fontsource-variable/eb-garamond'
 import '@fontsource/instrument-serif/400.css'
 import App from './App'
+import { installGlobalErrorLogging } from './lib/logger'
 import './index.css'
+
+installGlobalErrorLogging()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

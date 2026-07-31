@@ -1,7 +1,7 @@
 // FileBrowser — orchestration layer
 // All state lives in useFileBrowser; this file only handles layout and dialog state.
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading02Icon, Upload01Icon } from "@hugeicons/core-free-icons";
+import { Upload01Icon } from "@hugeicons/core-free-icons";
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { FileEntry } from '../shared/types';
 import { useFileBrowser } from './files/hooks/useFileBrowser';
@@ -13,6 +13,8 @@ import { ToastNotification } from './files/ToastNotification';
 import { InputDialog } from './files/InputDialog';
 import { FilePreview } from './files/FilePreview';
 import { FileEditor } from './FileEditor';
+import { FlowingBar } from './ui/progress-bar';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface Props {
   connectionId: string;
@@ -35,6 +37,7 @@ interface ContextMenuState { x: number; y: number; file: FileEntry | null }
 
 export function FileBrowser({ connectionId, isConnected = true }: Props) {
   const fb = useFileBrowser(connectionId);
+  const { t } = useTranslation();
 
   // ── Local UI state ────────────────────────────────────────────────────────────
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -85,9 +88,9 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
   }, []);
 
   // ── Dialog helpers ────────────────────────────────────────────────────────────
-  const openNewFolder = () => setDialog({ kind: 'newFolder', title: '新建文件夹', placeholder: '文件夹名称', defaultValue: '' });
-  const openNewFile = () => setDialog({ kind: 'newFile', title: '新建文件', placeholder: '文件名称', defaultValue: '' });
-  const openRename = (file: FileEntry) => setDialog({ kind: 'rename', title: '重命名', placeholder: '新名称', defaultValue: file.name, entry: file });
+  const openNewFolder = () => setDialog({ kind: 'newFolder', title: t('fileBrowser.newFolder'), placeholder: t('fileBrowser.name'), defaultValue: '' });
+  const openNewFile = () => setDialog({ kind: 'newFile', title: t('fileBrowser.newFile'), placeholder: t('fileBrowser.name'), defaultValue: '' });
+  const openRename = (file: FileEntry) => setDialog({ kind: 'rename', title: t('fileBrowser.rename'), placeholder: t('fileBrowser.name'), defaultValue: file.name, entry: file });
 
   const handleDialogConfirm = async (value: string) => {
     if (!dialog) return;
@@ -133,9 +136,9 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       {/* Drag overlay */}
       {isDragging && (
         <div className="pointer-events-none absolute inset-1.5 z-50 flex items-center justify-center rounded-xl border border-dashed border-foreground/30 bg-background/75 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-2 rounded-2xl bg-foreground/[0.055] px-6 py-5 shadow-xl">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-border/60 bg-foreground/[0.055] px-6 py-5">
             <HugeiconsIcon icon={Upload01Icon} className="h-7 w-7 animate-bounce text-foreground" />
-            <span className="text-sm font-medium text-foreground">松开以上传文件</span>
+            <span className="text-sm font-medium text-foreground">{t('fileBrowser.dropToUpload')}</span>
           </div>
         </div>
       )}
@@ -163,12 +166,11 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       />
 
       {/* File list */}
-      <div className="flex-1 min-w-0 overflow-hidden" onContextMenu={e => openContextMenu(e)}>
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" onContextMenu={e => openContextMenu(e)}>
         <FileList
           files={fb.files}
           loading={fb.loading}
           hasLoaded={fb.hasLoaded}
-          isCompact={isCompact}
           sortField={sortField}
           sortOrder={sortOrder}
           filterQuery={filterQuery}
@@ -181,7 +183,12 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       </div>
 
       {/* Transfer panel */}
-      <TransferPanel transfers={fb.transfers} onClearHistory={fb.clearTransferHistory} />
+      <TransferPanel
+        transfers={fb.transfers}
+        onClearHistory={fb.clearTransferHistory}
+        onOpenLocation={fb.openTransferLocation}
+        onRetry={fb.retryTransfer}
+      />
 
       {/* Context menu */}
       {contextMenu && (
@@ -214,23 +221,23 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       {/* Delete confirm */}
       {deleteTarget && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 backdrop-blur-sm animate-in fade-in">
-          <div className="w-72 rounded-2xl border border-border/70 bg-card p-5 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-sm font-semibold mb-2">删除确认</h3>
+          <div className="w-72 rounded-2xl border border-border/70 bg-card p-5 animate-in zoom-in-95">
+            <h3 className="mb-2 text-sm font-semibold">{t('fileBrowser.confirmDelete')}</h3>
             <p className="text-xs text-muted-foreground mb-5">
-              确定要删除 <span className="font-mono text-foreground">{deleteTarget.name}</span> 吗？此操作不可撤销。
+              {t('fileBrowser.deletePrompt')} <span className="font-mono text-foreground">{deleteTarget.name}</span>?
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setDeleteTarget(null)}
                 className="px-3 py-1.5 text-xs rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={async () => { const t = deleteTarget; setDeleteTarget(null); setSelectedFile(null); await fb.deleteEntry(t); }}
                 className="px-3 py-1.5 text-xs rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
               >
-                删除
+                {t('fileBrowser.delete')}
               </button>
             </div>
           </div>
@@ -240,13 +247,11 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       {/* Toasts */}
       <ToastNotification toasts={fb.toasts} onDismiss={fb.dismissToast} />
 
-      {/* File-open loading overlay */}
+      {/* Opening a file shows a thin bar at the top instead of a blocking card, so the
+          list stays usable and nothing covers the content. */}
       {fb.openingFile && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-background/50 backdrop-blur-[2px] pointer-events-none">
-          <div className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-border/70 bg-card px-6 py-5 shadow-xl">
-            <HugeiconsIcon icon={Loading02Icon} className="h-7 w-7 animate-spin text-foreground" />
-            <span className="text-sm text-muted-foreground">正在加载文件...</span>
-          </div>
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[60]">
+          <FlowingBar className="animate-in fade-in duration-150" />
         </div>
       )}
 
@@ -257,6 +262,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
           onClose={() => { setIsEditingFile(false); fb.closeFile(); }}
           onEdit={() => setIsEditingFile(true)}
           onDownload={() => void fb.downloadEntry(fb.openFile!.entry)}
+          onEncodingChange={fb.setFileEncoding}
         />
       )}
 
@@ -266,8 +272,9 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
           fileName={fb.openFile.name}
           filePath={fb.openFile.path}
           initialContent={fb.openFile.content}
+          encoding={fb.openFile.encoding ?? 'utf-8'}
           onSave={async (content) => {
-            await fb.saveFile(fb.openFile!.path, content);
+            await fb.saveFile(fb.openFile!.path, content, fb.openFile!.encoding ?? 'utf-8');
           }}
           onClose={() => { setIsEditingFile(false); fb.closeFile(); }}
         />

@@ -1,14 +1,28 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { FileEntry } from '../../../shared/types';
-import { joinPath, parentPath, getFileKind } from '../utils/fileUtils';
+import type { FileEntry, TextFileEncoding } from '../../../shared/types';
+import { log } from '../../../lib/logger';
+import {
+    base64ToBytes,
+    decodeText,
+    detectImageMime,
+    detectTextEncoding,
+    getFileKind,
+    isProbablyBinary,
+    joinPath,
+    parentPath,
+} from '../utils/fileUtils';
 import { useTransferQueue } from './useTransferQueue';
+import type { TransferItem } from './useTransferQueue';
+import { useTranslation } from '../../../hooks/useTranslation';
 
 export interface FileOpenResult {
     kind: 'text' | 'image';
     name: string;
     path: string;
     entry: FileEntry;
-    content: string; // text content or base64 data URL for images
+    content: string; // decoded text or a data URL for images
+    rawBase64: string;
+    encoding?: TextFileEncoding;
 }
 
 export interface Toast {
@@ -23,15 +37,16 @@ function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
 
-function validateEntryName(name: string) {
+function validateEntryName(name: string, invalidMessage: string) {
     const trimmed = name.trim();
-    if (!trimmed) throw new Error('名称不能为空');
-    if (trimmed === '.' || trimmed === '..') throw new Error('名称不能是 . 或 ..');
-    if (/[\\/\0]/.test(trimmed)) throw new Error('名称不能包含路径分隔符');
+    if (!trimmed || trimmed === '.' || trimmed === '..' || /[\\/\0]/.test(trimmed)) {
+        throw new Error(invalidMessage);
+    }
     return trimmed;
 }
 
 export function useFileBrowser(connectionId: string) {
+    const { t } = useTranslation();
     const [currentPath, setCurrentPath] = useState('/');
     const [files, setFiles] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(false);
@@ -44,6 +59,10 @@ export function useFileBrowser(connectionId: string) {
     const latestRequestRef = useRef(0);
     const toastTimersRef = useRef<Set<number>>(new Set());
     const transferQueue = useTransferQueue();
+
+    useEffect(() => window.electron.onSftpTransferProgress(({ transferId, progress, transferred, total }) => {
+        transferQueue.updateProgress(transferId, progress, transferred, total);
+    }), [transferQueue.updateProgress]);
 
     useEffect(() => () => {
         toastTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -77,6 +96,7 @@ export function useFileBrowser(connectionId: string) {
 
     const loadFiles = useCallback(async (path: string, force = false) => {
         const requestId = ++latestRequestRef.current;
+        const startedAt = performance.now();
         setLoading(true);
         try {
             let resolvedPath = path;
@@ -86,11 +106,13 @@ export function useFileBrowser(connectionId: string) {
 
             const newFiles = await fetchDirectory(resolvedPath, force);
             if (requestId !== latestRequestRef.current) return;
+            log.info(`[FileBrowser] Listed ${resolvedPath}: ${newFiles.length} entries in ${Math.round(performance.now() - startedAt)}ms`);
             setFiles(newFiles);
             setCurrentPath(resolvedPath);
         } catch (error: unknown) {
             if (requestId !== latestRequestRef.current) return;
-            pushToast(`无法加载目录: ${errorMessage(error)}`);
+            log.error(`[FileBrowser] Listing ${path} failed`, error);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
             setFiles([]);
         } finally {
             if (requestId === latestRequestRef.current) {
@@ -98,7 +120,7 @@ export function useFileBrowser(connectionId: string) {
                 setHasLoaded(true);
             }
         }
-    }, [connectionId, fetchDirectory, pushToast]);
+    }, [connectionId, fetchDirectory, pushToast, t]);
 
     const refresh = useCallback(() => {
         pathCacheRef.current = {};
@@ -123,68 +145,101 @@ export function useFileBrowser(connectionId: string) {
         }
 
         if (kind === 'binary') {
-            pushToast(`"${entry.name}" 是二进制文件，无法在编辑器中打开`, 'info');
+            pushToast(t('fileBrowser.cannotPreview'), 'info');
             return;
         }
 
         // Size guard: refuse to open files > 5MB
         if (entry.size > 5 * 1024 * 1024) {
-            pushToast(`文件超过 5MB，无法在编辑器中打开`, 'info');
+            pushToast(t('fileBrowser.cannotPreview'), 'info');
             return;
         }
 
         setOpeningFile(true);
         try {
-            const content = await window.electron.sftpReadFile(connectionId, path);
-            if (kind === 'image') {
-                // Content from sftpReadFile is a base64 string for binary files
-                const ext = entry.name.split('.').pop()?.toLowerCase() ?? 'png';
-                const mime = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
-                setOpenFile({ kind: 'image', name: entry.name, path, entry, content: `data:${mime};base64,${content}` });
-            } else {
-                setOpenFile({ kind: 'text', name: entry.name, path, entry, content });
+            const payload = await window.electron.sftpReadFile(connectionId, path);
+            const bytes = base64ToBytes(payload.base64);
+            const imageMime = detectImageMime(entry.name, bytes);
+
+            if (imageMime) {
+                setOpenFile({
+                    kind: 'image',
+                    name: entry.name,
+                    path,
+                    entry,
+                    rawBase64: payload.base64,
+                    content: `data:${imageMime};base64,${payload.base64}`,
+                });
+                return;
             }
+
+            if (isProbablyBinary(bytes)) {
+                pushToast(t('fileBrowser.cannotPreview'), 'info');
+                return;
+            }
+
+            const encoding = detectTextEncoding(bytes);
+            setOpenFile({
+                kind: 'text',
+                name: entry.name,
+                path,
+                entry,
+                rawBase64: payload.base64,
+                encoding,
+                content: decodeText(bytes, encoding),
+            });
         } catch (error: unknown) {
-            pushToast(`无法打开文件: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
         } finally {
             setOpeningFile(false);
         }
-    }, [connectionId, currentPath, loadFiles, pushToast]);
+    }, [connectionId, currentPath, loadFiles, pushToast, t]);
 
     const closeFile = useCallback(() => setOpenFile(null), []);
 
-    const saveFile = useCallback(async (path: string, content: string) => {
+    const setFileEncoding = useCallback((encoding: TextFileEncoding) => {
+        setOpenFile((current) => {
+            if (!current || current.kind !== 'text') return current;
+            return {
+                ...current,
+                encoding,
+                content: decodeText(base64ToBytes(current.rawBase64), encoding),
+            };
+        });
+    }, []);
+
+    const saveFile = useCallback(async (path: string, content: string, encoding: TextFileEncoding = 'utf-8') => {
         try {
-            await window.electron.sftpWriteFile(connectionId, path, content);
-            pushToast('保存成功', 'success');
+            await window.electron.sftpWriteFile(connectionId, path, content, encoding);
+            pushToast(t('common.success'), 'success');
         } catch (error: unknown) {
-            pushToast(`保存失败: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
             throw error;
         }
-    }, [connectionId, pushToast]);
+    }, [connectionId, pushToast, t]);
 
     // ── Create ───────────────────────────────────────────────────────────────────
     const createFolder = useCallback(async (name: string) => {
         try {
-            const newPath = joinPath(currentPath, validateEntryName(name));
+            const newPath = joinPath(currentPath, validateEntryName(name, t('fileBrowser.invalidName')));
             await window.electron.sftpMkdir(connectionId, newPath);
             delete pathCacheRef.current[currentPath];
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
-            pushToast(`创建文件夹失败: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
         }
-    }, [connectionId, currentPath, loadFiles, pushToast]);
+    }, [connectionId, currentPath, loadFiles, pushToast, t]);
 
     const createFile = useCallback(async (name: string) => {
         try {
-            const newPath = joinPath(currentPath, validateEntryName(name));
+            const newPath = joinPath(currentPath, validateEntryName(name, t('fileBrowser.invalidName')));
             await window.electron.sftpWriteFile(connectionId, newPath, '');
             delete pathCacheRef.current[currentPath];
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
-            pushToast(`创建文件失败: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
         }
-    }, [connectionId, currentPath, loadFiles, pushToast]);
+    }, [connectionId, currentPath, loadFiles, pushToast, t]);
 
     // ── Delete ───────────────────────────────────────────────────────────────────
     const deleteEntry = useCallback(async (entry: FileEntry) => {
@@ -194,24 +249,24 @@ export function useFileBrowser(connectionId: string) {
             delete pathCacheRef.current[currentPath];
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
-            pushToast(`删除失败: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
         }
-    }, [connectionId, currentPath, loadFiles, pushToast]);
+    }, [connectionId, currentPath, loadFiles, pushToast, t]);
 
     // ── Rename ───────────────────────────────────────────────────────────────────
     const renameEntry = useCallback(async (entry: FileEntry, newName: string) => {
         const oldPath = joinPath(currentPath, entry.name);
         try {
-            const safeName = validateEntryName(newName);
+            const safeName = validateEntryName(newName, t('fileBrowser.invalidName'));
             if (safeName === entry.name) return;
             const newPath = joinPath(currentPath, safeName);
             await window.electron.sftpRename(connectionId, oldPath, newPath);
             delete pathCacheRef.current[currentPath];
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
-            pushToast(`重命名失败: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
         }
-    }, [connectionId, currentPath, loadFiles, pushToast]);
+    }, [connectionId, currentPath, loadFiles, pushToast, t]);
 
     // ── Download ─────────────────────────────────────────────────────────────────
     const downloadEntry = useCallback(async (entry: FileEntry) => {
@@ -220,15 +275,15 @@ export function useFileBrowser(connectionId: string) {
         if (!localPath) return;
 
         const remotePath = joinPath(currentPath, entry.name);
-        const tid = transferQueue.addTransfer(entry.name, 'download');
+        const tid = transferQueue.addTransfer(entry.name, 'download', localPath, remotePath);
         try {
-            await window.electron.sftpDownload(connectionId, remotePath, localPath);
+            await window.electron.sftpDownload(connectionId, remotePath, localPath, tid);
             transferQueue.markDone(tid);
         } catch (error: unknown) {
             transferQueue.markError(tid, errorMessage(error));
-            pushToast(`下载失败: ${errorMessage(error)}`);
+            pushToast(`${t('fileBrowser.download')}: ${errorMessage(error)}`);
         }
-    }, [connectionId, currentPath, transferQueue, pushToast]);
+    }, [connectionId, currentPath, transferQueue, pushToast, t]);
 
     // ── Upload ───────────────────────────────────────────────────────────────────
     const uploadFile = useCallback(async (fileOrPath?: File | string) => {
@@ -243,7 +298,7 @@ export function useFileBrowser(connectionId: string) {
                 filePath = fileOrPath ?? await window.electron.openDialog();
             }
         } catch (error: unknown) {
-            pushToast(`无法读取本地文件路径: ${errorMessage(error)}`);
+            pushToast(`${t('common.error')}: ${errorMessage(error)}`);
             return;
         }
 
@@ -251,17 +306,40 @@ export function useFileBrowser(connectionId: string) {
 
         filename ??= filePath.split(/[\\/]/).pop() ?? 'file';
         const remotePath = joinPath(currentPath, filename);
-        const tid = transferQueue.addTransfer(filename, 'upload');
+        const tid = transferQueue.addTransfer(filename, 'upload', filePath, remotePath);
         try {
-            await window.electron.sftpUpload(connectionId, filePath, remotePath);
+            await window.electron.sftpUpload(connectionId, filePath, remotePath, tid);
             transferQueue.markDone(tid);
             delete pathCacheRef.current[currentPath];
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
             transferQueue.markError(tid, errorMessage(error));
-            pushToast(`上传失败: ${errorMessage(error)}`);
+            pushToast(`${t('fileBrowser.upload')}: ${errorMessage(error)}`);
         }
-    }, [connectionId, currentPath, loadFiles, transferQueue, pushToast]);
+    }, [connectionId, currentPath, loadFiles, transferQueue, pushToast, t]);
+
+    const retryTransfer = useCallback(async (transfer: TransferItem) => {
+        transferQueue.restart(transfer.id);
+        try {
+            if (transfer.direction === 'download') {
+                await window.electron.sftpResumeDownload(connectionId, transfer.remotePath, transfer.localPath, transfer.id);
+            } else {
+                await window.electron.sftpResumeUpload(connectionId, transfer.localPath, transfer.remotePath, transfer.id);
+                delete pathCacheRef.current[currentPath];
+                await loadFiles(currentPath, true);
+            }
+            transferQueue.markDone(transfer.id);
+        } catch (error: unknown) {
+            transferQueue.markError(transfer.id, errorMessage(error));
+            pushToast(`${t('fileBrowser.resumeTransfer')}: ${errorMessage(error)}`);
+        }
+    }, [connectionId, currentPath, loadFiles, pushToast, t, transferQueue]);
+
+    const openTransferLocation = useCallback((transfer: TransferItem) => {
+        if (transfer.direction === 'download' && transfer.localPath) {
+            void window.electron.showItemInFolder(transfer.localPath);
+        }
+    }, []);
 
     // ── Drop upload ──────────────────────────────────────────────────────────────
     const uploadDroppedFiles = useCallback(async (nativeFiles: File[]) => {
@@ -277,7 +355,7 @@ export function useFileBrowser(connectionId: string) {
         activeTransferCount: transferQueue.activeCount,
         // File ops
         loadFiles, refresh, navigateTo, navigateUp, navigateInto,
-        openFileEntry, closeFile, saveFile,
+        openFileEntry, closeFile, setFileEncoding, saveFile,
         createFolder, createFile,
         deleteEntry, renameEntry,
         downloadEntry, uploadFile, uploadDroppedFiles,
@@ -285,5 +363,7 @@ export function useFileBrowser(connectionId: string) {
         dismissToast,
         // Transfer history
         clearTransferHistory: transferQueue.clearHistory,
+        retryTransfer,
+        openTransferLocation,
     };
 }

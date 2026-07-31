@@ -1,11 +1,11 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import { AiNetworkIcon, CpuIcon, HardDriveIcon, RamMemoryIcon, TerminalIcon } from '@hugeicons/core-free-icons';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SystemStats } from '../shared/types';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import clsx from 'clsx';
 import { ProcessList } from './ProcessList';
-import { ConnectingLog } from './ConnectingOverlay';
+import { MonitorSkeleton } from './ui/skeleton';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface SystemMonitorProps {
   connectionId: string;
@@ -15,17 +15,78 @@ function clampPercent(value: number) {
   return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0;
 }
 
+function compactUptime(value: string) {
+  const units = [
+    { pattern: /(\d+)\s+weeks?/i, suffix: 'w' },
+    { pattern: /(\d+)\s+days?/i, suffix: 'd' },
+    { pattern: /(\d+)\s+hours?/i, suffix: 'h' },
+    { pattern: /(\d+)\s+minutes?/i, suffix: 'm' },
+  ];
+  const parts = units.flatMap(({ pattern, suffix }) => {
+    const match = value.match(pattern);
+    return match ? [`${match[1]}${suffix}`] : [];
+  });
+  return parts.length > 0 ? parts.slice(0, 3).join(' ') : value;
+}
+
+interface NetworkPoint {
+  time: number;
+  up: number;
+  down: number;
+}
+
+function NetworkChart({ data, label }: { data: NetworkPoint[]; label: string }) {
+  const geometry = useMemo(() => {
+    const width = 320;
+    const height = 88;
+    const padding = 4;
+    const maxValue = Math.max(1, ...data.flatMap((point) => [point.up, point.down]));
+    const x = (index: number) => data.length <= 1 ? 0 : (index / (data.length - 1)) * width;
+    const y = (value: number) => height - padding - (value / maxValue) * (height - padding * 2);
+    const points = (key: 'up' | 'down') => data
+      .map((point, index) => `${x(index).toFixed(1)},${y(point[key]).toFixed(1)}`)
+      .join(' ');
+    const downPoints = points('down');
+
+    return {
+      width,
+      height,
+      upPoints: points('up'),
+      downPoints,
+      downArea: downPoints
+        ? `M 0 ${height} L ${downPoints.split(' ').join(' L ')} L ${width} ${height} Z`
+        : '',
+    };
+  }, [data]);
+
+  return (
+    <svg
+      viewBox={`0 0 ${geometry.width} ${geometry.height}`}
+      preserveAspectRatio="none"
+      className="h-full w-full"
+      role="img"
+      aria-label={label}
+    >
+      <line x1="0" y1="29" x2={geometry.width} y2="29" stroke="currentColor" className="text-border/40" vectorEffect="non-scaling-stroke" />
+      <line x1="0" y1="58" x2={geometry.width} y2="58" stroke="currentColor" className="text-border/40" vectorEffect="non-scaling-stroke" />
+      {geometry.downArea && <path d={geometry.downArea} fill="rgb(59 130 246 / 0.10)" />}
+      <polyline points={geometry.downPoints} fill="none" stroke="#3b82f6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <polyline points={geometry.upPoints} fill="none" stroke="#60a5fa" strokeWidth="1.25" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 export function SystemMonitor({ connectionId }: SystemMonitorProps) {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [showProcesses, setShowProcesses] = useState(false);
-  const [netHistory, setNetHistory] = useState<{ time: number; up: number; down: number }[]>([]);
-  const networkGradientId = `network-gradient-${useId().replace(/:/g, '')}`;
+  const [netHistory, setNetHistory] = useState<NetworkPoint[]>([]);
 
   useEffect(() => {
     setStats(null);
     setNetHistory([]);
     setShowProcesses(false);
-    window.electron.startMonitoring(connectionId);
+    let monitoring = false;
 
     const cleanup = window.electron.onStatsUpdate((_, { id, stats: nextStats }) => {
       if (id === connectionId) {
@@ -41,22 +102,31 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
       }
     });
 
+    const syncMonitoring = () => {
+      const shouldMonitor = document.visibilityState !== 'hidden';
+      if (shouldMonitor && !monitoring) {
+        monitoring = true;
+        window.electron.startMonitoring(connectionId);
+      } else if (!shouldMonitor && monitoring) {
+        monitoring = false;
+        window.electron.stopMonitoring(connectionId);
+      }
+    };
+
+    syncMonitoring();
+    document.addEventListener('visibilitychange', syncMonitoring);
+
     return () => {
+      document.removeEventListener('visibilitychange', syncMonitoring);
       cleanup();
-      window.electron.stopMonitoring(connectionId);
+      if (monitoring) window.electron.stopMonitoring(connectionId);
     };
   }, [connectionId]);
 
   if (!stats) {
     return (
-      <div className="h-full overflow-hidden">
-        <ConnectingLog lines={[
-          { text: '> Probing system resources...', delay: 400 },
-          { text: '> Reading /proc/cpuinfo...', delay: 1000 },
-          { text: '> Reading /proc/meminfo...', delay: 1800 },
-          { text: '> Querying disk usage (df -h)...', delay: 2800 },
-          { text: '> Scanning network interfaces...', delay: 3800 },
-        ]} />
+      <div className="h-full overflow-hidden border-l border-border/50">
+        <MonitorSkeleton />
       </div>
     );
   }
@@ -64,142 +134,112 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
   const memoryUsedPercent = clampPercent((stats.memory.used / stats.memory.total) * 100);
 
   return (
-    <div className="h-full space-y-3 overflow-y-auto border-l border-border/50 bg-transparent p-3 font-sans text-foreground scrollbar-hide">
-      <div className="flex items-center justify-between rounded-lg border border-border/50 bg-card/40 p-3 shadow-sm backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <HugeiconsIcon icon={TerminalIcon} className="h-4 w-4 text-primary" />
-          <span className="text-sm font-bold tracking-tight">{stats.os.distro}</span>
+    <div className="h-full space-y-2 overflow-y-auto border-l border-border/50 bg-transparent p-2 font-sans text-foreground scrollbar-hide">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/55 bg-card/35 px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <HugeiconsIcon icon={TerminalIcon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-xs font-semibold tracking-tight">{stats.os.distro}</span>
         </div>
-        <span className="rounded border border-border/30 bg-muted/50 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-          {stats.os.uptime}
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground" title={stats.os.uptime}>
+          {compactUptime(stats.os.uptime)}
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
-        <div className="space-y-3 rounded-lg border border-border/50 bg-card/40 p-4 shadow-sm backdrop-blur-md transition-colors hover:border-emerald-500/30">
-          <div className="flex items-center justify-between border-b border-border/30 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <div className="flex items-center gap-1.5 text-emerald-400">
-              <HugeiconsIcon icon={CpuIcon} className="h-4 w-4" />
+      <div className="grid grid-cols-1 gap-2">
+        <div className="space-y-2.5 rounded-xl border border-border/55 bg-card/35 p-3">
+          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+            <div className="flex items-center gap-1.5">
+              <HugeiconsIcon icon={CpuIcon} className="h-3.5 w-3.5" />
               <span>CPU</span>
             </div>
-            <span className="font-mono text-sm text-emerald-400">{stats.cpu.totalUsage}%</span>
+            <span className="font-mono text-xs text-emerald-500">{stats.cpu.totalUsage}%</span>
           </div>
 
-          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/30">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/60">
             <div
-              className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] transition-all duration-300 ease-out"
+              className="h-full rounded-full bg-emerald-500 transition-all duration-300 ease-out"
               style={{ width: `${clampPercent(stats.cpu.totalUsage)}%` }}
             />
           </div>
 
-          <div className="grid gap-1 pt-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(18px, 1fr))' }}>
+          <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(14px, 1fr))' }}>
             {stats.cpu.cores.map((core, index) => (
-              <div key={index} className="relative h-7 overflow-hidden rounded-sm bg-secondary/20" title={`Core ${index}: ${core.usage}%`}>
+              <div key={index} className="relative h-4 overflow-hidden rounded-sm bg-secondary/40" title={`Core ${index}: ${core.usage}%`}>
                 <div
-                  className="absolute bottom-0 left-0 w-full bg-emerald-500/30 transition-all duration-300"
+                  className="absolute bottom-0 left-0 w-full bg-emerald-500/35 transition-all duration-300"
                   style={{ height: `${clampPercent(core.usage)}%` }}
                 />
               </div>
             ))}
           </div>
-          <div className="truncate pt-1 font-mono text-[10px] text-muted-foreground opacity-60">
+          <div className="truncate font-mono text-[9px] text-muted-foreground/65">
             {stats.cpu.model}
           </div>
         </div>
 
         <div
-          className="group cursor-pointer space-y-3 rounded-lg border border-border/50 bg-card/40 p-4 shadow-sm backdrop-blur-md transition-all hover:border-violet-500/30"
+          className="group cursor-pointer space-y-2.5 rounded-xl border border-border/55 bg-card/35 p-3 transition-colors hover:bg-foreground/[0.035]"
           onClick={() => setShowProcesses(true)}
         >
-          <div className="flex items-center justify-between border-b border-border/30 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <div className="flex items-center gap-1.5 text-violet-400">
-              <HugeiconsIcon icon={RamMemoryIcon} className="h-4 w-4" />
-              <span>Memory</span>
+          <div className="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider text-violet-500">
+            <div className="flex items-center gap-1.5">
+              <HugeiconsIcon icon={RamMemoryIcon} className="h-3.5 w-3.5" />
+              <span>{t('monitor.memory')}</span>
             </div>
-            <span className="font-mono transition-colors group-hover:text-violet-300">
+            <span className="shrink-0 font-mono text-[10px] normal-case tracking-normal text-foreground/80">
               {stats.memory.used} / {stats.memory.total} GB
             </span>
           </div>
 
-          <div className="flex h-2 w-full overflow-hidden rounded-full bg-secondary/30">
+          <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-secondary/60">
             <div
-              className="h-full bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.3)] transition-all duration-300"
+              className="h-full rounded-full bg-violet-500 transition-all duration-300"
               style={{ width: `${memoryUsedPercent}%` }}
             />
           </div>
 
-          <div className="flex justify-between pt-1 font-mono text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-violet-500" />
-                Used {memoryUsedPercent.toFixed(0)}%
-              </span>
-              <span>Cached {stats.memory.cached} GB</span>
+          <div className="flex justify-between gap-2 font-mono text-[9px] text-muted-foreground">
+            <div className="flex min-w-0 items-center gap-2">
+              <span>{t('monitor.used')} {memoryUsedPercent.toFixed(0)}%</span>
+              <span className="truncate">{t('monitor.cached')} {stats.memory.cached} GB</span>
             </div>
-            <span className="opacity-0 transition-opacity group-hover:opacity-100 group-hover:text-violet-300">View Processes →</span>
+            <span className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">{t('monitor.viewProcesses')} →</span>
           </div>
         </div>
 
-        <div className="space-y-3 rounded-lg border border-border/50 bg-card/40 p-4 shadow-sm backdrop-blur-md transition-colors hover:border-blue-500/30">
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-blue-400">
-            <HugeiconsIcon icon={AiNetworkIcon} className="h-4 w-4" />
-            <span>Network</span>
+        <div className="space-y-2 rounded-xl border border-border/55 bg-card/35 p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+            <HugeiconsIcon icon={AiNetworkIcon} className="h-3.5 w-3.5" />
+            <span>{t('monitor.network')}</span>
           </div>
           <div className="flex gap-3 pt-0.5 font-mono text-[10px]">
-            <span className="text-blue-400">↓ {(stats.network.downSpeed / 1024).toFixed(1)} KB/s</span>
-            <span className="text-blue-300/70">↑ {(stats.network.upSpeed / 1024).toFixed(1)} KB/s</span>
+            <span className="text-blue-500">↓ {(stats.network.downSpeed / 1024).toFixed(1)} KB/s</span>
+            <span className="text-blue-400">↑ {(stats.network.upSpeed / 1024).toFixed(1)} KB/s</span>
           </div>
 
-          <div className="-mx-1 h-24 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={netHistory}>
-                <defs>
-                  <linearGradient id={networkGradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="down"
-                  stroke="#60a5fa"
-                  strokeWidth={2}
-                  fill={`url(#${networkGradientId})`}
-                  isAnimationActive={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="up"
-                  stroke="#93c5fd"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  strokeOpacity={0.6}
-                  fill="none"
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="-mx-0.5 h-16 w-full pt-1">
+            <NetworkChart data={netHistory} label={t('monitor.networkHistory')} />
           </div>
         </div>
 
-        <div className="space-y-4 rounded-lg border border-border/50 bg-card/40 p-4 shadow-sm backdrop-blur-md transition-colors hover:border-amber-500/30">
-          <div className="flex items-center gap-1.5 border-b border-border/30 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <HugeiconsIcon icon={HardDriveIcon} className="h-4 w-4 text-amber-400" />
-            <span>Storage</span>
+        <div className="space-y-3 rounded-xl border border-border/55 bg-card/35 p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+            <HugeiconsIcon icon={HardDriveIcon} className="h-3.5 w-3.5" />
+            <span>{t('monitor.storage')}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {stats.disks.map((disk) => (
               <div key={`${disk.filesystem}:${disk.mount}`} className="space-y-1.5">
                 <div className="flex justify-between gap-2 font-mono text-[11px] text-muted-foreground">
                   <span className="min-w-0 truncate text-foreground/80">{disk.mount}</span>
                   <span className="shrink-0">{disk.used}G / {disk.size}G</span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/30">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/60">
                   <div
                     className={clsx(
-                      'h-full shadow-[0_0_8px_rgba(251,191,36,0.2)] transition-all duration-300',
-                      disk.usePercent > 90 ? 'bg-red-500' : 'bg-amber-500',
+                      'h-full transition-all duration-300',
+                      disk.usePercent > 90 ? 'bg-destructive' : 'bg-amber-500',
                     )}
                     style={{ width: `${clampPercent(disk.usePercent)}%` }}
                   />

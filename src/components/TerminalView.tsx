@@ -51,41 +51,6 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       // Open terminal
       term.open(containerRef.current!);
 
-      const bellDisposable = term.onBell(() => {
-        const bellStyle = useSettingsStore.getState().bellStyle;
-        if (bellStyle === 'none') return;
-
-        if (bellStyle === 'visual') {
-          containerRef.current?.animate(
-            [
-              { filter: 'brightness(1)' },
-              { filter: 'brightness(1.55)' },
-              { filter: 'brightness(1)' },
-            ],
-            { duration: 180, easing: 'ease-out' },
-          );
-          return;
-        }
-
-        const audioContext = new AudioContext();
-        const playBell = async () => {
-          if (audioContext.state === 'suspended') await audioContext.resume();
-          const oscillator = audioContext.createOscillator();
-          const gain = audioContext.createGain();
-          const now = audioContext.currentTime;
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(660, now);
-          gain.gain.setValueAtTime(0.035, now);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
-          oscillator.connect(gain);
-          gain.connect(audioContext.destination);
-          oscillator.start(now);
-          oscillator.stop(now + 0.1);
-          oscillator.addEventListener('ended', () => void audioContext.close(), { once: true });
-        };
-        void playBell().catch(() => void audioContext.close());
-      });
-
       // Load WebGL if enabled
       if (rendererType === 'webgl') {
         try {
@@ -157,16 +122,29 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       };
       window.addEventListener('terminal-refresh', handleTermRefresh);
 
+      // ResizeObserver fires in bursts while panels are dragged. Coalescing to one fit
+      // per frame, and only sending a window-change when the grid actually changed,
+      // keeps redundant SSH packets off the connection the shell is typing on.
+      let resizeFrame = 0;
+      let lastCols = 0;
+      let lastRows = 0;
+
       const handleResize = () => {
-        if (!containerRef.current) return;
-        try {
-          fitAddon.fit();
-          if (term.cols > 0 && term.rows > 0) {
-            window.electron.resizeTerminal(connectionId, term.cols, term.rows);
+        if (resizeFrame) return;
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = 0;
+          if (!containerRef.current) return;
+          try {
+            fitAddon.fit();
+            if (term.cols > 0 && term.rows > 0 && (term.cols !== lastCols || term.rows !== lastRows)) {
+              lastCols = term.cols;
+              lastRows = term.rows;
+              window.electron.resizeTerminal(connectionId, term.cols, term.rows);
+            }
+          } catch (e) {
+            console.warn('Resize fit failed:', e);
           }
-        } catch (e) {
-          console.warn('Resize fit failed:', e);
-        }
+        });
       };
 
       const resizeObserver = new ResizeObserver(() => {
@@ -177,8 +155,8 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       return () => {
         unsubTheme();
         unsubSettings();
-        bellDisposable.dispose();
         window.removeEventListener('terminal-refresh', handleTermRefresh);
+        if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
         try {
           cleanup();
         } catch (e) { }

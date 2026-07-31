@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { SSHConnection, SystemStats, UsageDelta, UsageStats } from '../src/shared/types';
+import type { ActivityLine, ActivityScope, SSHConnection, SystemStats, UsageDelta, UsageStats } from '../src/shared/types';
 
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
@@ -17,17 +17,25 @@ contextBridge.exposeInMainWorld('electron', {
   resizeTerminal: (id: string, cols: number, rows: number) => ipcRenderer.send('term-resize', { id, cols, rows }),
 
   sftpList: (id: string, path: string) => ipcRenderer.invoke('sftp-list', { id, path }),
-  sftpUpload: (id: string, localPath: string, remotePath: string) => ipcRenderer.invoke('sftp-upload', { id, localPath, remotePath }),
-  sftpDownload: (id: string, remotePath: string, localPath: string) => ipcRenderer.invoke('sftp-download', { id, remotePath, localPath }),
+  sftpUpload: (id: string, localPath: string, remotePath: string, transferId: string) => ipcRenderer.invoke('sftp-upload', { id, localPath, remotePath, transferId }),
+  sftpDownload: (id: string, remotePath: string, localPath: string, transferId: string) => ipcRenderer.invoke('sftp-download', { id, remotePath, localPath, transferId }),
+  sftpResumeUpload: (id: string, localPath: string, remotePath: string, transferId: string) => ipcRenderer.invoke('sftp-upload-resume', { id, localPath, remotePath, transferId }),
+  sftpResumeDownload: (id: string, remotePath: string, localPath: string, transferId: string) => ipcRenderer.invoke('sftp-download-resume', { id, remotePath, localPath, transferId }),
+  onSftpTransferProgress: (callback: (payload: { transferId: string; transferred: number; total: number; progress: number }) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, payload: { transferId: string; transferred: number; total: number; progress: number }) => callback(payload);
+    ipcRenderer.on('sftp-transfer-progress', subscription);
+    return () => ipcRenderer.removeListener('sftp-transfer-progress', subscription);
+  },
   sftpDelete: (id: string, path: string) => ipcRenderer.invoke('sftp-delete', { id, path }),
   sftpMkdir: (id: string, path: string) => ipcRenderer.invoke('sftp-mkdir', { id, path }),
   sftpRename: (id: string, oldPath: string, newPath: string) => ipcRenderer.invoke('sftp-rename', { id, oldPath, newPath }),
   sftpReadFile: (id: string, path: string) => ipcRenderer.invoke('sftp-read-file', { id, path }),
-  sftpWriteFile: (id: string, path: string, content: string) => ipcRenderer.invoke('sftp-write-file', { id, path, content }),
+  sftpWriteFile: (id: string, path: string, content: string, encoding = 'utf-8') => ipcRenderer.invoke('sftp-write-file', { id, path, content, encoding }),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   getPwd: (id: string) => ipcRenderer.invoke('get-pwd', id),
   openDialog: () => ipcRenderer.invoke('dialog-open'),
   saveDialog: (defaultName: string) => ipcRenderer.invoke('dialog-save', defaultName),
+  showItemInFolder: (filePath: string) => ipcRenderer.invoke('show-item-in-folder', filePath),
 
   startMonitoring: (id: string) => ipcRenderer.send('start-monitoring', id),
   stopMonitoring: (id: string) => ipcRenderer.send('stop-monitoring', id),
@@ -52,6 +60,11 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('ssh-status', subscription);
     return () => ipcRenderer.removeListener('ssh-status', subscription);
   },
+  onSSHActivity: (callback: (payload: { id: string; scope: ActivityScope; line: ActivityLine }) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, payload: { id: string; scope: ActivityScope; line: ActivityLine }) => callback(payload);
+    ipcRenderer.on('ssh-activity', subscription);
+    return () => ipcRenderer.removeListener('ssh-activity', subscription);
+  },
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
@@ -66,4 +79,9 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('usage-stats-updated', subscription);
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  logWrite: (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) =>
+    ipcRenderer.send('log-write', { level, message, detail }),
+  logReveal: () => ipcRenderer.invoke('log-reveal'),
+  logPath: (): Promise<string> => ipcRenderer.invoke('log-path'),
+  logRead: (maxLines?: number): Promise<string> => ipcRenderer.invoke('log-read', maxLines),
 });

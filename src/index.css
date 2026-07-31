@@ -5,7 +5,7 @@
 @layer base {
   :root {
     --font-sans: 'Geist Variable', 'Noto Sans SC Variable', sans-serif;
-    --font-mono: 'Geist Mono Variable', 'Cascadia Mono', Consolas, monospace;
+    --font-mono: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, monospace;
 
     --background: 240 20% 98%;
     --foreground: 240 10% 10%;
@@ -26,8 +26,8 @@
     --border: 240 6% 88%;
     --input: 240 6% 84%;
     --ring: 221 83% 53%;
-    --glow: 221 83% 53%;
     --radius: 1rem;
+    --radius-scale: 1;
     --panel-gap: 10px;
     --app-opacity: 1;
   }
@@ -86,6 +86,13 @@
     font: inherit;
   }
 
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+  }
+
   ::selection {
     background: hsl(var(--primary) / 0.28);
   }
@@ -95,9 +102,6 @@
   .glass-panel {
     border: 1px solid hsl(var(--border) / 0.72);
     background: hsl(var(--card) / 0.66);
-    box-shadow:
-      0 1px 0 hsl(var(--foreground) / 0.035) inset,
-      0 20px 50px hsl(240 20% 2% / 0.12);
     backdrop-filter: blur(24px) saturate(135%);
   }
 
@@ -108,67 +112,13 @@
   }
 
   .surface-hover {
-    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    transition: border-color 160ms ease, background-color 160ms ease;
   }
 
   .surface-hover:hover {
     border-color: hsl(var(--foreground) / 0.17);
     background-color: hsl(var(--card) / 0.82);
-    box-shadow: 0 14px 34px hsl(240 20% 2% / 0.1);
-    transform: translateY(-1px);
   }
-}
-
-.ambient-orb {
-  position: absolute;
-  width: 38vw;
-  height: 38vw;
-  min-width: 420px;
-  min-height: 420px;
-  border-radius: 999px;
-  filter: blur(110px);
-  opacity: 0.14;
-  will-change: transform;
-  animation: ambient-drift 18s ease-in-out infinite alternate;
-}
-
-.ambient-orb-primary {
-  left: -14vw;
-  top: -18vw;
-  background: hsl(var(--glow));
-}
-
-.ambient-orb-secondary {
-  right: -16vw;
-  bottom: -22vw;
-  background: hsl(var(--glow));
-  opacity: 0.09;
-  animation-delay: -7s;
-  animation-duration: 23s;
-}
-
-.ambient-orb-neutral {
-  left: 38%;
-  top: 24%;
-  width: 26vw;
-  height: 26vw;
-  background: hsl(var(--foreground));
-  opacity: 0.025;
-  animation-delay: -12s;
-}
-
-:root:not(.dark) .ambient-orb {
-  opacity: 0.095;
-}
-
-.app-noise {
-  background-image: radial-gradient(hsl(var(--foreground) / 0.8) 0.45px, transparent 0.45px);
-  background-size: 4px 4px;
-}
-
-@keyframes ambient-drift {
-  from { transform: translate3d(-2%, -2%, 0) scale(0.96); }
-  to { transform: translate3d(7%, 5%, 0) scale(1.08); }
 }
 
 @media (prefers-reduced-motion: reduce) {

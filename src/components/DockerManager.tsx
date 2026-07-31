@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
 import type { DockerAction, DockerContainer, DockerImage, DockerPruneType } from '../shared/types';
-import { workspaceBarClass, workspaceTabClass } from './workspaceChrome';
 
 interface DockerManagerProps {
     connectionId: string;
@@ -25,20 +24,23 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
 
     return (
         <div className="flex h-full flex-col bg-transparent text-foreground">
-            <div className={cn(workspaceBarClass, 'gap-1 px-2')}>
-                {tabs.map((item) => (
-                    <button
-                        key={item.id}
-                        onClick={() => setTab(item.id)}
-                        className={cn(
-                            workspaceTabClass,
-                            tab === item.id && 'bg-foreground/[0.09] text-foreground shadow-sm'
-                        )}
-                    >
-                        <HugeiconsIcon icon={item.icon} className="h-3.5 w-3.5" />
-                        {item.label}
-                    </button>
-                ))}
+            <div className="shrink-0 border-b border-border/50 p-2">
+                <div className="grid grid-cols-3 gap-1 rounded-xl bg-foreground/[0.035] p-1">
+                    {tabs.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setTab(item.id)}
+                            className={cn(
+                                'flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] text-muted-foreground transition-colors hover:text-foreground',
+                                tab === item.id && 'bg-background/80 text-foreground',
+                            )}
+                        >
+                            <HugeiconsIcon icon={item.icon} className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{item.label}</span>
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div className="flex-1 overflow-hidden">
@@ -166,35 +168,50 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
 
     return (
         <div className="flex h-full flex-col">
-            <div className="flex items-center gap-2 border-b border-border/50 p-3">
-                <div className="flex overflow-hidden rounded-md bg-secondary/50 text-[11px]">
+            <div className="space-y-2 border-b border-border/50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="text-xs font-medium">{t('docker.containers')}</div>
+                        <div className="mt-0.5 text-[10px] text-muted-foreground">
+                            {counts.running} {t('dockerManager.running')} · {counts.all} {t('dockerManager.all')}
+                        </div>
+                    </div>
+                    <button type="button" onClick={fetchContainers} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground" title={t('dockerManager.refresh')}>
+                        <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
+
+                <label className="relative flex h-8 items-center rounded-lg border border-border/55 bg-background/38">
+                    <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                        placeholder={t('dockerManager.searchContainers')}
+                        className="h-full w-full bg-transparent pl-8 pr-8 text-[11px] outline-none placeholder:text-muted-foreground/60"
+                    />
+                    {searchTerm && (
+                        <button type="button" onClick={() => setSearchTerm('')} className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
+                            <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
+                        </button>
+                    )}
+                </label>
+
+                <div className="grid grid-cols-3 gap-1 rounded-lg bg-foreground/[0.035] p-1 text-[10px]">
                     {(['all', 'running', 'stopped'] as ContainerFilter[]).map((value) => (
                         <button
                             key={value}
+                            type="button"
                             onClick={() => setFilter(value)}
-                            className={`px-2.5 py-1 transition-colors ${
-                                filter === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'
-                            }`}
+                            className={cn(
+                                'flex h-7 items-center justify-center gap-1 rounded-md px-2 text-muted-foreground transition-colors hover:text-foreground',
+                                filter === value && 'bg-background/80 text-foreground',
+                            )}
                         >
                             {filterLabel(value)}
-                            <span className="ml-1 opacity-60">{counts[value]}</span>
+                            <span className="tabular-nums opacity-55">{counts[value]}</span>
                         </button>
                     ))}
                 </div>
-
-                <div className="relative flex-1">
-                    <HugeiconsIcon icon={Search01Icon} className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder={t('dockerManager.searchContainers')}
-                        className="w-full rounded-md border border-transparent bg-secondary/50 py-1 pl-7 pr-2 text-[11px] outline-none focus:border-primary/50"
-                    />
-                </div>
-
-                <button onClick={fetchContainers} className="rounded p-1.5 transition-colors hover:bg-secondary" title={t('dockerManager.refresh')}>
-                    <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
             </div>
 
             {error && (
@@ -218,7 +235,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                     {Array.from(composeProjects.entries()).map(([project, projectContainers]) => {
                         const running = projectContainers.filter((item) => item.state?.toLowerCase() === 'running').length;
                         return (
-                            <div key={project} className="flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2 py-0.5 font-mono text-[10px] text-blue-400">
+                            <div key={project} className="flex items-center gap-1.5 rounded-full border border-border/50 bg-background/32 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
                                 <HugeiconsIcon icon={Layers01Icon} className="h-3 w-3" />
                                 {project}
                                 <span className="opacity-60">{running}/{projectContainers.length}</span>
@@ -237,58 +254,62 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                 )}
 
                 {filtered.map((container) => (
-                    <div key={container.id} className="overflow-hidden rounded-lg border border-border bg-card/50 transition-colors hover:border-primary/30">
+                    <div key={container.id} className="overflow-hidden rounded-xl border border-border/65 bg-background/24 transition-colors hover:border-foreground/20">
                         <div className="p-3">
-                            <div className="mb-1.5 flex items-start justify-between">
+                            <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 truncate text-xs font-medium">
                                         <div className={`h-2 w-2 shrink-0 rounded-full ${getStateColor(container.state)}`} />
                                         {container.name}
                                         {container.composeProject && (
-                                            <span className="rounded bg-blue-500/10 px-1.5 py-0 font-mono text-[9px] text-blue-400">
+                                            <span className="rounded border border-border/50 px-1.5 py-0 font-mono text-[9px] text-muted-foreground">
                                                 {container.composeProject}
                                             </span>
                                         )}
                                     </div>
-                                    <div className="ml-4 mt-0.5 truncate text-[10px] text-muted-foreground">
+                                    <div className="ml-4 mt-1 truncate text-[10px] text-muted-foreground">
                                         {container.image}
                                     </div>
                                 </div>
-                                <span className={`ml-2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStateBadge(container.state)}`}>
+                                <span className={`shrink-0 whitespace-nowrap rounded-md px-2 py-0.5 text-[9px] font-medium ${getStateBadge(container.state)}`}>
                                     {container.state || 'unknown'}
                                 </span>
                             </div>
 
                             <div className="mt-2 space-y-1.5">
-                                <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground/60">
+                                <div className="flex items-center gap-2 font-mono text-[9px] text-muted-foreground/60">
                                     <span>{container.id.substring(0, 12)}</span>
-                                    {container.ports && <span className="truncate" title={container.ports}>Ports: {container.ports}</span>}
+                                    {container.ports && <span className="truncate" title={container.ports}>{container.ports}</span>}
                                 </div>
+                                {container.status && <div className="truncate text-[9px] text-muted-foreground/55">{container.status}</div>}
 
-                                <div className="flex flex-wrap items-center gap-0.5">
+                                <div className="flex flex-wrap items-center gap-1 border-t border-border/45 pt-2">
                                     <button
                                         onClick={() => setExpandedId(expandedId === container.id ? null : container.id)}
-                                        className={`rounded p-1 transition-colors ${
-                                            expandedId === container.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary'
-                                        }`}
+                                        className={cn(
+                                            'flex h-7 items-center gap-1 rounded-lg px-2 text-[9px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground',
+                                            expandedId === container.id && 'bg-foreground/[0.08] text-foreground',
+                                        )}
                                         title={t('dockerManager.logs')}
                                     >
                                         <HugeiconsIcon icon={FileAttachmentIcon} className="h-3.5 w-3.5" />
+                                        {t('dockerManager.logs')}
                                     </button>
 
                                     <button
                                         onClick={() => handleExec(container.id)}
                                         disabled={container.state?.toLowerCase() !== 'running'}
-                                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-purple-500/10 hover:text-purple-400 disabled:opacity-20"
+                                        className="flex h-7 items-center gap-1 rounded-lg px-2 text-[9px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
                                         title={t('dockerManager.exec')}
                                     >
                                         <HugeiconsIcon icon={TerminalIcon} className="h-3.5 w-3.5" />
+                                        {t('dockerManager.exec')}
                                     </button>
 
                                     <button
                                         onClick={() => handleAction(container.id, 'start')}
                                         disabled={Boolean(actionLoading) || container.state?.toLowerCase() === 'running'}
-                                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-green-500/10 hover:text-green-500 disabled:opacity-20"
+                                        className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
                                         title={t('dockerManager.start')}
                                     >
                                         <HugeiconsIcon icon={PlayIcon} className="h-3.5 w-3.5" />
@@ -298,7 +319,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         <button
                                             onClick={() => handleAction(container.id, 'unpause')}
                                             disabled={Boolean(actionLoading)}
-                                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-yellow-500/10 hover:text-yellow-500 disabled:opacity-20"
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
                                             title={t('dockerManager.resume')}
                                         >
                                             <HugeiconsIcon icon={PlayIcon} className="h-3.5 w-3.5" />
@@ -307,7 +328,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         <button
                                             onClick={() => handleAction(container.id, 'pause')}
                                             disabled={Boolean(actionLoading) || container.state?.toLowerCase() !== 'running'}
-                                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-yellow-500/10 hover:text-yellow-500 disabled:opacity-20"
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
                                             title={t('dockerManager.pause')}
                                         >
                                             <HugeiconsIcon icon={PauseIcon} className="h-3.5 w-3.5" />
@@ -317,7 +338,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                     <button
                                         onClick={() => handleAction(container.id, 'restart')}
                                         disabled={Boolean(actionLoading)}
-                                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-500 disabled:opacity-20"
+                                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
                                         title={t('dockerManager.restart')}
                                     >
                                         <HugeiconsIcon icon={RotateRight01Icon} className={`h-3.5 w-3.5 ${actionLoading === container.id ? 'animate-spin' : ''}`} />
@@ -326,7 +347,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                     <button
                                         onClick={() => handleAction(container.id, 'stop')}
                                         disabled={Boolean(actionLoading) || container.state?.toLowerCase() !== 'running'}
-                                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-20"
+                                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:pointer-events-none disabled:opacity-20"
                                         title={t('dockerManager.stop')}
                                     >
                                         <HugeiconsIcon icon={SquareIcon} className="h-3.5 w-3.5 fill-current" />
@@ -336,7 +357,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         <>
                                             <button
                                                 onClick={() => setPendingConfirm(null)}
-                                                className="rounded p-1 text-[10px] text-muted-foreground transition-colors hover:bg-secondary"
+                                                className="h-7 rounded-lg px-2 text-[9px] text-muted-foreground transition-colors hover:bg-foreground/[0.06]"
                                             >
                                                 {t('dockerManager.cancel')}
                                             </button>
@@ -345,7 +366,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                                     setPendingConfirm(null);
                                                     handleAction(container.id, 'remove');
                                                 }}
-                                                className="rounded bg-destructive/10 p-1 text-[10px] text-destructive transition-colors hover:bg-destructive/20"
+                                                className="h-7 rounded-lg bg-destructive/10 px-2 text-[9px] text-destructive transition-colors hover:bg-destructive/20"
                                             >
                                                 {t('dockerManager.confirm')}
                                             </button>
@@ -354,7 +375,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
                                         <button
                                             onClick={() => setPendingConfirm(container.id)}
                                             disabled={Boolean(actionLoading)}
-                                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-20"
+                                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-20"
                                             title={t('dockerManager.remove')}
                                         >
                                             <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
@@ -460,6 +481,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
     const [deleting, setDeleting] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const fetchImages = async () => {
         setLoading(true);
@@ -492,18 +514,41 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
     };
 
     const pendingImage = images.find((image) => image.id === pendingDelete);
+    const filteredImages = useMemo(() => {
+        const keyword = searchTerm.trim().toLowerCase();
+        if (!keyword) return images;
+        return images.filter((image) =>
+            `${image.repository}:${image.tag} ${image.id}`.toLowerCase().includes(keyword),
+        );
+    }, [images, searchTerm]);
 
     return (
         <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-border/50 p-3">
-                <div className="flex items-center gap-2 text-xs">
-                    <HugeiconsIcon icon={PackageIcon} className="h-4 w-4 text-blue-400" />
-                    <span className="font-medium">{t('docker.images')}</span>
-                    <span className="rounded-full bg-secondary px-1.5 text-[10px] text-muted-foreground">{images.length}</span>
+            <div className="space-y-2 border-b border-border/50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs">
+                        <HugeiconsIcon icon={PackageIcon} className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{t('docker.images')}</span>
+                        <span className="rounded-md bg-foreground/[0.05] px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">{images.length}</span>
+                    </div>
+                    <button type="button" onClick={fetchImages} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground" title={t('dockerManager.refresh')}>
+                        <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
                 </div>
-                <button onClick={fetchImages} className="rounded p-1.5 transition-colors hover:bg-secondary" title={t('dockerManager.refresh')}>
-                    <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                <label className="relative flex h-8 items-center rounded-lg border border-border/55 bg-background/38">
+                    <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                        placeholder={t('common.search')}
+                        className="h-full w-full bg-transparent pl-8 pr-8 text-[11px] outline-none placeholder:text-muted-foreground/60"
+                    />
+                    {searchTerm && (
+                        <button type="button" onClick={() => setSearchTerm('')} className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
+                            <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
+                        </button>
+                    )}
+                </label>
             </div>
 
             {error && (
@@ -530,8 +575,8 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
             )}
 
             <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                {images.map((image) => (
-                    <div key={image.id} className="rounded-lg border border-border bg-card/50 p-3 transition-colors hover:border-primary/30">
+                {filteredImages.map((image) => (
+                    <div key={image.id} className="rounded-xl border border-border/65 bg-background/24 p-3 transition-colors hover:border-foreground/20">
                         <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                                 <div className="truncate font-mono text-xs text-foreground/90">
@@ -546,7 +591,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
                             <button
                                 onClick={() => setPendingDelete(image.id)}
                                 disabled={Boolean(deleting)}
-                                className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-20"
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-20"
                                 title={t('dockerManager.remove')}
                             >
                                 <HugeiconsIcon icon={Delete02Icon} className={`h-3.5 w-3.5 ${deleting === image.id ? 'animate-spin' : ''}`} />
@@ -555,7 +600,7 @@ function ImagesTab({ connectionId }: { connectionId: string }) {
                     </div>
                 ))}
 
-                {images.length === 0 && !loading && (
+                {filteredImages.length === 0 && !loading && (
                     <div className="py-8 text-center text-xs text-muted-foreground opacity-70">
                         <HugeiconsIcon icon={PackageIcon} className="mx-auto mb-2 h-8 w-8 opacity-30" />
                         {t('docker.noDockerHint')}
@@ -615,17 +660,17 @@ function PruneTab({ connectionId }: { connectionId: string }) {
 
     return (
         <div className="flex h-full flex-col">
-            <div className="border-b border-border/50 p-3">
-                <div className="mb-2 flex items-center justify-between">
+            <div className="space-y-2 border-b border-border/50 p-3">
+                <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-medium">
-                        <HugeiconsIcon icon={HardDriveIcon} className="h-4 w-4 text-amber-400" />
+                        <HugeiconsIcon icon={HardDriveIcon} className="h-4 w-4 text-muted-foreground" />
                         {t('docker.stats')}
                     </div>
-                    <button onClick={fetchDiskUsage} className="rounded p-1 hover:bg-secondary" title={t('dockerManager.refresh')}>
-                        <HugeiconsIcon icon={Refresh01Icon} className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                    <button type="button" onClick={fetchDiskUsage} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground" title={t('dockerManager.refresh')}>
+                        <HugeiconsIcon icon={Refresh01Icon} className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
-                <pre className="overflow-x-auto whitespace-pre rounded-md bg-secondary/30 p-2 font-mono text-[10px] leading-[1.5] text-muted-foreground">
+                <pre className="overflow-x-auto whitespace-pre rounded-lg border border-border/50 bg-background/35 p-2.5 font-mono text-[9px] leading-[1.6] text-muted-foreground">
                     {loading ? t('common.loading') : (diskUsage || t('common.loading'))}
                 </pre>
             </div>
@@ -636,10 +681,10 @@ function PruneTab({ connectionId }: { connectionId: string }) {
                         key={action.type}
                         onClick={() => setPendingPrune(action.type)}
                         disabled={Boolean(pruning)}
-                        className={`w-full rounded-lg border border-border bg-card/50 p-3 text-left transition-all disabled:opacity-40 ${action.color}`}
+                        className={`w-full rounded-xl border border-border/65 bg-background/24 p-3 text-left transition-colors hover:border-foreground/20 disabled:opacity-40 ${action.color}`}
                     >
                         <div className="flex items-center gap-3">
-                            <HugeiconsIcon icon={action.icon} className={`h-5 w-5 shrink-0 ${pruning === action.type ? 'animate-pulse' : ''}`} />
+                            <HugeiconsIcon icon={action.icon} className={`h-5 w-5 shrink-0 ${pruning === action.type ? 'animate-spin' : ''}`} />
                             <div className="min-w-0">
                                 <div className="text-xs font-medium">{action.label}</div>
                                 <div className="font-mono text-[10px] text-muted-foreground/60">{action.desc}</div>

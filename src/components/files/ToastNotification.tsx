@@ -23,7 +23,7 @@ export function ToastNotification({ toasts, onDismiss }: Props) {
                 <div
                     key={t.id}
                     className={cn(
-                        'flex items-start gap-2 px-3 py-2.5 rounded-xl border shadow-lg text-xs',
+                        'flex items-start gap-2 px-3 py-2.5 rounded-xl border text-xs',
                         'bg-card/95 backdrop-blur-sm animate-in slide-in-from-bottom-2 fade-in',
                         t.type === 'error' && 'border-destructive/30',
                         t.type === 'success' && 'border-emerald-500/30',

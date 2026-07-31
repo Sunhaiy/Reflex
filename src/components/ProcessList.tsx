@@ -2,6 +2,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, PowerIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from '../hooks/useTranslation';
 import type { RemoteProcess } from '../shared/types';
 
 interface ProcessListProps {
@@ -10,6 +11,7 @@ interface ProcessListProps {
 }
 
 export function ProcessList({ connectionId, onClose }: ProcessListProps) {
+    const { t } = useTranslation();
     const [processes, setProcesses] = useState<RemoteProcess[]>([]);
     const [loading, setLoading] = useState(false);
     const [sortBy, setSortBy] = useState<'cpu' | 'mem'>('cpu');
@@ -24,42 +26,60 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
             const sorted = [...list].sort((a, b) => b[sortBy] - a[sortBy]).slice(0, 50);
             setProcesses(sorted);
         } catch (err: any) {
-            setError(err.message || 'Failed to fetch processes');
+            setError(err.message || t('common.error'));
         } finally {
             setLoading(false);
         }
     };
 
+    // `ps -ax` shares the SSH connection with the shell, so it is not worth running
+    // while the window is hidden — the output would only compete with terminal traffic.
     useEffect(() => {
-        fetchProcesses();
-        const interval = setInterval(fetchProcesses, 5000); // Auto refresh every 5s
-        return () => clearInterval(interval);
+        let interval: number | undefined;
+
+        const start = () => {
+            if (interval !== undefined) return;
+            void fetchProcesses();
+            interval = window.setInterval(fetchProcesses, 5000);
+        };
+        const stop = () => {
+            if (interval === undefined) return;
+            window.clearInterval(interval);
+            interval = undefined;
+        };
+        const sync = () => (document.visibilityState === 'hidden' ? stop() : start());
+
+        sync();
+        document.addEventListener('visibilitychange', sync);
+        return () => {
+            document.removeEventListener('visibilitychange', sync);
+            stop();
+        };
     }, [connectionId, sortBy]);
 
     const handleKill = async (pid: number) => {
-        if (!confirm(`Are you sure you want to kill process ${pid}?`)) return;
+        if (!confirm(`${t('processList.confirmKill')} PID ${pid}?`)) return;
         try {
             await window.electron.killProcess(connectionId, pid);
             fetchProcesses(); // Refresh immediately
         } catch (err: any) {
-            alert('Failed to kill process: ' + err.message);
+            alert(`${t('common.error')}: ${err.message}`);
         }
     };
 
     return createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="flex h-[min(600px,calc(100vh-32px))] w-[min(800px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card shadow-xl">
+            <div className="flex h-[min(600px,calc(100vh-32px))] w-[min(800px,calc(100vw-32px))] flex-col rounded-lg border border-border bg-card">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
                     <h2 className="text-lg font-semibold flex items-center gap-2">
-                        Process Manager
-                        <span className="text-xs font-normal text-muted-foreground bg-secondary px-2 py-0.5 rounded">Top 50</span>
+                        {t('processList.title')}
                     </h2>
                     <div className="flex items-center gap-2">
-                        <button onClick={fetchProcesses} className="p-2 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
+                        <button onClick={fetchProcesses} className="p-2 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title={t('common.refresh')}>
                             <HugeiconsIcon icon={Refresh01Icon} className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                         </button>
-                        <button onClick={onClose} className="p-2 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title="Close">
+                        <button onClick={onClose} className="p-2 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors" title={t('common.close')}>
                             <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4" />
                         </button>
                     </div>
@@ -71,13 +91,13 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                         onClick={() => setSortBy('cpu')}
                         className={`px-3 py-1 text-xs rounded transition-colors ${sortBy === 'cpu' ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary text-muted-foreground'}`}
                     >
-                        Sort by CPU
+                        {t('processList.cpu')} ↓
                     </button>
                     <button
                         onClick={() => setSortBy('mem')}
                         className={`px-3 py-1 text-xs rounded transition-colors ${sortBy === 'mem' ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary text-muted-foreground'}`}
                     >
-                        Sort by Memory
+                        {t('processList.mem')} ↓
                     </button>
                 </div>
 
@@ -90,11 +110,11 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                             <thead className="text-xs text-muted-foreground bg-secondary/50 sticky top-0">
                                 <tr>
                                     <th className="px-4 py-2 font-medium">PID</th>
-                                    <th className="px-4 py-2 font-medium">User</th>
+                                    <th className="px-4 py-2 font-medium">{t('processList.user')}</th>
                                     <th className="px-4 py-2 font-medium">CPU %</th>
                                     <th className="px-4 py-2 font-medium">Mem %</th>
-                                    <th className="px-4 py-2 font-medium">Command</th>
-                                    <th className="px-4 py-2 font-medium text-right">Action</th>
+                                    <th className="px-4 py-2 font-medium">{t('processList.command')}</th>
+                                    <th className="px-4 py-2 font-medium text-right" />
                                 </tr>
                             </thead>
                             <tbody>
@@ -114,7 +134,7 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
                                             <button
                                                 onClick={() => handleKill(proc.pid)}
                                                 className="p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded opacity-0 group-hover:opacity-100 transition-all"
-                                                title="Kill Process"
+                                                title={t('processList.kill')}
                                             >
                                                 <HugeiconsIcon icon={PowerIcon} className="w-3.5 h-3.5" />
                                             </button>
