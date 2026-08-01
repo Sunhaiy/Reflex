@@ -11,9 +11,11 @@ const DockerManager = lazy(() => import('./DockerManager').then((module) => ({ d
 
 interface RightPanelProps {
   connectionId: string;
+  /** False while this session sits behind another tab; polling pauses, state stays. */
+  active: boolean;
 }
 
-export function RightPanel({ connectionId }: RightPanelProps) {
+export function RightPanel({ connectionId, active }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<'monitor' | 'docker'>('monitor');
   const { t } = useTranslation();
 
@@ -51,7 +53,7 @@ export function RightPanel({ connectionId }: RightPanelProps) {
           <div className="absolute inset-0">
             <ErrorBoundary name="SystemMonitor">
               <Suspense fallback={null}>
-                <SystemMonitor connectionId={connectionId} />
+                <SystemMonitor connectionId={connectionId} active={active} />
               </Suspense>
             </ErrorBoundary>
           </div>

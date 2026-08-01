@@ -6,10 +6,13 @@ import { TerminalConnecting } from './components/ConnectingOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ResizableLayout } from './components/ResizableLayout';
 import { ServerHome } from './components/ServerHome';
+import { StartupCover } from './components/StartupCover';
 import { ThemeBackground } from './components/ThemeBackground';
 import { TitleBar } from './components/TitleBar';
 import { Modal } from './components/ui/modal';
 import { clearActivity, startActivityCapture } from './lib/activityStore';
+import { bootReady } from './lib/bootProgress';
+import { log } from './lib/logger';
 import { flushUsage, queueUsage, startUsageTracking } from './lib/usageTracker';
 import type { ConnectionDraft, SSHConnection } from './shared/types';
 import { useSettingsStore } from './store/settingsStore';
@@ -106,9 +109,18 @@ function App() {
   }, []);
 
   useEffect(() => {
-    initTheme();
-    initSettings();
-    void Promise.all([
+    // The startup cover waits on these three restores rather than on a timer. A failed
+    // one still resolves — the shell falls back to defaults instead of hanging behind
+    // the cover — but it lands in the log file either way.
+    const restoreTheme = initTheme().catch((error) => {
+      log.error('[Boot] Appearance restore failed', error);
+    });
+
+    const restoreSettings = initSettings().catch((error) => {
+      log.error('[Boot] Settings restore failed', error);
+    });
+
+    const restoreConnections = Promise.all([
       window.electron.storeGet('connections'),
       window.electron.storeGet('connectionDraft'),
     ]).then(([storedConnections, storedDraft]) => {
@@ -117,7 +129,11 @@ function App() {
       if (storedDraft && typeof storedDraft === 'object' && 'data' in storedDraft) {
         setConnectionDraft(storedDraft as ConnectionDraft);
       }
-    }).catch(() => undefined);
+    }).catch((error) => {
+      log.error('[Boot] Connection restore failed', error);
+    });
+
+    void Promise.all([restoreTheme, restoreSettings, restoreConnections]).then(bootReady);
   }, [initSettings, initTheme]);
 
   useEffect(() => {
@@ -398,13 +414,19 @@ function App() {
                         </div>
                       }
                       rightContent={
-                        page === 'workspace' && session.uniqueId === activeSessionId ? (
-                          <ErrorBoundary name="RightPanel">
-                            <Suspense fallback={null}>
-                              <RightPanel connectionId={session.uniqueId} />
-                            </Suspense>
-                          </ErrorBoundary>
-                        ) : null
+                        // Kept mounted for every session, like the terminals above.
+                        // Unmounting it on a tab switch tore down monitoring and threw
+                        // away the collected chart history, so returning to a session
+                        // meant a skeleton and a full reload. `active` pauses the polling
+                        // instead, leaving the last readings on screen.
+                        <ErrorBoundary name="RightPanel">
+                          <Suspense fallback={null}>
+                            <RightPanel
+                              connectionId={session.uniqueId}
+                              active={page === 'workspace' && session.uniqueId === activeSessionId}
+                            />
+                          </Suspense>
+                        </ErrorBoundary>
                       }
                     />
                   </div>
@@ -429,6 +451,8 @@ function App() {
           onCancel={() => setEditingConnection(null)}
         />
       </Modal>
+
+      <StartupCover />
     </>
   );
 }

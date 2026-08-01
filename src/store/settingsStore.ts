@@ -6,6 +6,7 @@ import {
     normalizeTerminalFont,
     normalizeUiFont,
 } from '../shared/fontStacks';
+import { ensureFontsFor } from '../lib/fontLoader';
 
 export interface SettingsState {
     language: Language;
@@ -75,10 +76,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         persist('language', language);
     },
     setUiFontFamily: (uiFontFamily) => {
+        ensureFontsFor(uiFontFamily);
         set({ uiFontFamily });
         persist('uiFontFamily', uiFontFamily);
     },
     setTerminalFontFamily: (terminalFontFamily) => {
+        ensureFontsFor(terminalFontFamily);
         set({ terminalFontFamily });
         persist('terminalFontFamily', terminalFontFamily);
     },

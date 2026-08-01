@@ -29,7 +29,10 @@ const EMPTY_CONNECTION: Partial<SSHConnection> = {
     providerUrl: '',
 };
 
-const inputClass = 'h-11 rounded-xl bg-background/55 px-3.5';
+// Kept compact on purpose: with the recovered-draft banner on top, the taller rhythm
+// pushed the form past the modal's max height and put a scrollbar on every field.
+const inputClass = 'h-10 rounded-xl bg-background/55 px-3.5';
+const sideButtonClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition-colors hover:bg-foreground/[0.055] hover:text-foreground';
 
 /**
  * Required and optional are separated by contrast rather than colour: a required label
@@ -38,7 +41,7 @@ const inputClass = 'h-11 rounded-xl bg-background/55 px-3.5';
  */
 function FieldLabel({ text, required, optionalText }: { text: string; required?: boolean; optionalText: string }) {
     return (
-        <span className="mb-1.5 flex items-center gap-1.5">
+        <span className="mb-1 flex items-center gap-1.5">
             <span className={cn('text-xs font-medium', required ? 'text-foreground' : 'text-muted-foreground')}>{text}</span>
             {required
                 ? <span className="text-xs leading-none text-primary" aria-hidden="true">*</span>
@@ -146,9 +149,9 @@ export function ConnectionForm({
     );
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
             {draftRecovered && !isEditing && (
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-foreground/[0.045] px-3 py-2 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-foreground/[0.045] px-3 py-1.5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-2">
                         <HugeiconsIcon icon={FloppyDiskIcon} className="h-3.5 w-3.5" />
                         {t('form.draftRecovered')}
@@ -159,10 +162,10 @@ export function ConnectionForm({
                 </div>
             )}
 
-            <section className="space-y-4 rounded-2xl border border-border/60 bg-card/25 p-4 sm:p-5">
+            <section className="space-y-3.5 rounded-2xl border border-border/60 bg-card/25 p-4">
                 <div>
                     <h3 className="text-sm font-semibold">{t('form.detailsTitle')}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">{t('form.detailsDescription')}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{t('form.detailsDescription')}</p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -174,7 +177,7 @@ export function ConnectionForm({
                             placeholder={autoName(formData) || t('connection.form.nameDesc')}
                             className={inputClass}
                         />
-                        <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{t('connection.form.nameAutoDesc')}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{t('connection.form.nameAutoDesc')}</p>
                     </label>
                     <div className="block">
                         <Label text={t('connection.form.providerUrl')} />
@@ -189,17 +192,17 @@ export function ConnectionForm({
                                 type="button"
                                 onClick={() => providerLink && void window.electron.openExternal(providerLink)}
                                 disabled={!providerLink}
-                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground transition-colors hover:bg-foreground/[0.055] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                                className={cn(sideButtonClass, 'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent')}
                                 title={t('form.openProvider')}
                             >
                                 <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-4 w-4" />
                             </button>
                         </div>
-                        <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">{t('connection.form.providerUrlDesc')}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{t('connection.form.providerUrlDesc')}</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3 border-t border-border/45 pt-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3 border-t border-border/45 pt-3.5">
                     <label className="block">
                         <Label text={t('connection.form.hostIp')} required />
                         <Input
@@ -279,7 +282,7 @@ export function ConnectionForm({
                             <button
                                 type="button"
                                 onClick={() => setShowPassword((value) => !value)}
-                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground hover:bg-foreground/[0.055] hover:text-foreground"
+                                className={sideButtonClass}
                                 title={showPassword ? t('connection.form.hidePassword') : t('connection.form.showPassword')}
                             >
                                 {showPassword ? <HugeiconsIcon icon={ViewOffIcon} className="h-4 w-4" /> : <HugeiconsIcon icon={ViewIcon} className="h-4 w-4" />}
@@ -300,7 +303,7 @@ export function ConnectionForm({
                                 <button
                                     type="button"
                                     onClick={() => void pickFile()}
-                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border/60 text-muted-foreground hover:bg-foreground/[0.055] hover:text-foreground"
+                                    className={sideButtonClass}
                                     title={t('connection.form.browse')}
                                 >
                                     <HugeiconsIcon icon={FolderOpenIcon} className="h-4 w-4" />
@@ -321,10 +324,10 @@ export function ConnectionForm({
             </section>
 
             {error && (
-                <div className="rounded-xl bg-destructive/10 px-3 py-2.5 text-xs text-destructive">{error}</div>
+                <div className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>
             )}
 
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex items-center justify-between gap-3">
                 <Button type="button" variant="ghost" onClick={onCancel} className="rounded-xl">{t('connection.form.cancel')}</Button>
 
                 <div className="flex items-center gap-2">

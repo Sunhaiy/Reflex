@@ -620,6 +620,7 @@ export class SSHManager {
 
         const staticCommand = `
     echo ">>>OS"; cat /etc/os-release;
+    echo ">>>TZ"; (cat /etc/timezone 2>/dev/null || readlink -f /etc/localtime 2>/dev/null | sed 's#.*/zoneinfo/##' || timedatectl show -p Timezone --value 2>/dev/null) | head -1;
     echo ">>>CPU_INFO"; grep -m 1 "model name" /proc/cpuinfo; grep -m 1 "cpu MHz" /proc/cpuinfo;
     `;
         const dynamicCommand = `
@@ -862,6 +863,16 @@ export class SSHManager {
             const osInfo = data['OS'] || '';
             const prettyName = osInfo.match(/PRETTY_NAME="([^"]+)"/)?.[1] || 'Linux';
             const uptime = data['UPTIME'] || '';
+            // Allow-list the real IANA areas rather than blocking known-bad values: a
+            // host with no timezone set reports 'UTC', 'Etc/UTC', 'Etc/GMT+8' or 'n/a',
+            // and both 'Etc/UTC' and 'n/a' satisfy a naive Area/City shape check — the
+            // latter would surface as the city "a" in the region "n". The UI has to show
+            // that it does not know rather than invent a place.
+            const rawTimezone = (data['TZ'] || '').trim().split('\n')[0].trim();
+            const IANA_AREAS = /^(Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\//;
+            const looksLikePlace = IANA_AREAS.test(rawTimezone)
+                && /^[A-Za-z]+\/[A-Za-z0-9_+\-/]+$/.test(rawTimezone);
+            const timezone = looksLikePlace ? rawTimezone : '';
 
             // CPU Info
             const cpuInfo = (data['CPU_INFO'] || '').split('\n');
@@ -980,7 +991,8 @@ export class SSHManager {
                     distro: prettyName,
                     kernel: 'Linux',
                     uptime: uptime.replace('up ', ''),
-                    hostname: 'Server'
+                    hostname: 'Server',
+                    timezone
                 },
                 cpu: {
                     totalUsage,

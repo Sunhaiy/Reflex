@@ -122,6 +122,8 @@ export interface SystemStats {
     kernel: string;
     uptime: string;
     hostname: string;
+    /** IANA zone read from the server, e.g. "Asia/Shanghai". Empty when unset there. */
+    timezone: string;
   };
   cpu: {
     totalUsage: number;

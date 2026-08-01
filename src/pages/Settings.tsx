@@ -27,6 +27,7 @@ import { accentColors, type AccentColorId, type AppearanceMode } from '../shared
 import { useSettingsStore } from '../store/settingsStore';
 import { MAX_RADIUS_SCALE, MIN_RADIUS_SCALE, useThemeStore } from '../store/themeStore';
 import { useTranslation } from '../hooks/useTranslation';
+import { loadAllFonts } from '../lib/fontLoader';
 
 type SettingsTab = 'app' | 'appearance' | 'terminal';
 
@@ -239,6 +240,10 @@ function ThemePreview({ mode }: { mode: AppearanceMode }) {
 }
 
 export function Settings() {
+  // The picker previews each option in its own typeface, so this is the moment
+  // the families kept out of the startup path are actually needed.
+  useEffect(() => loadAllFonts(), []);
+
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const [appVersion, setAppVersion] = useState('1.0.12');

@@ -119,6 +119,148 @@
     border-color: hsl(var(--foreground) / 0.17);
     background-color: hsl(var(--card) / 0.82);
   }
+
+  /* Startup cover backdrop for machines without WebGL: the same slow drift built from
+     two blurred accent blobs instead of a shader. The opaque canvas hides it elsewhere. */
+  .cover-fallback {
+    overflow: hidden;
+    background-color: hsl(var(--background));
+  }
+
+  .cover-fallback::before,
+  .cover-fallback::after {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    background: radial-gradient(closest-side, hsl(var(--primary) / 0.34), transparent);
+    filter: blur(60px);
+    animation: cover-drift 22s ease-in-out infinite alternate;
+  }
+
+  .cover-fallback::after {
+    background: radial-gradient(closest-side, hsl(var(--primary) / 0.16), transparent);
+    animation-duration: 31s;
+    animation-direction: alternate-reverse;
+  }
+}
+
+/* Accent glow along the inner bottom edge, after border-beam's `line` variant: a few
+   ellipses anchored at y=100% and clipped by the element's own overflow, so only their
+   tops show, plus a blurred copy for the bloom. The upstream recipe stacks eight
+   differently coloured ellipses and hue-rotates them; a single theme colour needs three
+   and no hue cycle, so the motion here is purely the breathing. Content needs
+   `relative z-[1]` to sit above it. */
+.beam-line {
+  /* The upstream figures are tuned for a 366x42 search bar. This button is 126x48 —
+     far narrower but no shorter, so the two axes need different ratios. The spread is
+     deliberately wider than the button so the bottom edge is lit at all times. Note the
+     figures are ellipse *radii*. */
+  --beam-scale-x: 1.2;
+  --beam-scale-y: 0.85;
+  --beam-duration: 16s;
+  --beam-strength: 1;
+
+  position: relative;
+  overflow: hidden;
+}
+
+/* Every animation lives on the pseudo-elements, never on the host. The
+   tailwindcss-animate plugin makes the `duration-*` utilities set animation-duration as
+   well as transition-duration, so the button's `duration-200` — there for its hover
+   colour fade — silently drove this whole sweep at 0.2s. Utilities cannot target
+   ::before/::after, so keeping the animations here makes that class of collision
+   impossible rather than merely outranked. */
+.beam-line::before,
+.beam-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse calc(46px * var(--beam-scale-x) * var(--beam-w)) calc(30px * var(--beam-scale-y) * var(--beam-h)) at calc(var(--beam-x) * 100%) 100%, hsl(var(--primary) / 0.55), transparent 70%),
+    radial-gradient(ellipse calc(34px * var(--beam-scale-x) * var(--beam-w)) calc(22px * var(--beam-scale-y) * var(--beam-h)) at calc(var(--beam-x) * 100% - 34px * var(--beam-scale-x)) 100%, hsl(var(--primary) / 0.42), transparent 72%),
+    radial-gradient(ellipse calc(34px * var(--beam-scale-x) * var(--beam-w)) calc(22px * var(--beam-scale-y) * var(--beam-h)) at calc(var(--beam-x) * 100% + 34px * var(--beam-scale-x)) 100%, hsl(var(--primary) / 0.42), transparent 72%);
+  animation:
+    beam-drift calc(var(--beam-duration) * 0.75) ease-in-out infinite alternate,
+    beam-breathe calc(var(--beam-duration) * 0.4) ease-in-out infinite;
+}
+
+/* Blurred copy of the same glow — the bloom that spills up off the edge. */
+.beam-line::after {
+  filter: blur(6px);
+}
+
+/* Registered so they interpolate as numbers; unregistered custom properties would
+   snap between keyframes instead of animating. */
+@property --beam-x {
+  syntax: '<number>';
+  initial-value: 0.5;
+  inherits: true;
+}
+
+@property --beam-w {
+  syntax: '<number>';
+  initial-value: 1;
+  inherits: true;
+}
+
+@property --beam-h {
+  syntax: '<number>';
+  initial-value: 1;
+  inherits: true;
+}
+
+/* A narrow sway rather than a crossing. Paired with `alternate` it eases back and
+   forth with no loop seam, so the old edge-fade that blanked the glow once per cycle
+   is gone — the button stays lit continuously. */
+@keyframes beam-drift {
+  from {
+    --beam-x: 0.35;
+  }
+
+  to {
+    --beam-x: 0.65;
+  }
+}
+
+@keyframes beam-breathe {
+  0%,
+  100% {
+    --beam-w: 0.86;
+    --beam-h: 0.88;
+    opacity: calc(var(--beam-strength) * 0.66);
+  }
+
+  50% {
+    --beam-w: 1.18;
+    --beam-h: 1.14;
+    opacity: var(--beam-strength);
+  }
+}
+
+/* Draw-on for the location schematic's roads. Every line carries pathLength="1", so a
+   single dash length covers all of them regardless of their real length. */
+.road-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: road-draw 700ms ease-out forwards;
+}
+
+@keyframes road-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cover-drift {
+  from {
+    transform: translate3d(-12%, -8%, 0) scale(1);
+  }
+
+  to {
+    transform: translate3d(14%, 10%, 0) scale(1.25);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

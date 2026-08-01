@@ -8,6 +8,12 @@ import { SSHManager } from './ssh/sshManager.js';
 import { getLogDirectory, getLogFilePath, readRecentLog, writeLog, type LogLevel } from './logger.js';
 
 const store = new Store();
+
+/** Shared so the main process can persist window bounds through the same file. */
+export function getStore() {
+  return store;
+}
+
 const sshManager = new SSHManager();
 const LEGACY_STORE_DIR_NAMES = ['zangqing', 'Zangqing'];
 const MIGRATED_STORE_KEYS = [

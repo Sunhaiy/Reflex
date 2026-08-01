@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, Tray, nativeImage, shell } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { setupIpcHandlers } from './ipcHandlers';
+import { getStore, setupIpcHandlers } from './ipcHandlers';
 import { flushLogSync, logger } from './logger';
 
 // Prevent third-party crashes from killing the whole Electron process.
@@ -17,6 +17,77 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 const DEV_SERVER_URL = 'http://127.0.0.1:3002';
+const WINDOW_STATE_KEY = 'windowState';
+const DEFAULT_WINDOW_SIZE = { width: 1200, height: 800 };
+const MIN_WINDOW_SIZE = { width: 720, height: 480 };
+
+interface WindowState {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  maximized: boolean;
+}
+
+function isPositionOnScreen(x: number, y: number, width: number, height: number) {
+  // A monitor that is no longer attached would otherwise strand the window off-screen.
+  return screen.getAllDisplays().some(({ workArea }) =>
+    x + width > workArea.x
+    && y + height > workArea.y
+    && x < workArea.x + workArea.width
+    && y < workArea.y + workArea.height);
+}
+
+function readWindowState(): WindowState {
+  const saved = getStore().get(WINDOW_STATE_KEY) as Partial<WindowState> | undefined;
+  const width = Math.max(MIN_WINDOW_SIZE.width, Math.round(Number(saved?.width) || DEFAULT_WINDOW_SIZE.width));
+  const height = Math.max(MIN_WINDOW_SIZE.height, Math.round(Number(saved?.height) || DEFAULT_WINDOW_SIZE.height));
+  const x = Number.isFinite(saved?.x) ? Math.round(saved!.x!) : undefined;
+  const y = Number.isFinite(saved?.y) ? Math.round(saved!.y!) : undefined;
+  const onScreen = x !== undefined && y !== undefined && isPositionOnScreen(x, y, width, height);
+
+  return {
+    width,
+    height,
+    x: onScreen ? x : undefined,
+    y: onScreen ? y : undefined,
+    // First run opens maximized; after that the last state wins.
+    maximized: saved?.maximized ?? true,
+  };
+}
+
+function trackWindowState(window: BrowserWindow) {
+  let saveTimer: NodeJS.Timeout | undefined;
+
+  const save = () => {
+    if (window.isDestroyed()) return;
+    const maximized = window.isMaximized();
+    // getNormalBounds reports the restored size even while maximized, so un-maximising
+    // later returns to the size the user actually chose.
+    const bounds = window.getNormalBounds();
+    getStore().set(WINDOW_STATE_KEY, {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      maximized,
+    } satisfies WindowState);
+  };
+
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 400);
+  };
+
+  window.on('resize', scheduleSave);
+  window.on('move', scheduleSave);
+  window.on('maximize', scheduleSave);
+  window.on('unmaximize', scheduleSave);
+  window.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    save();
+  });
+}
 const DEV_SERVER_RETRY_COUNT = 40;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
 
@@ -52,9 +123,15 @@ const createWindow = () => {
   const appIconPath = getRuntimeAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
   const supportsTransparency = process.platform === 'darwin';
 
+  const windowState = readWindowState();
+
   const window = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
+    minWidth: MIN_WINDOW_SIZE.width,
+    minHeight: MIN_WINDOW_SIZE.height,
     show: false,
     frame: false,
     titleBarStyle: 'hidden',
@@ -70,6 +147,12 @@ const createWindow = () => {
     },
   });
   mainWindow = window;
+
+  // Maximising happens here, while the window is still hidden and before the renderer
+  // has loaded, so it only ever paints at its final size. Doing it at reveal time meant
+  // the page rendered at the smaller size first and the resize flashed black.
+  if (windowState.maximized) window.maximize();
+  trackWindowState(window);
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     void openExternalUrl(url).catch((error) => console.warn('[Main] Blocked external window:', error));
@@ -94,9 +177,18 @@ const createWindow = () => {
     logger.error('[Main] Window became unresponsive');
   });
 
-  window.webContents.once('did-finish-load', () => {
-    revealWindow(window, { maximize: true });
-  });
+  // `ready-to-show` fires once the renderer has painted its first frame, while
+  // `did-finish-load` waits for every subresource. With a stylesheet carrying hundreds
+  // of @font-face rules that gap is the difference between the cover appearing at once
+  // and the user staring at nothing. Whichever lands first wins; the other is ignored.
+  let revealed = false;
+  const revealOnce = () => {
+    if (revealed) return;
+    revealed = true;
+    revealWindow(window);
+  };
+  window.once('ready-to-show', revealOnce);
+  window.webContents.once('did-finish-load', revealOnce);
 
   void loadRenderer(window).catch((error) => {
     console.error('[Main] Unable to load renderer:', error);
@@ -121,9 +213,9 @@ const createWindow = () => {
   });
 };
 
-// Re-maximizing on every reveal would strand the user with an undraggable window,
-// because a maximized frameless window ignores the title bar drag region.
-function revealWindow(window: BrowserWindow, { maximize = false } = {}) {
+// Geometry is settled at creation time from the saved state, so revealing never
+// resizes anything — this only brings an existing window forward.
+function revealWindow(window: BrowserWindow) {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   window.setSkipTaskbar(false);
@@ -132,7 +224,6 @@ function revealWindow(window: BrowserWindow, { maximize = false } = {}) {
     // Briefly promote the window, then immediately restore normal z-order behavior.
     window.setAlwaysOnTop(true);
   }
-  if (maximize) window.maximize();
   window.show();
   app.focus();
   window.focus();

@@ -36,6 +36,13 @@ export const uiTranslations: UiTranslationMap = {
       statusConnecting: 'Connecting',
       statusDisconnected: 'Disconnected',
       statusIdle: 'Not connected',
+      emptyTitle: 'No servers yet',
+      copyAddress: 'Copy address',
+      copied: 'Copied',
+    },
+    boot: {
+      tagline: 'A lightweight SSH workspace — terminal, files, Docker and system monitoring.',
+      loading: 'Starting Reflex',
     },
     form: {
       draft: 'Save draft',
@@ -99,6 +106,13 @@ export const uiTranslations: UiTranslationMap = {
       statusConnecting: '连接中',
       statusDisconnected: '已断开',
       statusIdle: '未连接',
+      emptyTitle: '还没有服务器',
+      copyAddress: '复制地址',
+      copied: '已复制',
+    },
+    boot: {
+      tagline: '轻量的 SSH 工作台 —— 终端、文件、Docker 与系统监控。',
+      loading: '正在启动 Reflex',
     },
     form: {
       draft: '暂存',
@@ -162,6 +176,13 @@ export const uiTranslations: UiTranslationMap = {
       statusConnecting: '接続中',
       statusDisconnected: '切断済み',
       statusIdle: '未接続',
+      emptyTitle: 'サーバーがありません',
+      copyAddress: 'アドレスをコピー',
+      copied: 'コピーしました',
+    },
+    boot: {
+      tagline: '軽量な SSH ワークスペース — ターミナル、ファイル、Docker、システム監視。',
+      loading: 'Reflex を起動しています',
     },
     form: {
       draft: '一時保存',
@@ -225,6 +246,13 @@ export const uiTranslations: UiTranslationMap = {
       statusConnecting: '연결 중',
       statusDisconnected: '연결 끊김',
       statusIdle: '연결 안 됨',
+      emptyTitle: '서버가 없습니다',
+      copyAddress: '주소 복사',
+      copied: '복사됨',
+    },
+    boot: {
+      tagline: '가벼운 SSH 작업 공간 — 터미널, 파일, Docker, 시스템 모니터링.',
+      loading: 'Reflex 시작 중',
     },
     form: {
       draft: '임시 저장',
@@ -288,6 +316,13 @@ export const uiTranslations: UiTranslationMap = {
       statusConnecting: 'Connessione',
       statusDisconnected: 'Disconnesso',
       statusIdle: 'Non connesso',
+      emptyTitle: 'Nessun server',
+      copyAddress: 'Copia indirizzo',
+      copied: 'Copiato',
+    },
+    boot: {
+      tagline: 'Un workspace SSH leggero — terminale, file, Docker e monitoraggio di sistema.',
+      loading: 'Avvio di Reflex',
     },
     form: {
       draft: 'Salva bozza',

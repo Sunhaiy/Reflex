@@ -10,6 +10,13 @@ interface TerminalViewProps {
   connectionId: string;
 }
 
+// xterm parses theme colours itself and only understands hex and rgb()/rgba() forms —
+// the keyword 'transparent' throws inside its parser and silently falls back to opaque
+// black. The DOM renderer hid that because CSS overrides its background layer, but the
+// WebGL renderer paints its own and turned every terminal black. Alpha-zero hex works
+// in both, and `allowTransparency` keeps the alpha channel intact.
+const TRANSPARENT_BACKGROUND = '#00000000';
+
 export function TerminalView({ connectionId }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -39,7 +46,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         allowTransparency: true,
         theme: {
           ...(currentTerminalTheme || {}),
-          background: 'transparent',
+          background: TRANSPARENT_BACKGROUND,
         }
       });
 
@@ -47,6 +54,22 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
 
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
+
+      // A hidden session, or one measured before layout, reports 0x0. Fitting to that
+      // yields a one-column terminal and — worse — sends that width to the shell as a
+      // window-change, which reflows the prompt into wrapped fragments that stay in the
+      // scrollback for good. Every fit goes through here.
+      const safeFit = () => {
+        const element = containerRef.current;
+        if (!element || element.clientWidth < 40 || element.clientHeight < 20) return false;
+        try {
+          fitAddon.fit();
+          return true;
+        } catch (error) {
+          console.warn('Fit failed:', error);
+          return false;
+        }
+      };
 
       // Open terminal
       term.open(containerRef.current!);
@@ -66,18 +89,14 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         }
       }
 
-      try {
-        fitAddon.fit();
-      } catch (e) {
-        console.warn('Initial fit failed:', e);
-      }
+      safeFit();
       term.focus();
 
       // --- Live theme/settings subscription (registered HERE because initTerminal
       // is async, so term doesn't exist yet when useEffect callbacks run) ---
       const applySettings = () => {
         const t = useThemeStore.getState().terminalTheme;
-        if (t) term.options.theme = { ...t, background: 'transparent' };
+        if (t) term.options.theme = { ...t, background: TRANSPARENT_BACKGROUND };
         const s = useSettingsStore.getState();
         term.options.fontFamily = s.terminalFontFamily;
         term.options.fontSize = s.fontSize;
@@ -88,7 +107,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         term.options.scrollback = s.scrollback;
         term.options.drawBoldTextInBrightColors = s.brightBold;
         try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
-        try { fitAddon.fit(); } catch (_) { }
+        safeFit();
       };
       const unsubTheme = useThemeStore.subscribe(applySettings);
       const unsubSettings = useSettingsStore.subscribe(applySettings);
@@ -114,7 +133,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         const detail = (e as CustomEvent).detail;
         if (detail?.connectionId === connectionId) {
           requestAnimationFrame(() => {
-            try { fitAddon.fit(); } catch (_) { }
+            safeFit();
             try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
             term.focus();
           });
@@ -133,16 +152,13 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         if (resizeFrame) return;
         resizeFrame = window.requestAnimationFrame(() => {
           resizeFrame = 0;
-          if (!containerRef.current) return;
-          try {
-            fitAddon.fit();
-            if (term.cols > 0 && term.rows > 0 && (term.cols !== lastCols || term.rows !== lastRows)) {
-              lastCols = term.cols;
-              lastRows = term.rows;
-              window.electron.resizeTerminal(connectionId, term.cols, term.rows);
-            }
-          } catch (e) {
-            console.warn('Resize fit failed:', e);
+          if (!safeFit()) return;
+          // A plausible terminal is at least a couple of columns wide; anything smaller
+          // means the measurement was taken mid-layout and must not reach the shell.
+          if (term.cols > 2 && term.rows > 1 && (term.cols !== lastCols || term.rows !== lastRows)) {
+            lastCols = term.cols;
+            lastRows = term.rows;
+            window.electron.resizeTerminal(connectionId, term.cols, term.rows);
           }
         });
       };

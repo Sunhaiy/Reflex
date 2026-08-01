@@ -34,7 +34,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md animate-in fade-in duration-200">
             <div
                 className={cn(
-                    'glass-panel flex max-h-[92vh] w-full flex-col rounded-[calc(28px*var(--radius-scale))] animate-in zoom-in-95 duration-200',
+                    'glass-panel flex max-h-[94vh] w-full flex-col rounded-[calc(28px*var(--radius-scale))] animate-in zoom-in-95 duration-200',
                     size === 'sm' && 'max-w-sm',
                     size === 'md' && 'max-w-lg',
                     size === 'lg' && 'max-w-2xl',
@@ -42,13 +42,13 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
                 role="dialog"
                 aria-modal="true"
             >
-                <div className="flex items-center justify-between px-6 pb-2 pt-6">
+                <div className="flex items-center justify-between px-6 pb-1.5 pt-5">
                     <h2 className="text-base font-semibold tracking-[-0.02em]">{title}</h2>
                     <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-xl">
                         <HugeiconsIcon icon={Cancel01Icon} className="w-4 h-4" />
                     </Button>
                 </div>
-                <div className="overflow-y-auto px-6 pb-6 pt-2">
+                <div className="overflow-y-auto px-6 pb-5 pt-2">
                     {children}
                 </div>
             </div>

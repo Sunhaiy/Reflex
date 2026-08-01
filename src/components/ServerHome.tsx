@@ -3,11 +3,14 @@ import {
   Add01Icon,
   ArrowRight01Icon,
   ArrowUpRight01Icon,
+  Copy01Icon,
   Delete02Icon,
+  FlashIcon,
   Globe02Icon,
   Key02Icon,
   PencilIcon,
   ServerStack01Icon,
+  Tick02Icon,
 } from '@hugeicons/core-free-icons';
 import { useState } from 'react';
 import { cn } from '../lib/utils';
@@ -46,133 +49,262 @@ function statusMeta(status: HomeSession['status'] | undefined, t: (key: string) 
 
 export function ServerHome({ connections, sessions, onConnect, onNew, onEdit, onDelete }: ServerHomeProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const { t } = useTranslation();
 
-  return (
-    <main className="relative z-10 h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-[1440px] p-5 lg:p-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <button
-            type="button"
-            onClick={onNew}
-            className="glass-panel surface-hover flex min-h-[220px] flex-col items-center justify-center rounded-[calc(26px*var(--radius-scale))] border-dashed p-5 text-center"
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-background">
-              <HugeiconsIcon icon={Add01Icon} className="h-5 w-5" />
-            </span>
-            <span className="mt-4 text-sm font-semibold">{t('home.newConnection')}</span>
-            <span className="mt-1.5 text-xs text-muted-foreground">{t('home.newConnectionHint')}</span>
-          </button>
+  const copyAddress = async (connection: SSHConnection) => {
+    try {
+      await navigator.clipboard.writeText(`${connection.username || 'root'}@${connection.host}`);
+      setCopiedId(connection.id);
+      setTimeout(() => setCopiedId((current) => (current === connection.id ? null : current)), 1500);
+    } catch {
+      // Clipboard access can be refused; the address stays visible on the card either way.
+    }
+  };
 
+  return (
+    <main className="relative z-10 h-full overflow-hidden">
+      {/* Padded past the floating button so the last row never hides underneath it. */}
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1440px] px-5 pb-24 pt-12 lg:px-6">
+          {connections.length === 0 && (
+            <div className="flex min-h-[62vh] flex-col items-center justify-center text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-[calc(20px*var(--radius-scale))] border border-dashed border-border/70 bg-background/50">
+                <HugeiconsIcon icon={ServerStack01Icon} className="h-6 w-6 text-muted-foreground" />
+              </span>
+              <h2 className="mt-5 text-[15px] font-semibold tracking-tight">{t('home.emptyTitle')}</h2>
+              <p className="mt-1.5 text-xs text-muted-foreground">{t('home.newConnectionHint')}</p>
+            </div>
+          )}
+
+          <div className="grid gap-x-4 gap-y-14 sm:grid-cols-2 xl:grid-cols-3">
           {connections.map((connection) => {
             const session = sessions.find((item) => item.connection.id === connection.id);
             const status = statusMeta(session?.status, t);
             const deleting = pendingDeleteId === connection.id;
+            const connected = session?.status === 'connected';
             const providerLink = providerLinkOf(connection.providerUrl);
 
             return (
-              <article key={connection.id} className="glass-panel surface-hover group min-h-[220px] overflow-hidden rounded-[calc(26px*var(--radius-scale))] p-5">
-                <div className="flex h-full flex-col">
-                  <div className="flex items-start gap-3.5">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background">
-                      <HugeiconsIcon icon={ServerStack01Icon} className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate text-[15px] font-semibold tracking-tight">{connection.name}</h3>
-                        <span className={cn('h-2 w-2 shrink-0 rounded-full', status.dot)} />
-                      </div>
-                      <div className={cn('mt-1 text-[11px] font-medium', status.text)}>{status.label}</div>
-                    </div>
-                  </div>
+              // Adapted from the 21st.dev profile card: a coloured slab sits behind the
+              // card and peeks out above it, carrying the address. The card itself is a
+              // frosted radial gradient rather than a flat fill. Both are driven by theme
+              // variables instead of the original's hardcoded #1a1a1a and lime, so the
+              // light appearance and the user's accent colour both work.
+              //
+              // No entrance animation on this wrapper on purpose: an animating opacity or
+              // transform on an ancestor makes the card its own backdrop root, so the
+              // frosted backdrop-filter below has nothing to sample until the animation
+              // finishes and the blur always arrives a beat late.
+              <div key={connection.id} className="relative">
+                {/* The accent slab is the reward for being connected. Idle servers get a
+                    plain recessed one, so a screen of them reads as monochrome and the
+                    live server is the only thing glowing. */}
+                <div
+                  className={cn(
+                    'pointer-events-none absolute inset-x-3 -top-8 bottom-[72%] rounded-[calc(26px*var(--radius-scale))]',
+                    'transition-colors duration-300',
+                    connected ? 'bg-primary' : 'bg-background/85',
+                  )}
+                  style={{
+                    // Idle keeps its inset top edge only — a 1px highlight, not a drop
+                    // shadow. Without it the strip and the card sat at the same value
+                    // and the whole thing read as one flat plane.
+                    boxShadow: connected
+                      ? '0 -26px 56px -20px hsl(var(--primary) / 0.7)'
+                      : 'inset 0 1px 0 hsl(var(--foreground) / 0.07)',
+                  }}
+                />
 
-                  <div className="mt-5 rounded-2xl border border-border/50 bg-background px-3.5 py-3">
-                    <div className="truncate font-mono text-xs text-foreground/85">
-                      {connection.username || 'root'}@{connection.host}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>{t('home.port')} {connection.port || 22}</span>
-                      <span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
-                      <HugeiconsIcon icon={Key02Icon} className="h-3 w-3" />
-                      <span>{connection.authType === 'privateKey' ? t('home.authKey') : t('home.authPassword')}</span>
-                    </div>
-                  </div>
+                <div
+                  className={cn(
+                    'pointer-events-none absolute inset-x-0 -top-8 flex h-8 items-center justify-center gap-1.5 px-7',
+                    'text-[11px] font-medium transition-colors duration-300',
+                    connected ? 'text-primary-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  <HugeiconsIcon icon={FlashIcon} className="h-3 w-3 shrink-0" />
+                  <span className="truncate font-mono">
+                    {connection.username || 'root'}@{connection.host}
+                  </span>
+                </div>
 
-                  <div className="mt-3 flex min-h-7 flex-wrap items-center gap-1.5">
-                    {providerLink && (
+                <article
+                  role="button"
+                  tabIndex={0}
+                  aria-label={session ? t('home.openSession') : t('home.connect')}
+                  onClick={() => {
+                    if (!deleting) onConnect(connection);
+                  }}
+                  onKeyDown={(event) => {
+                    if (deleting || (event.key !== 'Enter' && event.key !== ' ')) return;
+                    event.preventDefault();
+                    onConnect(connection);
+                  }}
+                  className={cn(
+                    'group relative z-10 overflow-hidden rounded-[calc(26px*var(--radius-scale))] border p-4',
+                    'border-border/55 transition-colors duration-200',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                    !deleting && 'cursor-pointer hover:border-foreground/20',
+                  )}
+                  style={{
+                    // Frosted rather than plain translucent. Without the blur the slab
+                    // behind showed through as a hard green tint; blurring the backdrop
+                    // turns that same light into a soft bloom instead.
+                    background:
+                      'radial-gradient(135% 115% at 28% -10%, hsl(var(--card) / 0.97) 0%,'
+                      + ' hsl(var(--card) / 0.8) 45%, hsl(var(--background) / 0.68) 100%)',
+                    backdropFilter: 'blur(22px) saturate(140%)',
+                    WebkitBackdropFilter: 'blur(22px) saturate(140%)',
+                    // The lit top edge is what makes a dark glass panel read as raised.
+                    boxShadow: 'inset 0 1px 0 hsl(var(--foreground) / 0.09)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', status.dot)} />
+                      <span className={cn('truncate font-medium', status.text)}>{status.label}</span>
+                    </div>
+
+                    {/* Secondary actions stay out of the way until the card is under the
+                        cursor or holds focus, so a screen of cards is just names. Each
+                        stops propagation, otherwise it would also open the session. */}
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                       <button
                         type="button"
-                        onClick={() => void window.electron.openExternal(providerLink.url)}
-                        className="flex max-w-full items-center gap-1.5 rounded-full border border-border/55 bg-background px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
-                        title={providerLink.url}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void copyAddress(connection);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground"
+                        title={copiedId === connection.id ? t('home.copied') : t('home.copyAddress')}
                       >
-                        <HugeiconsIcon icon={Globe02Icon} className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{providerLink.label}</span>
-                        <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-2.5 w-2.5 shrink-0" />
+                        <HugeiconsIcon
+                          icon={copiedId === connection.id ? Tick02Icon : Copy01Icon}
+                          className="h-3.5 w-3.5"
+                        />
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onEdit(connection);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground"
+                        title={t('home.edit')}
+                      >
+                        <HugeiconsIcon icon={PencilIcon} className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPendingDeleteId(connection.id);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500"
+                        title={t('home.delete')}
+                      >
+                        <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between border-t border-border/45 pt-4">
-                    {deleting ? (
-                      <div className="flex w-full items-center justify-between gap-2">
-                        <span className="text-xs text-muted-foreground">{t('home.confirmDelete')}</span>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteId(null)}
-                            className="h-8 rounded-xl px-3 text-xs text-muted-foreground hover:bg-foreground/[0.06]"
-                          >
-                            {t('common.cancel')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPendingDeleteId(null);
-                              onDelete(connection);
-                            }}
-                            className="h-8 rounded-xl bg-rose-500/12 px-3 text-xs font-medium text-rose-500 hover:bg-rose-500/18"
-                          >
-                            {t('home.delete')}
-                          </button>
-                        </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ring-foreground/[0.09]"
+                      style={{
+                        background:
+                          'linear-gradient(hsl(var(--foreground) / 0.08), hsl(var(--foreground) / 0.03))',
+                        boxShadow: 'inset 0 1px 0 hsl(var(--foreground) / 0.10)',
+                      }}
+                    >
+                      <HugeiconsIcon icon={ServerStack01Icon} className="h-[18px] w-[18px] text-muted-foreground" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-[15px] font-semibold tracking-tight" title={connection.name}>
+                        {connection.name}
+                      </h3>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                        <span>{t('home.port')} {connection.port || 22}</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
+                        <HugeiconsIcon icon={Key02Icon} className="h-3 w-3" />
+                        <span>{connection.authType === 'privateKey' ? t('home.authKey') : t('home.authPassword')}</span>
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => onEdit(connection)}
-                            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-                            title={t('home.edit')}
-                          >
-                            <HugeiconsIcon icon={PencilIcon} className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteId(connection.id)}
-                            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500"
-                            title={t('home.delete')}
-                          >
-                            <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                    </div>
+                    {/* The only hint that the card itself is the action. */}
+                    <HugeiconsIcon
+                      icon={ArrowRight01Icon}
+                      className="h-4 w-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                    />
+                  </div>
+
+                  {providerLink && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void window.electron.openExternal(providerLink.url);
+                      }}
+                      className="mt-2.5 flex w-fit max-w-full items-center gap-1.5 rounded-full border border-border/50 px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                      title={providerLink.url}
+                    >
+                      <HugeiconsIcon icon={Globe02Icon} className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{providerLink.label}</span>
+                      <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-2.5 w-2.5 shrink-0" />
+                    </button>
+                  )}
+
+                  {deleting && (
+                    <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-rose-500/[0.07] px-3 py-2">
+                      <span className="text-xs text-muted-foreground">{t('home.confirmDelete')}</span>
+                      <div className="flex gap-1.5">
                         <button
                           type="button"
-                          onClick={() => onConnect(connection)}
-                          className="flex h-9 items-center gap-2 rounded-xl bg-foreground px-3.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDeleteId(null);
+                          }}
+                          className="h-8 rounded-xl px-3 text-xs text-muted-foreground hover:bg-foreground/[0.06]"
                         >
-                          {session ? t('home.openSession') : t('home.connect')}
-                          <HugeiconsIcon icon={ArrowRight01Icon} className="h-3.5 w-3.5" />
+                          {t('common.cancel')}
                         </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </article>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDeleteId(null);
+                            onDelete(connection);
+                          }}
+                          className="h-8 rounded-xl bg-rose-500/15 px-3 text-xs font-medium text-rose-500 hover:bg-rose-500/25"
+                        >
+                          {t('home.delete')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              </div>
             );
           })}
+          </div>
         </div>
+      </div>
+
+      {/* Floating primary action: it stays reachable while the list scrolls, and keeps
+          the grid made purely of real servers. Its own backdrop blur does the separating,
+          so no scrim or drop shadow is needed behind it. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-6">
+        <button
+          type="button"
+          onClick={onNew}
+          className="beam-line glass-panel group pointer-events-auto flex h-12 items-center gap-2.5 rounded-full pl-3 pr-5 text-[13px] font-medium text-foreground transition-colors duration-200 hover:border-foreground/20 hover:bg-card/85"
+        >
+          {/* The beam renders in ::before/::after, which paint over children by default. */}
+          <span className="relative z-[1] flex h-8 w-8 items-center justify-center rounded-full bg-foreground/[0.07] transition-colors duration-200 group-hover:bg-foreground/[0.11]">
+            <HugeiconsIcon icon={Add01Icon} className="h-4 w-4" />
+          </span>
+          <span className="relative z-[1]">{t('home.newConnection')}</span>
+        </button>
       </div>
     </main>
   );

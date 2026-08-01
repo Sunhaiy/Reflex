@@ -1,14 +1,18 @@
 import { HugeiconsIcon } from '@hugeicons/react';
-import { AiNetworkIcon, CpuIcon, HardDriveIcon, RamMemoryIcon, TerminalIcon } from '@hugeicons/core-free-icons';
+import { AiNetworkIcon, Clock01Icon, CpuIcon, HardDriveIcon, RamMemoryIcon } from '@hugeicons/core-free-icons';
 import { useEffect, useMemo, useState } from 'react';
 import type { SystemStats } from '../shared/types';
 import clsx from 'clsx';
+import { DistroLogo } from './DistroLogo';
 import { ProcessList } from './ProcessList';
+import { ServerLocation } from './ServerLocation';
 import { MonitorSkeleton } from './ui/skeleton';
 import { useTranslation } from '../hooks/useTranslation';
 
 interface SystemMonitorProps {
   connectionId: string;
+  /** False while this session is behind another tab. */
+  active: boolean;
 }
 
 function clampPercent(value: number) {
@@ -76,19 +80,20 @@ function NetworkChart({ data, label }: { data: NetworkPoint[]; label: string }) 
   );
 }
 
-export function SystemMonitor({ connectionId }: SystemMonitorProps) {
+export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
   const { t } = useTranslation();
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [showProcesses, setShowProcesses] = useState(false);
   const [netHistory, setNetHistory] = useState<NetworkPoint[]>([]);
 
+  // Readings are kept for the life of the session. Only a different connection clears
+  // them — switching tabs must not throw away the chart history.
   useEffect(() => {
     setStats(null);
     setNetHistory([]);
     setShowProcesses(false);
-    let monitoring = false;
 
-    const cleanup = window.electron.onStatsUpdate((_, { id, stats: nextStats }) => {
+    return window.electron.onStatsUpdate((_, { id, stats: nextStats }) => {
       if (id === connectionId) {
         setStats(nextStats);
         setNetHistory((previous) => {
@@ -101,9 +106,15 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
         });
       }
     });
+  }, [connectionId]);
+
+  // Polling is the only thing that stops when the session moves behind another tab, so
+  // coming back shows the last readings immediately instead of a skeleton.
+  useEffect(() => {
+    let monitoring = false;
 
     const syncMonitoring = () => {
-      const shouldMonitor = document.visibilityState !== 'hidden';
+      const shouldMonitor = active && document.visibilityState !== 'hidden';
       if (shouldMonitor && !monitoring) {
         monitoring = true;
         window.electron.startMonitoring(connectionId);
@@ -118,10 +129,9 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
 
     return () => {
       document.removeEventListener('visibilitychange', syncMonitoring);
-      cleanup();
       if (monitoring) window.electron.stopMonitoring(connectionId);
     };
-  }, [connectionId]);
+  }, [active, connectionId]);
 
   if (!stats) {
     return (
@@ -135,14 +145,23 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
 
   return (
     <div className="h-full space-y-2 overflow-y-auto border-l border-border/50 bg-transparent p-2 font-sans text-foreground scrollbar-hide">
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/55 bg-card/35 px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <HugeiconsIcon icon={TerminalIcon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-xs font-semibold tracking-tight">{stats.os.distro}</span>
+      {/* Distribution and uptime are separate facts, so they get separate tiles rather
+          than sharing one row. The logo is the distro's own mark, picked from the
+          reported name. */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex min-w-0 items-center gap-2 rounded-xl border border-border/55 bg-card/35 px-3 py-2.5">
+          <DistroLogo distro={stats.os.distro} className="h-4 w-4 shrink-0" />
+          <span className="truncate text-xs font-semibold tracking-tight" title={stats.os.distro}>
+            {stats.os.distro}
+          </span>
         </div>
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground" title={stats.os.uptime}>
-          {compactUptime(stats.os.uptime)}
-        </span>
+
+        <div className="flex min-w-0 items-center gap-2 rounded-xl border border-border/55 bg-card/35 px-3 py-2.5">
+          <HugeiconsIcon icon={Clock01Icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate font-mono text-xs" title={stats.os.uptime}>
+            {compactUptime(stats.os.uptime)}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-2">
@@ -249,6 +268,8 @@ export function SystemMonitor({ connectionId }: SystemMonitorProps) {
           </div>
         </div>
       </div>
+
+      <ServerLocation timezone={stats.os.timezone} />
 
       {showProcesses && (
         <ProcessList connectionId={connectionId} onClose={() => setShowProcesses(false)} />
