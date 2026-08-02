@@ -2,16 +2,22 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Loading02Icon } from "@hugeicons/core-free-icons";
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ConnectionForm } from './components/ConnectionForm';
-import { TerminalConnecting } from './components/ConnectingOverlay';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { ResizableLayout } from './components/ResizableLayout';
 import { ServerHome } from './components/ServerHome';
+import { Workspace } from './components/Workspace';
 import { StartupCover } from './components/StartupCover';
 import { ThemeBackground } from './components/ThemeBackground';
 import { TitleBar } from './components/TitleBar';
 import { Modal } from './components/ui/modal';
 import { appendActivity, clearActivity, startActivityCapture } from './lib/activityStore';
 import { activityLine } from './components/ActivityLog';
+import {
+  CONNECTION_RETRY_ATTEMPTS,
+  connectionTransportChanged,
+  normalizeConnection,
+  refreshTerminal,
+  retryDelay,
+  wait,
+} from './lib/connectionUtils';
 import { bootReady } from './lib/bootProgress';
 import { log } from './lib/logger';
 import { flushUsage, queueUsage, startUsageTracking } from './lib/usageTracker';
@@ -22,9 +28,6 @@ import { useTranslation } from './hooks/useTranslation';
 import { useThemeStore } from './store/themeStore';
 
 const Settings = lazy(() => import('./pages/Settings').then((module) => ({ default: module.Settings })));
-const RightPanel = lazy(() => import('./components/RightPanel').then((module) => ({ default: module.RightPanel })));
-const FileBrowser = lazy(() => import('./components/FileBrowser').then((module) => ({ default: module.FileBrowser })));
-const TerminalView = lazy(() => import('./components/TerminalView').then((module) => ({ default: module.TerminalView })));
 
 interface AppSession {
   uniqueId: string;
@@ -34,52 +37,6 @@ interface AppSession {
 }
 
 type AppPage = 'connections' | 'workspace' | 'settings';
-
-const CONNECTION_RETRY_ATTEMPTS = 3;
-const CONNECTION_RETRY_BASE_MS = 1000;
-
-/**
- * Exponential with jitter rather than a fixed gap. The aborts seen against a throttled
- * host come from arriving too fast, and a constant retry keeps arriving at exactly the
- * same cadence; widening gaps give the server room to accept.
- */
-function retryDelay(attempt: number) {
-  const backoff = CONNECTION_RETRY_BASE_MS * 2 ** (attempt - 1);
-  return Math.round(backoff * (0.75 + Math.random() * 0.5));
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function refreshTerminal(sessionId: string) {
-  window.requestAnimationFrame(() => {
-    window.dispatchEvent(new CustomEvent('terminal-refresh', { detail: { connectionId: sessionId } }));
-  });
-}
-
-function normalizeConnection(data: SSHConnection): SSHConnection {
-  const username = data.username || 'root';
-  return {
-    ...data,
-    id: data.id || crypto.randomUUID(),
-    name: data.name || (data.host ? `${username}@${data.host}` : 'New Server'),
-    username,
-  };
-}
-
-function connectionTransportChanged(previous: SSHConnection, next: SSHConnection) {
-  const transportFields: Array<keyof SSHConnection> = [
-    'host',
-    'port',
-    'username',
-    'authType',
-    'password',
-    'privateKeyPath',
-    'passphrase',
-  ];
-  return transportFields.some((field) => previous[field] !== next[field]);
-}
 
 function App() {
   const [page, setPage] = useState<AppPage>('connections');
@@ -466,57 +423,12 @@ function App() {
               style={{ display: page === 'workspace' && sessions.length > 0 ? 'flex' : 'none' }}
             >
               {sessions.map((session) => (
-                <div
+                <Workspace
                   key={session.uniqueId}
-                  className="absolute inset-0 flex flex-col"
-                  style={{ display: session.uniqueId === activeSessionId ? 'flex' : 'none' }}
-                >
-                  <div className="min-h-0 flex-1">
-                    <ResizableLayout
-                      leftContent={
-                        <ErrorBoundary name="FileBrowser">
-                          <Suspense fallback={null}>
-                            <FileBrowser connectionId={session.uniqueId} isConnected={session.status === 'connected'} />
-                          </Suspense>
-                        </ErrorBoundary>
-                      }
-                      middleContent={
-                        <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background/28">
-                          <div className="relative min-h-0 flex-1 overflow-hidden">
-                            <ErrorBoundary name="Terminal">
-                              <Suspense fallback={null}>
-                                <TerminalView connectionId={session.uniqueId} />
-                              </Suspense>
-                            </ErrorBoundary>
-                          </div>
-                          {session.status === 'connecting' && (
-                            <TerminalConnecting connectionId={session.uniqueId} />
-                          )}
-                        </div>
-                      }
-                      rightContent={
-                        // Kept mounted for every session, like the terminals above.
-                        // Unmounting it on a tab switch tore down monitoring and threw
-                        // away the collected chart history, so returning to a session
-                        // meant a skeleton and a full reload. `active` pauses the polling
-                        // instead, leaving the last readings on screen.
-                        <ErrorBoundary name="RightPanel">
-                          <Suspense fallback={null}>
-                            <RightPanel
-                              connectionId={session.uniqueId}
-                              // Gated on 'connected', not just visible: starting a cycle
-                              // against a session still handshaking fails outright and then
-                              // sits out the whole 3s interval before trying again.
-                              active={page === 'workspace'
-                                && session.uniqueId === activeSessionId
-                                && session.status === 'connected'}
-                            />
-                          </Suspense>
-                        </ErrorBoundary>
-                      }
-                    />
-                  </div>
-                </div>
+                  sessionId={session.uniqueId}
+                  status={session.status}
+                  active={page === 'workspace' && session.uniqueId === activeSessionId}
+                />
               ))}
             </div>
         </div>
