@@ -2,6 +2,7 @@ import { Client, type ClientChannel } from 'ssh2';
 import { logger } from '../logger';
 
 import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection, FileEntry } from '../../src/shared/types';
+import { CommandService } from './commandService';
 import { MonitorService } from './monitorService';
 import { SftpService, type TransferProgressCallback } from './sftpService';
 import type { WebContents } from 'electron';
@@ -11,6 +12,11 @@ import * as iconv from 'iconv-lite';
 export class SSHManager {
     private connections: Map<string, Client> = new Map();
     private streams: Map<string, ClientChannel> = new Map();
+    private readonly commands = new CommandService({
+        execCommand: (id, command, maxOutputBytes) => this.execCommand(id, command, maxOutputBytes),
+        getConnection: (id) => this.connections.get(id),
+    });
+
     private readonly monitor = new MonitorService({
         getConnection: (id) => this.connections.get(id),
         emitActivity: (id, text, level, webContents, scope) =>
@@ -353,118 +359,18 @@ export class SSHManager {
     startMonitoring(id: string, webContents: WebContents) { this.monitor.startMonitoring(id, webContents); }
     stopMonitoring(id: string) { this.monitor.stopMonitoring(id); }
 
-    async getProcesses(id: string): Promise<any[]> {
-        const { stdout } = await this.execCommand(
-            id,
-            'ps -ax -o pid,user,%cpu,%mem,comm,args',
-            2 * 1024 * 1024,
-        );
-        const lines = stdout.trim().split('\n');
-        return lines.slice(1).map((line) => {
-            const parts = line.trim().split(/\s+/);
-            if (parts.length < 6) return null;
-            const pid = Number.parseInt(parts[0], 10);
-            const cpu = Number.parseFloat(parts[2]);
-            const mem = Number.parseFloat(parts[3]);
-            if (!Number.isSafeInteger(pid) || !Number.isFinite(cpu) || !Number.isFinite(mem)) return null;
-            return {
-                pid,
-                user: parts[1],
-                cpu,
-                mem,
-                command: parts[4],
-                args: parts.slice(5).join(' '),
-            };
-        }).filter((process) => process !== null);
+    // --- Processes and Docker -----------------------------------------------
+    getProcesses(id: string) { return this.commands.getProcesses(id); }
+    killProcess(id: string, pid: number) { return this.commands.killProcess(id, pid); }
+    getDockerContainers(id: string) { return this.commands.getDockerContainers(id); }
+    dockerAction(id: string, containerId: string, action: Parameters<CommandService['dockerAction']>[2]) {
+        return this.commands.dockerAction(id, containerId, action);
     }
-
-    async killProcess(id: string, pid: number): Promise<void> {
-        const conn = this.connections.get(id);
-        if (!conn) throw new Error('Not connected');
-        if (!Number.isSafeInteger(pid) || pid <= 0) throw new Error('Invalid process ID');
-
-        return new Promise((resolve, reject) => {
-            conn.exec(`kill -9 ${pid}`, (err, stream) => {
-                if (err) return reject(err);
-                stream.on('close', (code: any) => {
-                    if (code === 0) resolve();
-                    else reject(new Error(`Process exited with code ${code}`));
-                });
-            });
-        });
+    dockerLogs(id: string, containerId: string, tail?: number) { return this.commands.dockerLogs(id, containerId, tail); }
+    dockerImages(id: string) { return this.commands.dockerImages(id); }
+    dockerRemoveImage(id: string, imageId: string) { return this.commands.dockerRemoveImage(id, imageId); }
+    dockerPrune(id: string, target: Parameters<CommandService['dockerPrune']>[1]) {
+        return this.commands.dockerPrune(id, target);
     }
-
-    async getDockerContainers(id: string): Promise<any[]> {
-        const command = 'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.State}}|{{.Ports}}|{{.Label \\"com.docker.compose.project\\"}}"';
-        const { stdout } = await this.execCommand(id, command, 2 * 1024 * 1024);
-        return stdout.trim().split('\n').filter((line) => line.trim()).map((line) => {
-            const parts = line.split('|');
-            return {
-                id: parts[0] || '',
-                name: parts[1] || '',
-                image: parts[2] || '',
-                status: parts[3] || '',
-                state: parts[4] || '',
-                ports: parts[5] || '',
-                composeProject: parts[6] || '',
-            };
-        });
-    }
-
-    async dockerAction(id: string, containerId: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove'): Promise<void> {
-        this.assertSafeIdentifier(containerId, 'container ID');
-        const allowedActions = new Set(['start', 'stop', 'restart', 'pause', 'unpause', 'remove']);
-        if (!allowedActions.has(action)) throw new Error('Invalid Docker action');
-
-        const cmd = action === 'remove' ? `docker rm -f ${containerId}` : `docker ${action} ${containerId}`;
-        await this.execCommand(id, cmd);
-    }
-
-    async dockerLogs(id: string, containerId: string, lines: number = 200): Promise<string> {
-        this.assertSafeIdentifier(containerId, 'container ID');
-        const safeLines = Math.min(10_000, Math.max(1, Math.trunc(lines)));
-        const { stdout, stderr } = await this.execCommand(
-            id,
-            `docker logs --tail ${safeLines} ${containerId}`,
-        );
-        return `${stdout}${stderr}`;
-    }
-
-    async dockerImages(id: string): Promise<any[]> {
-        const { stdout } = await this.execCommand(
-            id,
-            'docker images --format "{{.ID}}|{{.Repository}}|{{.Tag}}|{{.Size}}|{{.CreatedSince}}"',
-            2 * 1024 * 1024,
-        );
-        return stdout.trim().split('\n').filter((line) => line.trim()).map((line) => {
-            const [imageId, repository, tag, size, created] = line.split('|');
-            return { id: imageId, repository, tag, size, created };
-        });
-    }
-
-    async dockerRemoveImage(id: string, imageId: string): Promise<string> {
-        this.assertSafeIdentifier(imageId, 'image ID');
-        const { stdout, stderr } = await this.execCommand(id, `docker rmi ${imageId}`);
-        return `${stdout}${stderr}`;
-    }
-
-    async dockerPrune(id: string, type: 'system' | 'images' | 'volumes' | 'containers'): Promise<string> {
-        const cmds: Record<string, string> = {
-            system: 'docker system prune -af --volumes',
-            images: 'docker image prune -af',
-            volumes: 'docker volume prune -af',
-            containers: 'docker container prune -f',
-        };
-        const command = cmds[type];
-        if (!command) throw new Error('Invalid Docker prune type');
-        const { stdout, stderr } = await this.execCommand(id, command);
-        return `${stdout}${stderr}`;
-    }
-
-    async dockerDiskUsage(id: string): Promise<string> {
-        const { stdout, stderr } = await this.execCommand(id, 'docker system df');
-        return `${stdout}${stderr}`;
-    }
-
-
+    dockerDiskUsage(id: string) { return this.commands.dockerDiskUsage(id); }
 }
