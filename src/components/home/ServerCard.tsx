@@ -15,9 +15,7 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../hooks/useTranslation';
 import { latencyClass, type Probe } from '../../hooks/useHostProbes';
 import { normalizeProviderUrl, providerUrlLabel } from '../../shared/providerUrl';
-import type { SSHConnection } from '../../shared/types';
-
-type SessionStatus = 'connecting' | 'connected' | 'disconnected';
+import type { SessionStatus, SSHConnection } from '../../shared/types';
 
 interface ServerCardProps {
   connection: SSHConnection;

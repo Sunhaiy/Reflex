@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { TerminalConnecting } from './ConnectingOverlay';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ResizableLayout } from './ResizableLayout';
+import type { SessionStatus } from '../shared/types';
 
 const RightPanel = lazy(() => import('./RightPanel').then((module) => ({ default: module.RightPanel })));
 const FileBrowser = lazy(() => import('./FileBrowser').then((module) => ({ default: module.FileBrowser })));
@@ -9,7 +10,7 @@ const TerminalView = lazy(() => import('./TerminalView').then((module) => ({ def
 
 interface WorkspaceProps {
   sessionId: string;
-  status: 'connecting' | 'connected' | 'disconnected';
+  status: SessionStatus;
   /** False while another tab is in front; the panes stay mounted regardless. */
   active: boolean;
 }

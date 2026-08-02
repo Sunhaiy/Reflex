@@ -2,19 +2,13 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { Add01Icon, Cancel01Icon, Home01Icon, MinusSignIcon, Settings01Icon, SquareIcon } from '@hugeicons/core-free-icons';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
-import type { SSHConnection } from '../shared/types';
+import type { Session, SessionStatus } from '../shared/types';
 
 const logoUrl = `${import.meta.env.BASE_URL}tray-icon.png`;
 
-interface SessionTab {
-  uniqueId: string;
-  connection: SSHConnection;
-  status: 'connecting' | 'connected' | 'disconnected';
-}
-
 interface TitleBarProps {
   page: 'connections' | 'workspace' | 'settings';
-  sessions: SessionTab[];
+  sessions: Session[];
   activeSessionId: string | null;
   onHome: () => void;
   onSwitchSession: (id: string) => void;
@@ -23,7 +17,7 @@ interface TitleBarProps {
   onSettings: () => void;
 }
 
-function statusClass(status: SessionTab['status']) {
+function statusClass(status: SessionStatus) {
   if (status === 'connected') return 'bg-primary';
   if (status === 'connecting') return 'animate-pulse bg-amber-400';
   return 'bg-rose-400';

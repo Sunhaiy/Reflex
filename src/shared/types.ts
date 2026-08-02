@@ -13,6 +13,17 @@ export interface SSHConnection {
   os?: string;
 }
 
+export type SessionStatus = 'connecting' | 'connected' | 'disconnected';
+
+/** One open SSH session. A connection can legitimately be open more than once. */
+export interface Session {
+  /** Identifies the SSH channel, not the saved server. */
+  uniqueId: string;
+  connection: SSHConnection;
+  status: SessionStatus;
+  connectedAt?: number;
+}
+
 export type ActivityLevel = 'cmd' | 'info' | 'ok' | 'dim' | 'error';
 
 /** Which loading surface a progress line belongs to. */

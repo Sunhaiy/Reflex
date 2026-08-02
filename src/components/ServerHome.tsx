@@ -7,18 +7,11 @@ import { ServerCard } from './home/ServerCard';
 import { useHostProbes } from '../hooks/useHostProbes';
 import { Input } from './ui/input';
 import { useTranslation } from '../hooks/useTranslation';
-import type { SSHConnection } from '../shared/types';
-
-interface HomeSession {
-  uniqueId: string;
-  connection: SSHConnection;
-  status: 'connecting' | 'connected' | 'disconnected';
-  connectedAt?: number;
-}
+import type { Session, SSHConnection } from '../shared/types';
 
 interface ServerHomeProps {
   connections: SSHConnection[];
-  sessions: HomeSession[];
+  sessions: Session[];
   onConnect: (connection: SSHConnection) => void;
   /** Epoch ms of the last successful connect, keyed by connection id. */
   lastConnectedAt: Record<string, number>;
