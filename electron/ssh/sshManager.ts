@@ -1,21 +1,11 @@
 import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
 import { logger } from '../logger';
 
-import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection, SystemStats, FileEntry, CpuCore } from '../../src/shared/types';
-import { normalizeTimezone } from '../../src/shared/timezone';
+import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection, FileEntry } from '../../src/shared/types';
+import { emptySampleState, parseSample, type SampleState } from './statsParser';
 import type { WebContents } from 'electron';
 import { createReadStream, createWriteStream, existsSync, readFileSync, statSync } from 'fs';
 import * as iconv from 'iconv-lite';
-
-interface CpuTimes {
-    total: number;
-    idle: number;
-}
-
-interface CpuSnapshot {
-    total: CpuTimes;
-    cores: Map<number, CpuTimes>;
-}
 
 type TransferProgressCallback = (transferred: number, total: number) => void;
 
@@ -24,9 +14,8 @@ export class SSHManager {
     private streams: Map<string, ClientChannel> = new Map();
     private sftpSessions: Map<string, Promise<SFTPWrapper>> = new Map();
     private intervals: Map<string, NodeJS.Timeout> = new Map();
-    private prevCpuBySession: Map<string, CpuSnapshot> = new Map();
-    private prevNetBySession: Map<string, { time: number; rx: number; tx: number }> = new Map();
-    private monitorSectionsBySession: Map<string, Record<string, string>> = new Map();
+    /** Merged sections plus the previous CPU/network readings, per session. */
+    private sampleStates: Map<string, SampleState> = new Map();
     private monitorTokens: Map<string, number> = new Map();
     private monitorChannels: Map<string, ClientChannel> = new Map();
     private monitorBuffers: Map<string, string> = new Map();
@@ -292,8 +281,7 @@ export class SSHManager {
         const hasResources = this.connections.has(id) || this.streams.has(id) || this.intervals.has(id);
         if (hasResources) console.log(`[SSH] Cleaning up resources for session: ${id}`);
         this.stopMonitoring(id);
-        this.prevCpuBySession.delete(id);
-        this.prevNetBySession.delete(id);
+        this.sampleStates.delete(id);
         this.closeSftpSession(id);
 
         const stream = this.streams.get(id);
@@ -725,9 +713,7 @@ export class SSHManager {
     startMonitoring(id: string, webContents: WebContents) {
         if (this.intervals.has(id)) return;
 
-        this.prevCpuBySession.delete(id);
-        this.prevNetBySession.delete(id);
-        this.monitorSectionsBySession.delete(id);
+        this.sampleStates.delete(id);
 
         const monitorToken = ++this.nextMonitorToken;
         this.monitorTokens.set(id, monitorToken);
@@ -735,6 +721,8 @@ export class SSHManager {
         const staticCommand = `
     echo ">>>OS"; cat /etc/os-release;
     echo ">>>TZ"; (cat /etc/timezone 2>/dev/null || readlink -f /etc/localtime 2>/dev/null | sed 's#.*/zoneinfo/##' || timedatectl show -p Timezone --value 2>/dev/null) | head -1;
+    echo ">>>KERNEL"; uname -r;
+    echo ">>>HOSTNAME"; hostname;
     echo ">>>CPU_INFO"; grep -m 1 "model name" /proc/cpuinfo; grep -m 1 "cpu MHz" /proc/cpuinfo;
     `;
         const dynamicCommand = `
@@ -769,7 +757,7 @@ export class SSHManager {
             const cmd = `${includeStatic ? staticCommand : ''}${dynamicCommand}${includeSlow ? slowCommand : ''}`;
 
             if (firstCycle) {
-                this.emitActivity(id, 'Reading /etc/os-release, /proc/cpuinfo...', 'info', webContents, 'monitor');
+                this.emitActivity(id, 'Reading /etc/os-release, /proc/cpuinfo, uname, hostname...', 'info', webContents, 'monitor');
                 this.emitActivity(id, 'Reading /proc/stat, /proc/meminfo, /proc/net/dev, uptime...', 'info', webContents, 'monitor');
             }
 
@@ -781,7 +769,9 @@ export class SSHManager {
                     return;
                 }
 
-                const stats = this.parseStats(id, output);
+                const parsed = parseSample(output, this.sampleStates.get(id) ?? emptySampleState());
+                if (parsed) this.sampleStates.set(id, parsed.state);
+                const stats = parsed?.stats;
                 if (!stats) {
                     if (firstCycle) {
                         this.emitActivity(id, 'Sample received but could not be parsed.', 'error', webContents, 'monitor');
@@ -819,9 +809,7 @@ export class SSHManager {
             clearInterval(interval);
             this.intervals.delete(id);
         }
-        this.prevCpuBySession.delete(id);
-        this.prevNetBySession.delete(id);
-        this.monitorSectionsBySession.delete(id);
+        this.sampleStates.delete(id);
     }
 
     async getProcesses(id: string): Promise<any[]> {
@@ -938,170 +926,4 @@ export class SSHManager {
     }
 
 
-    private parseStats(sessionId: string, output: string): SystemStats | null {
-        try {
-            const parts = output.split('>>>');
-            const data: Record<string, string> = {
-                ...(this.monitorSectionsBySession.get(sessionId) || {}),
-            };
-            parts.forEach(p => {
-                const lines = p.trim().split('\n');
-                const key = lines[0];
-                if (!key) return;
-                data[key] = lines.slice(1).join('\n');
-            });
-            this.monitorSectionsBySession.set(sessionId, data);
-
-            // OS
-            const osInfo = data['OS'] || '';
-            const prettyName = osInfo.match(/PRETTY_NAME="([^"]+)"/)?.[1] || 'Linux';
-            const uptime = data['UPTIME'] || '';
-            const timezone = normalizeTimezone(data['TZ']);
-
-            // CPU Info
-            const cpuInfo = (data['CPU_INFO'] || '').split('\n');
-            const cpuModel = cpuInfo.find((l: string) => l.includes('model name'))?.split(':')[1]?.trim() || 'Unknown CPU';
-            const cpuSpeed = cpuInfo.find((l: string) => l.includes('cpu MHz'))?.split(':')[1]?.trim() || '';
-
-            // Memory (KB -> GB)
-            const memInfo = data['MEM'] || '';
-            const memTotal = parseInt(memInfo.match(/MemTotal:\s+(\d+)\s+kB/)?.[1] || '0', 10);
-            const memAvailable = parseInt(memInfo.match(/MemAvailable:\s+(\d+)\s+kB/)?.[1] || '0', 10);
-            const memCached = parseInt(memInfo.match(/Cached:\s+(\d+)\s+kB/)?.[1] || '0', 10);
-            const memBuffers = parseInt(memInfo.match(/Buffers:\s+(\d+)\s+kB/)?.[1] || '0', 10);
-            const memUsed = memTotal - memAvailable;
-
-            const toGB = (kb: number) => parseFloat((kb / 1024 / 1024).toFixed(2));
-
-            // CPU Usage Calculation
-            const cpuLines = (data['CPU'] || '').split('\n');
-            const totalCpuLine = cpuLines[0]; // cpu  ...
-            const coreLines = cpuLines.slice(1);
-
-            const parseCpuLine = (line: string): CpuTimes | null => {
-                const parts = line.split(/\s+/);
-                if (parts.length < 5) return null;
-                const values = parts.slice(1).map((value) => Number.parseInt(value, 10));
-                if (values.some((value) => !Number.isFinite(value))) return null;
-                return {
-                    total: values.reduce((sum, value) => sum + value, 0),
-                    // Linux reports iowait immediately after idle. Treat both as
-                    // idle time so busy I/O does not appear as CPU execution.
-                    idle: values[3] + (values[4] || 0),
-                };
-            };
-
-            const currentTotalCpu = parseCpuLine(totalCpuLine);
-            const previousCpu = this.prevCpuBySession.get(sessionId);
-            let totalUsage = 0;
-
-            const calculateCpuUsage = (curr: CpuTimes, prev?: CpuTimes) => {
-                if (!prev) return 0;
-                const totalDiff = curr.total - prev.total;
-                const idleDiff = curr.idle - prev.idle;
-                return totalDiff > 0
-                    ? Math.min(100, Math.max(0, Math.round(((totalDiff - idleDiff) / totalDiff) * 100)))
-                    : 0;
-            };
-
-            if (currentTotalCpu) {
-                totalUsage = calculateCpuUsage(currentTotalCpu, previousCpu?.total);
-            }
-
-            const currentCoreTimes = new Map<number, CpuTimes>();
-            const cores: CpuCore[] = coreLines.map((line: string, index: number) => {
-                const match = line.match(/^cpu(\d+)\s+/);
-                const id = match ? parseInt(match[1]) : index;
-                const coreStats = parseCpuLine(line);
-                if (coreStats) currentCoreTimes.set(id, coreStats);
-                const usage = coreStats ? calculateCpuUsage(coreStats, previousCpu?.cores.get(id)) : 0;
-                return { id, usage };
-            });
-
-            if (currentTotalCpu) {
-                this.prevCpuBySession.set(sessionId, { total: currentTotalCpu, cores: currentCoreTimes });
-            }
-
-            // Network
-            const netInfo = data['NET'] || '';
-            const netLines = netInfo.split('\n').filter((l: string) => l.includes(':'));
-            let totalRx = 0;
-            let totalTx = 0;
-            netLines.forEach((line: string) => {
-                try {
-                    const parts = line.split(':')[1].trim().split(/\s+/);
-                    if (parts.length > 1) totalRx += parseInt(parts[0]) || 0;
-                    if (parts.length > 8) totalTx += parseInt(parts[8]) || 0;
-                } catch (_) { /* skip malformed line */ }
-            });
-
-            const now = Date.now();
-            let upSpeed = 0;
-            let downSpeed = 0;
-
-            const previousNet = this.prevNetBySession.get(sessionId);
-            if (previousNet) {
-                const timeDiff = (now - previousNet.time) / 1000;
-                if (timeDiff > 0) {
-                    downSpeed = Math.max(0, Math.round((totalRx - previousNet.rx) / timeDiff));
-                    upSpeed = Math.max(0, Math.round((totalTx - previousNet.tx) / timeDiff));
-                }
-            }
-            this.prevNetBySession.set(sessionId, { time: now, rx: totalRx, tx: totalTx });
-
-            // Disk
-            const diskInfo = data['DISK'] || '';
-            const diskLines = diskInfo.trim().split('\n').slice(1); // Skip header
-            const disks = diskLines.map((line: string) => {
-                const parts = line.split(/\s+/);
-                if (parts.length < 6) return null;
-                // df -B1 output: Filesystem 1B-blocks Used Available Use% Mounted on
-                const size = parseInt(parts[1]);
-                const used = parseInt(parts[2]);
-                const available = parseInt(parts[3]);
-
-                return {
-                    filesystem: parts[0],
-                    size: parseFloat((size / 1024 / 1024 / 1024).toFixed(1)), // GB
-                    used: parseFloat((used / 1024 / 1024 / 1024).toFixed(1)), // GB
-                    available: parseFloat((available / 1024 / 1024 / 1024).toFixed(1)), // GB
-                    usePercent: parseInt(parts[4].replace('%', '')),
-                    mount: parts[5]
-                };
-            }).filter((disk): disk is SystemStats['disks'][number] => disk !== null);
-
-            return {
-                os: {
-                    distro: prettyName,
-                    kernel: 'Linux',
-                    uptime: uptime.replace('up ', ''),
-                    hostname: 'Server',
-                    timezone
-                },
-                cpu: {
-                    totalUsage,
-                    cores: cores,
-                    model: cpuModel,
-                    speed: cpuSpeed ? `${parseFloat(cpuSpeed).toFixed(0)} MHz` : ''
-                },
-                memory: {
-                    total: toGB(memTotal),
-                    used: toGB(memUsed),
-                    free: toGB(memAvailable),
-                    cached: toGB(memCached),
-                    buffers: toGB(memBuffers)
-                },
-                network: {
-                    upSpeed,
-                    downSpeed,
-                    totalTx,
-                    totalRx
-                },
-                disks: disks
-            };
-        } catch (e: any) {
-            console.error('[Monitor] parseStats failed:', e?.message, e?.stack?.split('\n')[1]);
-            return null;
-        }
-    }
 }
