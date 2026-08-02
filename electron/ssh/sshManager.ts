@@ -1,13 +1,12 @@
 import { Client, type ClientChannel, type ConnectConfig } from 'ssh2';
 import { logger } from '../logger';
 
-import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection, FileEntry } from '../../src/shared/types';
+import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection } from '../../src/shared/types';
 import { CommandService } from './commandService';
 import { MonitorService } from './monitorService';
 import { SftpService, type TransferProgressCallback } from './sftpService';
 import type { WebContents } from 'electron';
-import { createReadStream, createWriteStream, existsSync, readFileSync, statSync } from 'fs';
-import * as iconv from 'iconv-lite';
+import { readFileSync } from 'fs';
 
 export class SSHManager {
     private connections: Map<string, Client> = new Map();
@@ -25,21 +24,12 @@ export class SSHManager {
 
     private readonly sftp = new SftpService({
         getConnection: (id) => this.connections.get(id),
-        execCommand: (id, command) => this.execCommand(id, command),
-        emitActivity: (id, text, level, webContents, scope) =>
-            this.emitActivity(id, text, level, webContents, scope),
     });
     private nextActivityId = 0;
 
     // Stored so we can reconnect automatically
     private connectionConfigs: Map<string, SSHConnection> = new Map();
     private webContentsBySession: Map<string, WebContents> = new Map();
-
-    private assertSafeIdentifier(value: string, label: string) {
-        if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value)) {
-            throw new Error(`Invalid ${label}`);
-        }
-    }
 
     private async execCommand(
         id: string,
@@ -96,7 +86,7 @@ export class SSHManager {
     }
 
     async connect(connection: SSHConnection, webContents: WebContents, sessionId: string): Promise<void> {
-        console.log(`[SSH] New connection request: session=${sessionId}`);
+        logger.info(`[SSH] New connection request: session=${sessionId}`);
         // A retry arrives on the same sessionId. If the previous attempt's socket is
         // still winding down, two sockets race to the same host — which is exactly what
         // a server enforcing MaxStartups aborts. Tear the old one down first.
@@ -116,7 +106,7 @@ export class SSHManager {
         if (!connection || !webContents) {
             throw new Error(`No stored config for session ${sessionId}`);
         }
-        console.log(`[SSH] Auto-reconnect attempt for session=${sessionId}`);
+        logger.info(`[SSH] Auto-reconnect attempt for session=${sessionId}`);
         this.cleanup(sessionId);
         await this.connect(connection, webContents, sessionId);
     }
@@ -182,6 +172,11 @@ export class SSHManager {
             this.streams.set(sessionId, stream);
             this.emitActivity(sessionId, 'Shell channel open — session ready.', 'ok', webContents);
             this.emitStatus(sessionId, 'connected', webContents);
+
+            // The file browser mounts with the session and lists a directory immediately.
+            // Opening the SFTP subsystem now spends those round trips while the UI is
+            // still settling instead of inside that first listing.
+            this.sftp.prewarm(sessionId);
 
             // 16ms batch buffer (~60 fps) to prevent IPC floods from high-frequency output
             let buf = '';
@@ -285,7 +280,7 @@ export class SSHManager {
 
     cleanup(id: string) {
         const hasResources = this.connections.has(id) || this.streams.has(id);
-        if (hasResources) console.log(`[SSH] Cleaning up resources for session: ${id}`);
+        if (hasResources) logger.info(`[SSH] Cleaning up resources for session: ${id}`);
         this.monitor.dispose(id);
         this.sftp.close(id);
 
@@ -328,11 +323,6 @@ export class SSHManager {
         if (stream) stream.setWindow(rows, cols, 0, 0);
     }
 
-    /**
-     * Opening an SFTP subsystem costs a channel open plus a version handshake — several
-     * round trips. Doing that per operation made every directory listing feel slow on
-     * high-latency links, so the session is opened once and reused until it drops.
-     */
     // --- Remote files -------------------------------------------------------
     // Thin pass-throughs so the IPC surface stays flat while the implementation lives
     // in SftpService.
@@ -356,7 +346,6 @@ export class SSHManager {
     writeFile(id: string, remotePath: string, content: string, encoding?: string) {
         return this.sftp.writeFile(id, remotePath, content, encoding);
     }
-    getPwd(id: string) { return this.sftp.getPwd(id); }
 
     // --- Monitoring ---------------------------------------------------------
     startMonitoring(id: string, webContents: WebContents) { this.monitor.startMonitoring(id, webContents); }

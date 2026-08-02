@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { FileEntry, TextFileEncoding } from '../../../shared/types';
+import { errorMessage } from '../../../lib/errors';
 import { log } from '../../../lib/logger';
 import {
-    base64ToBytes,
     decodeText,
     detectImageMime,
     detectTextEncoding,
@@ -20,8 +20,10 @@ export interface FileOpenResult {
     name: string;
     path: string;
     entry: FileEntry;
-    content: string; // decoded text or a data URL for images
-    rawBase64: string;
+    /** Decoded text, or an object URL for images. */
+    content: string;
+    /** Kept so the text can be re-decoded when the user picks another encoding. */
+    bytes: Uint8Array<ArrayBuffer>;
     encoding?: TextFileEncoding;
 }
 
@@ -33,16 +35,27 @@ export interface Toast {
 
 let _toastId = 0;
 
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : String(error);
-}
-
 function validateEntryName(name: string, invalidMessage: string) {
     const trimmed = name.trim();
     if (!trimmed || trimmed === '.' || trimmed === '..' || /[\\/\0]/.test(trimmed)) {
         throw new Error(invalidMessage);
     }
     return trimmed;
+}
+
+/**
+ * How long a listing may be served from memory. Long enough that stepping into a folder
+ * and back is instant, short enough that a file created in the terminal shows up without
+ * the user reaching for refresh.
+ */
+const LISTING_TTL_MS = 30_000;
+
+/** How many dropped files may be uploading at once. */
+const UPLOAD_CONCURRENCY = 3;
+
+interface CachedListing {
+    entries: FileEntry[];
+    at: number;
 }
 
 export function useFileBrowser(connectionId: string) {
@@ -55,9 +68,10 @@ export function useFileBrowser(connectionId: string) {
     const [openFile, setOpenFile] = useState<FileOpenResult | null>(null);
     const [toasts, setToasts] = useState<Toast[]>([]);
 
-    const pathCacheRef = useRef<Record<string, FileEntry[]>>({});
+    const pathCacheRef = useRef<Map<string, CachedListing>>(new Map());
     const latestRequestRef = useRef(0);
     const toastTimersRef = useRef<Set<number>>(new Set());
+    const objectUrlRef = useRef<string | null>(null);
     const transferQueue = useTransferQueue();
 
     useEffect(() => window.electron.onSftpTransferProgress(({ transferId, progress, transferred, total }) => {
@@ -68,6 +82,15 @@ export function useFileBrowser(connectionId: string) {
         toastTimersRef.current.forEach((timer) => window.clearTimeout(timer));
         toastTimersRef.current.clear();
     }, []);
+
+    /** An object URL pins its blob in memory until it is revoked, so every path revokes. */
+    const releaseObjectUrl = useCallback(() => {
+        if (!objectUrlRef.current) return;
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+    }, []);
+
+    useEffect(() => releaseObjectUrl, [releaseObjectUrl]);
 
     // ── Toast helpers ────────────────────────────────────────────────────────────
     const pushToast = useCallback((message: string, type: Toast['type'] = 'error') => {
@@ -86,11 +109,12 @@ export function useFileBrowser(connectionId: string) {
 
     // ── Directory listing ─────────────────────────────────────────────────────────
     const fetchDirectory = useCallback(async (path: string, force = false): Promise<FileEntry[]> => {
-        if (!force && pathCacheRef.current[path]) return pathCacheRef.current[path];
+        const cached = pathCacheRef.current.get(path);
+        if (!force && cached && Date.now() - cached.at < LISTING_TTL_MS) return cached.entries;
 
         const list = await window.electron.sftpList(connectionId, path);
         const entries: FileEntry[] = Array.isArray(list) ? list : [];
-        pathCacheRef.current[path] = entries;
+        pathCacheRef.current.set(path, { entries, at: Date.now() });
         return entries;
     }, [connectionId]);
 
@@ -99,16 +123,11 @@ export function useFileBrowser(connectionId: string) {
         const startedAt = performance.now();
         setLoading(true);
         try {
-            let resolvedPath = path;
-            if (path === '.') {
-                resolvedPath = await window.electron.getPwd(connectionId);
-            }
-
-            const newFiles = await fetchDirectory(resolvedPath, force);
+            const newFiles = await fetchDirectory(path, force);
             if (requestId !== latestRequestRef.current) return;
-            log.info(`[FileBrowser] Listed ${resolvedPath}: ${newFiles.length} entries in ${Math.round(performance.now() - startedAt)}ms`);
+            log.info(`[FileBrowser] Listed ${path}: ${newFiles.length} entries in ${Math.round(performance.now() - startedAt)}ms`);
             setFiles(newFiles);
-            setCurrentPath(resolvedPath);
+            setCurrentPath(path);
         } catch (error: unknown) {
             if (requestId !== latestRequestRef.current) return;
             log.error(`[FileBrowser] Listing ${path} failed`, error);
@@ -120,10 +139,12 @@ export function useFileBrowser(connectionId: string) {
                 setHasLoaded(true);
             }
         }
-    }, [connectionId, fetchDirectory, pushToast, t]);
+    }, [fetchDirectory, pushToast, t]);
 
+    // Only this directory is stale — wiping the whole cache meant every parent had to be
+    // fetched again on the way back up.
     const refresh = useCallback(() => {
-        pathCacheRef.current = {};
+        pathCacheRef.current.delete(currentPath);
         loadFiles(currentPath, true);
     }, [currentPath, loadFiles]);
 
@@ -157,19 +178,16 @@ export function useFileBrowser(connectionId: string) {
 
         setOpeningFile(true);
         try {
-            const payload = await window.electron.sftpReadFile(connectionId, path);
-            const bytes = base64ToBytes(payload.base64);
+            const { bytes } = await window.electron.sftpReadFile(connectionId, path);
             const imageMime = detectImageMime(entry.name, bytes);
+            releaseObjectUrl();
 
             if (imageMime) {
-                setOpenFile({
-                    kind: 'image',
-                    name: entry.name,
-                    path,
-                    entry,
-                    rawBase64: payload.base64,
-                    content: `data:${imageMime};base64,${payload.base64}`,
-                });
+                // An object URL rather than a data URL: the bytes are handed to the
+                // image decoder as they are, with no base64 string in between.
+                const url = URL.createObjectURL(new Blob([bytes], { type: imageMime }));
+                objectUrlRef.current = url;
+                setOpenFile({ kind: 'image', name: entry.name, path, entry, bytes, content: url });
                 return;
             }
 
@@ -184,7 +202,7 @@ export function useFileBrowser(connectionId: string) {
                 name: entry.name,
                 path,
                 entry,
-                rawBase64: payload.base64,
+                bytes,
                 encoding,
                 content: decodeText(bytes, encoding),
             });
@@ -193,18 +211,17 @@ export function useFileBrowser(connectionId: string) {
         } finally {
             setOpeningFile(false);
         }
-    }, [connectionId, currentPath, loadFiles, pushToast, t]);
+    }, [connectionId, currentPath, loadFiles, pushToast, releaseObjectUrl, t]);
 
-    const closeFile = useCallback(() => setOpenFile(null), []);
+    const closeFile = useCallback(() => {
+        releaseObjectUrl();
+        setOpenFile(null);
+    }, [releaseObjectUrl]);
 
     const setFileEncoding = useCallback((encoding: TextFileEncoding) => {
         setOpenFile((current) => {
             if (!current || current.kind !== 'text') return current;
-            return {
-                ...current,
-                encoding,
-                content: decodeText(base64ToBytes(current.rawBase64), encoding),
-            };
+            return { ...current, encoding, content: decodeText(current.bytes, encoding) };
         });
     }, []);
 
@@ -223,7 +240,7 @@ export function useFileBrowser(connectionId: string) {
         try {
             const newPath = joinPath(currentPath, validateEntryName(name, t('fileBrowser.invalidName')));
             await window.electron.sftpMkdir(connectionId, newPath);
-            delete pathCacheRef.current[currentPath];
+            pathCacheRef.current.delete(currentPath);
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
             pushToast(`${t('common.error')}: ${errorMessage(error)}`);
@@ -234,7 +251,7 @@ export function useFileBrowser(connectionId: string) {
         try {
             const newPath = joinPath(currentPath, validateEntryName(name, t('fileBrowser.invalidName')));
             await window.electron.sftpWriteFile(connectionId, newPath, '');
-            delete pathCacheRef.current[currentPath];
+            pathCacheRef.current.delete(currentPath);
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
             pushToast(`${t('common.error')}: ${errorMessage(error)}`);
@@ -246,7 +263,7 @@ export function useFileBrowser(connectionId: string) {
         const path = joinPath(currentPath, entry.name);
         try {
             await window.electron.sftpDelete(connectionId, path);
-            delete pathCacheRef.current[currentPath];
+            pathCacheRef.current.delete(currentPath);
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
             pushToast(`${t('common.error')}: ${errorMessage(error)}`);
@@ -261,7 +278,7 @@ export function useFileBrowser(connectionId: string) {
             if (safeName === entry.name) return;
             const newPath = joinPath(currentPath, safeName);
             await window.electron.sftpRename(connectionId, oldPath, newPath);
-            delete pathCacheRef.current[currentPath];
+            pathCacheRef.current.delete(currentPath);
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
             pushToast(`${t('common.error')}: ${errorMessage(error)}`);
@@ -310,7 +327,7 @@ export function useFileBrowser(connectionId: string) {
         try {
             await window.electron.sftpUpload(connectionId, filePath, remotePath, tid);
             transferQueue.markDone(tid);
-            delete pathCacheRef.current[currentPath];
+            pathCacheRef.current.delete(currentPath);
             await loadFiles(currentPath, true);
         } catch (error: unknown) {
             transferQueue.markError(tid, errorMessage(error));
@@ -325,7 +342,7 @@ export function useFileBrowser(connectionId: string) {
                 await window.electron.sftpResumeDownload(connectionId, transfer.remotePath, transfer.localPath, transfer.id);
             } else {
                 await window.electron.sftpResumeUpload(connectionId, transfer.localPath, transfer.remotePath, transfer.id);
-                delete pathCacheRef.current[currentPath];
+                pathCacheRef.current.delete(currentPath);
                 await loadFiles(currentPath, true);
             }
             transferQueue.markDone(transfer.id);
@@ -342,10 +359,19 @@ export function useFileBrowser(connectionId: string) {
     }, []);
 
     // ── Drop upload ──────────────────────────────────────────────────────────────
+    /**
+     * Three at a time. Strictly sequential spent most of its time on the per-file round
+     * trip when a folder of small files was dropped, and going fully parallel would open
+     * a channel per file against a server that may cap them.
+     */
     const uploadDroppedFiles = useCallback(async (nativeFiles: File[]) => {
-        for (const file of nativeFiles) {
-            await uploadFile(file);
-        }
+        const queue = [...nativeFiles];
+        const worker = async () => {
+            for (let next = queue.shift(); next; next = queue.shift()) {
+                await uploadFile(next);
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, queue.length) }, worker));
     }, [uploadFile]);
 
     return {

@@ -345,7 +345,6 @@ export function setupIpcHandlers() {
   ipcMain.handle('sftp-rename', (event, { id, oldPath, newPath }) => trackServerOperation(event.sender, () => sshManager.renameFile(id, oldPath, newPath)));
   ipcMain.handle('sftp-read-file', (_event, { id, path: remotePath }) => sshManager.readFile(id, remotePath));
   ipcMain.handle('sftp-write-file', (event, { id, path: remotePath, content, encoding }) => trackServerOperation(event.sender, () => sshManager.writeFile(id, remotePath, content, encoding), 5));
-  ipcMain.handle('get-pwd', (_event, id: string) => sshManager.getPwd(id));
 
   ipcMain.handle('dialog-open', async () => {
     const result = await dialog.showOpenDialog({ properties: ['openFile'] });

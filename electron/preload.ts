@@ -36,7 +36,6 @@ contextBridge.exposeInMainWorld('electron', {
   sftpReadFile: (id: string, path: string) => ipcRenderer.invoke('sftp-read-file', { id, path }),
   sftpWriteFile: (id: string, path: string, content: string, encoding = 'utf-8') => ipcRenderer.invoke('sftp-write-file', { id, path, content, encoding }),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  getPwd: (id: string) => ipcRenderer.invoke('get-pwd', id),
   openDialog: () => ipcRenderer.invoke('dialog-open'),
   saveDialog: (defaultName: string) => ipcRenderer.invoke('dialog-save', defaultName),
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('show-item-in-folder', filePath),

@@ -41,7 +41,6 @@ declare global {
       sftpReadFile: (id: string, path: string) => Promise<RemoteFilePayload>;
       sftpWriteFile: (id: string, path: string, content: string, encoding?: string) => Promise<void>;
       getPathForFile: (file: File) => string;
-      getPwd: (id: string) => Promise<string>;
       openDialog: () => Promise<string | undefined>;
       saveDialog: (defaultName: string) => Promise<string | undefined>;
       showItemInFolder: (filePath: string) => Promise<void>;

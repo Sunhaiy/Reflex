@@ -46,8 +46,14 @@ export type TextFileEncoding =
   | 'utf-16le'
   | 'utf-16be';
 
+/**
+ * A file read for preview. Raw bytes rather than base64: the payload crosses IPC by
+ * structured clone, which carries a Uint8Array natively, so encoding it would inflate
+ * every preview by a third for nothing.
+ */
 export interface RemoteFilePayload {
-  base64: string;
+  /** Backed by a plain ArrayBuffer, so it can go straight into a Blob or a TextDecoder. */
+  bytes: Uint8Array<ArrayBuffer>;
   size: number;
 }
 
