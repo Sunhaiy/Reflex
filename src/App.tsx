@@ -10,10 +10,12 @@ import { StartupCover } from './components/StartupCover';
 import { ThemeBackground } from './components/ThemeBackground';
 import { TitleBar } from './components/TitleBar';
 import { Modal } from './components/ui/modal';
-import { clearActivity, startActivityCapture } from './lib/activityStore';
+import { appendActivity, clearActivity, startActivityCapture } from './lib/activityStore';
+import { activityLine } from './components/ActivityLog';
 import { bootReady } from './lib/bootProgress';
 import { log } from './lib/logger';
 import { flushUsage, queueUsage, startUsageTracking } from './lib/usageTracker';
+import type { StoreKey } from './shared/storeKeys';
 import type { ConnectionDraft, SSHConnection } from './shared/types';
 import { useSettingsStore } from './store/settingsStore';
 import { useTranslation } from './hooks/useTranslation';
@@ -34,7 +36,17 @@ interface AppSession {
 type AppPage = 'connections' | 'workspace' | 'settings';
 
 const CONNECTION_RETRY_ATTEMPTS = 3;
-const CONNECTION_RETRY_DELAY_MS = 1500;
+const CONNECTION_RETRY_BASE_MS = 1000;
+
+/**
+ * Exponential with jitter rather than a fixed gap. The aborts seen against a throttled
+ * host come from arriving too fast, and a constant retry keeps arriving at exactly the
+ * same cadence; widening gaps give the server room to accept.
+ */
+function retryDelay(attempt: number) {
+  const backoff = CONNECTION_RETRY_BASE_MS * 2 ** (attempt - 1);
+  return Math.round(backoff * (0.75 + Math.random() * 0.5));
+}
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,8 +88,12 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  // Kept beside the connections rather than inside them, so the saved connection
+  // records keep exactly the fields the user entered.
+  const [lastConnectedAt, setLastConnectedAt] = useState<Record<string, number>>({});
   const [connError, setConnError] = useState<string | null>(null);
   const autoConnectedRef = useRef(false);
+  const sessionsRestoredRef = useRef(false);
   const connectedSinceRef = useRef(new Map<string, number>());
 
   const { t } = useTranslation();
@@ -120,21 +136,42 @@ function App() {
       log.error('[Boot] Settings restore failed', error);
     });
 
-    const restoreConnections = Promise.all([
-      window.electron.storeGet('connections'),
-      window.electron.storeGet('connectionDraft'),
-    ]).then(([storedConnections, storedDraft]) => {
-      if (Array.isArray(storedConnections)) setConnections(storedConnections as SSHConnection[]);
-      // Drafts saved by the old two-step wizard carry an extra `step` field, which is simply ignored.
-      if (storedDraft && typeof storedDraft === 'object' && 'data' in storedDraft) {
-        setConnectionDraft(storedDraft as ConnectionDraft);
-      }
-    }).catch((error) => {
-      log.error('[Boot] Connection restore failed', error);
+    // Read independently rather than through one Promise.all: a single rejected key
+    // took the whole batch down with it, and the server list silently came back empty
+    // because setConnections simply never ran.
+    const readKey = (key: StoreKey) => window.electron.storeGet(key).catch((error) => {
+      log.error(`[Boot] Could not read "${key}"`, error);
+      return undefined;
     });
+
+    const restoreConnections = Promise.all([
+      readKey('connections').then((stored) => {
+        if (Array.isArray(stored)) setConnections(stored as SSHConnection[]);
+      }),
+      readKey('connectionDraft').then((stored) => {
+        // Drafts saved by the old two-step wizard carry an extra `step` field, which is simply ignored.
+        if (stored && typeof stored === 'object' && 'data' in stored) {
+          setConnectionDraft(stored as ConnectionDraft);
+        }
+      }),
+      readKey('lastConnectedAt').then((stored) => {
+        if (stored && typeof stored === 'object') {
+          setLastConnectedAt(stored as Record<string, number>);
+        }
+      }),
+    ]);
 
     void Promise.all([restoreTheme, restoreSettings, restoreConnections]).then(bootReady);
   }, [initSettings, initTheme]);
+
+  useEffect(() => {
+    if (!sessionsRestoredRef.current) return;
+    const active = sessions.find((item) => item.uniqueId === activeSessionId);
+    void window.electron.storeSet('openSessions', {
+      ids: sessions.map((item) => item.connection.id),
+      activeId: active?.connection.id ?? null,
+    });
+  }, [activeSessionId, sessions]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--font-sans', uiFontFamily);
@@ -187,7 +224,20 @@ function App() {
       }
 
       if (result.success) break;
-      if (attempt < CONNECTION_RETRY_ATTEMPTS) await wait(CONNECTION_RETRY_DELAY_MS);
+      if (attempt < CONNECTION_RETRY_ATTEMPTS) {
+        const delay = retryDelay(attempt);
+        // The overlay is otherwise silent through every attempt and its backoff, which
+        // is what made a slow connect look like a hang.
+        appendActivity('session', uniqueId, activityLine(
+          `Attempt ${attempt} of ${CONNECTION_RETRY_ATTEMPTS} failed: ${result.error || 'unknown error'}`,
+          'error',
+        ));
+        appendActivity('session', uniqueId, activityLine(
+          `Retrying in ${(delay / 1000).toFixed(1)}s...`,
+          'dim',
+        ));
+        await wait(delay);
+      }
     }
 
     if (result.success) {
@@ -197,7 +247,11 @@ function App() {
       setSessions((current) => current.map((session) =>
         session.uniqueId === uniqueId ? { ...session, status: 'connected', connectedAt } : session
       ));
-      await window.electron.storeSet('lastConnection', JSON.stringify(connection));
+      setLastConnectedAt((current) => {
+        const next = { ...current, [connection.id]: Date.now() };
+        void window.electron.storeSet('lastConnectedAt', next);
+        return next;
+      });
       return;
     }
 
@@ -304,15 +358,41 @@ function App() {
   useEffect(() => {
     if (autoConnectedRef.current) return;
     autoConnectedRef.current = true;
+
     void (async () => {
-      const autoReconnect = await window.electron.storeGet('autoReconnect');
-      if (!autoReconnect) return;
-      const lastConnection = await window.electron.storeGet('lastConnection');
-      if (typeof lastConnection !== 'string') return;
       try {
-        await handleConnect(JSON.parse(lastConnection) as SSHConnection);
-      } catch {
-        // Invalid legacy state is ignored.
+        const autoReconnect = await window.electron.storeGet('autoReconnect');
+        if (!autoReconnect) return;
+
+        // Saved connections are read straight from the store rather than from state,
+        // because this runs alongside the restore that populates that state.
+        const [storedSessions, storedConnections] = await Promise.all([
+          window.electron.storeGet('openSessions'),
+          window.electron.storeGet('connections'),
+        ]);
+        const available = Array.isArray(storedConnections) ? storedConnections as SSHConnection[] : [];
+
+        const saved = storedSessions as { ids?: unknown; activeId?: unknown } | undefined;
+        const ids = Array.isArray(saved?.ids) ? (saved!.ids as unknown[]).filter((id): id is string => typeof id === 'string') : [];
+
+        // Sequential on purpose: every tab appears immediately in 'connecting' state, so
+        // the workspace is visibly whole right away, while the handshakes queue up rather
+        // than arriving at one host all at once.
+        for (const id of ids) {
+          const connection = available.find((item) => item.id === id);
+          if (connection) await handleConnect(connection);
+        }
+
+        const activeId = typeof saved?.activeId === 'string' ? saved.activeId : null;
+        if (activeId) {
+          setSessions((current) => {
+            const target = current.find((item) => item.connection.id === activeId);
+            if (target) setActiveSessionId(target.uniqueId);
+            return current;
+          });
+        }
+      } finally {
+        sessionsRestoredRef.current = true;
       }
     })();
     // Run once when the shell starts.
@@ -362,6 +442,7 @@ function App() {
                 connections={connections}
                 sessions={sessions}
                 onConnect={handleSelectConnection}
+                lastConnectedAt={lastConnectedAt}
                 onNew={() => setEditingConnection({})}
                 onEdit={(connection) => setEditingConnection(connection)}
                 onDelete={(connection) => void handleDeleteConnection(connection)}
@@ -423,7 +504,12 @@ function App() {
                           <Suspense fallback={null}>
                             <RightPanel
                               connectionId={session.uniqueId}
-                              active={page === 'workspace' && session.uniqueId === activeSessionId}
+                              // Gated on 'connected', not just visible: starting a cycle
+                              // against a session still handshaking fails outright and then
+                              // sits out the whole 3s interval before trying again.
+                              active={page === 'workspace'
+                                && session.uniqueId === activeSessionId
+                                && session.status === 'connected'}
                             />
                           </Suspense>
                         </ErrorBoundary>

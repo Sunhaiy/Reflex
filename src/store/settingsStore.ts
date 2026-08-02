@@ -7,6 +7,7 @@ import {
     normalizeUiFont,
 } from '../shared/fontStacks';
 import { ensureFontsFor } from '../lib/fontLoader';
+import type { StoreKey } from '../shared/storeKeys';
 
 export interface SettingsState {
     language: Language;
@@ -39,7 +40,7 @@ export interface SettingsState {
     initSettings: () => Promise<void>;
 }
 
-function persist(key: string, value: unknown) {
+function persist(key: StoreKey, value: unknown) {
     void window.electron.storeSet(key, value);
 }
 

@@ -34,3 +34,9 @@ release-new
 *.sw?
 .trae
 .agents
+
+# Build info
+*.tsbuildinfo
+
+# Tool caches
+.playwright-cli

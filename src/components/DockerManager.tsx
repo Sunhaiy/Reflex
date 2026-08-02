@@ -153,7 +153,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
 
     const getStateColor = (state: string) => {
         const normalized = state?.toLowerCase();
-        if (normalized === 'running') return 'bg-green-500';
+        if (normalized === 'running') return 'bg-primary';
         if (normalized === 'paused') return 'bg-yellow-500';
         if (normalized === 'exited') return 'bg-muted-foreground/50';
         return 'bg-red-400';
@@ -161,7 +161,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
 
     const getStateBadge = (state: string) => {
         const normalized = state?.toLowerCase();
-        if (normalized === 'running') return 'bg-green-500/15 text-green-500';
+        if (normalized === 'running') return 'bg-primary/15 text-primary';
         if (normalized === 'paused') return 'bg-yellow-500/15 text-yellow-500';
         return 'bg-muted text-muted-foreground';
     };
@@ -225,7 +225,7 @@ function ContainersTab({ connectionId }: { connectionId: string }) {
             )}
 
             {actionMsg && (
-                <div className="mx-3 mt-2 rounded-md bg-green-500/10 p-2 font-mono text-[11px] text-green-500">
+                <div className="mx-3 mt-2 rounded-md bg-primary/10 p-2 font-mono text-[11px] text-primary">
                     {actionMsg}
                 </div>
             )}

@@ -6,7 +6,7 @@ import clsx from 'clsx';
 import { DistroLogo } from './DistroLogo';
 import { ProcessList } from './ProcessList';
 import { ServerLocation } from './ServerLocation';
-import { MonitorSkeleton } from './ui/skeleton';
+import { MonitorSkeleton, Skeleton } from './ui/skeleton';
 import { useTranslation } from '../hooks/useTranslation';
 
 interface SystemMonitorProps {
@@ -248,6 +248,17 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
           </div>
 
           <div className="space-y-2.5">
+            {/* df runs a cycle behind the /proc reads, so this section fills in a moment
+                after the rest rather than holding the whole panel on a skeleton. */}
+            {stats.disks.length === 0 && (
+              <div className="space-y-1.5" role="status" aria-busy="true">
+                <div className="flex justify-between gap-2">
+                  <Skeleton className="h-2.5 w-24" />
+                  <Skeleton className="h-2.5 w-16" />
+                </div>
+                <Skeleton className="h-1.5 w-full rounded-full" />
+              </div>
+            )}
             {stats.disks.map((disk) => (
               <div key={`${disk.filesystem}:${disk.mount}`} className="space-y-1.5">
                 <div className="flex justify-between gap-2 font-mono text-[11px] text-muted-foreground">

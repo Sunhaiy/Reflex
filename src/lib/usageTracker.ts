@@ -8,7 +8,6 @@ const SUM_FIELDS = [
   'keyboardPresses',
   'terminalInputCharacters',
   'totalConnectedMs',
-  'tokenUsage',
   'activity',
 ] as const;
 

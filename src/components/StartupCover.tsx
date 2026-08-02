@@ -11,7 +11,7 @@ import { cn } from '../lib/utils';
  * steady, deliberate beat instead of a flash whose length varies run to run. It also
  * spans the moment the window takes its final size, hiding that reflow.
  */
-const MIN_COVER_MS = 1400;
+const MIN_COVER_MS = 2000;
 /** Never trap the user behind the cover if a boot step never settles. */
 const MAX_COVER_MS = 6000;
 const FADE_MS = 380;
@@ -31,6 +31,7 @@ export function StartupCover() {
     const [version, setVersion] = useState('');
     const mountedAtRef = useRef(Date.now());
     const [reducedMotion] = useState(prefersReducedMotion);
+    const [shownAt, setShownAt] = useState<number | null>(null);
 
     const { t } = useTranslation();
     const ready = useBootReady();
@@ -48,15 +49,43 @@ export function StartupCover() {
         window.electron.getVersion().then(setVersion).catch(() => undefined);
     }, []);
 
+    // The window stays hidden until this fires. Waiting on document.fonts means the
+    // first frame the user ever sees already has the real typeface — otherwise the
+    // wordmark painted in a fallback and swapped a moment later. Two frames of slack
+    // let the paint actually land, and the timeout keeps a slow font from holding the
+    // whole window back.
+    useEffect(() => {
+        let done = false;
+        const announce = () => {
+            if (done) return;
+            done = true;
+            setShownAt(Date.now());
+            window.electron.signalFirstFrame();
+        };
+
+        const timeout = setTimeout(announce, 1200);
+        const fonts = document.fonts?.ready ?? Promise.resolve();
+        void fonts.then(() => {
+            // Two frames normally, but a hidden window can have its rAF throttled, so a
+            // short timer races it — otherwise the reveal would wait for the 1.2s cap.
+            requestAnimationFrame(() => requestAnimationFrame(announce));
+            setTimeout(announce, 80);
+        }).catch(announce);
+
+        return () => clearTimeout(timeout);
+    }, []);
+
     useEffect(() => {
         if (phase !== 'visible' || HOLD_COVER) return;
-        const elapsed = Date.now() - mountedAtRef.current;
-        const remaining = ready
-            ? Math.max(0, MIN_COVER_MS - elapsed)
-            : Math.max(0, MAX_COVER_MS - elapsed);
+        const now = Date.now();
+        const deadline = Math.max(0, MAX_COVER_MS - (now - mountedAtRef.current));
+        // Until the window is actually on screen only the failsafe applies.
+        const remaining = ready && shownAt !== null
+            ? Math.min(deadline, Math.max(0, MIN_COVER_MS - (now - shownAt)))
+            : deadline;
         const timer = setTimeout(() => setPhase('leaving'), remaining);
         return () => clearTimeout(timer);
-    }, [phase, ready]);
+    }, [phase, ready, shownAt]);
 
     // Escape hatch while the cover is pinned for review.
     useEffect(() => {
@@ -116,7 +145,7 @@ export function StartupCover() {
             />
 
             <div className="relative flex h-full flex-col items-center justify-center px-8 text-center">
-                <div className="animate-in fade-in-0 zoom-in-95 duration-300 ease-out">
+                <div>
                     <h1 className="text-[clamp(38px,6vw,62px)] font-semibold leading-none tracking-[-0.045em] text-foreground transition-colors duration-500">
                         Reflex
                     </h1>

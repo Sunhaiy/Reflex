@@ -12,8 +12,10 @@ import {
   ServerStack01Icon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '../lib/utils';
+import { HomeOverview } from './HomeOverview';
+import { Input } from './ui/input';
 import { useTranslation } from '../hooks/useTranslation';
 import { normalizeProviderUrl, providerUrlLabel } from '../shared/providerUrl';
 import type { SSHConnection } from '../shared/types';
@@ -29,6 +31,8 @@ interface ServerHomeProps {
   connections: SSHConnection[];
   sessions: HomeSession[];
   onConnect: (connection: SSHConnection) => void;
+  /** Epoch ms of the last successful connect, keyed by connection id. */
+  lastConnectedAt: Record<string, number>;
   onNew: () => void;
   onEdit: (connection: SSHConnection) => void;
   onDelete: (connection: SSHConnection) => void;
@@ -40,17 +44,111 @@ function providerLinkOf(providerUrl?: string) {
   return url && label ? { url, label } : null;
 }
 
+/**
+ * Buckets follow how the greetings actually read in Chinese, which splits midday out on
+ * its own; the other languages reuse their afternoon greeting for that slot.
+ */
+function greetingKey(hour: number) {
+  if (hour >= 5 && hour < 11) return 'home.greetingMorning';
+  if (hour >= 11 && hour < 13) return 'home.greetingNoon';
+  if (hour >= 13 && hour < 18) return 'home.greetingAfternoon';
+  if (hour >= 18 && hour < 23) return 'home.greetingEvening';
+  return 'home.greetingNight';
+}
+
+interface Probe {
+  /** Round trip to the SSH port in ms, or null when it could not be reached. */
+  ms: number | null;
+}
+
+/** Accent under 80ms, amber to 200ms, rose beyond — and rose again for unreachable. */
+function latencyClass(probe: Probe) {
+  if (probe.ms === null) return 'text-rose-500';
+  if (probe.ms < 80) return 'text-primary';
+  if (probe.ms < 200) return 'text-amber-500';
+  return 'text-rose-400';
+}
+
+/** Coarse buckets — an exact timestamp is noise next to a server's name. */
+function relativeTime(at: number | undefined, t: (key: string, values?: Record<string, string | number>) => string) {
+  if (!at) return null;
+  const minutes = Math.floor((Date.now() - at) / 60_000);
+  if (minutes < 1) return t('home.lastJustNow');
+  if (minutes < 60) return t('home.lastMinutes', { minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return t('home.lastHours', { hours });
+  return t('home.lastDays', { days: Math.floor(hours / 24) });
+}
+
 function statusMeta(status: HomeSession['status'] | undefined, t: (key: string) => string) {
-  if (status === 'connected') return { label: t('home.statusConnected'), dot: 'bg-emerald-400', text: 'text-emerald-500' };
+  // Connected is the ordinary, healthy state, so it wears the user's accent. Amber and
+  // rose stay for the two states that are genuinely transitional or wrong.
+  if (status === 'connected') return { label: t('home.statusConnected'), dot: 'bg-primary', text: 'text-primary' };
   if (status === 'connecting') return { label: t('home.statusConnecting'), dot: 'animate-pulse bg-amber-400', text: 'text-amber-500' };
   if (status === 'disconnected') return { label: t('home.statusDisconnected'), dot: 'bg-rose-400', text: 'text-rose-500' };
   return { label: t('home.statusIdle'), dot: 'bg-muted-foreground/35', text: 'text-muted-foreground' };
 }
 
-export function ServerHome({ connections, sessions, onConnect, onNew, onEdit, onDelete }: ServerHomeProps) {
+export function ServerHome({ connections, sessions, onConnect, lastConnectedAt, onNew, onEdit, onDelete }: ServerHomeProps) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [hour, setHour] = useState(() => new Date().getHours());
   const { t } = useTranslation();
+
+  // A window left open overnight would otherwise still be wishing you good morning.
+  useEffect(() => {
+    const timer = setInterval(() => setHour(new Date().getHours()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const [probes, setProbes] = useState<Record<string, Probe>>({});
+  const [query, setQuery] = useState('');
+  const [onlyConnected, setOnlyConnected] = useState(false);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return connections.filter((connection) => {
+      if (onlyConnected) {
+        const session = sessions.find((item) => item.connection.id === connection.id);
+        if (session?.status !== 'connected') return false;
+      }
+      if (!needle) return true;
+      // Matched against everything visible on the card, so typing an address works
+      // as readily as typing the name.
+      return [connection.name, connection.host, connection.username, connection.providerUrl]
+        .some((field) => field?.toLowerCase().includes(needle));
+    });
+  }, [connections, onlyConnected, query, sessions]);
+
+  // Probed in small batches rather than all at once, and only once a minute: each probe
+  // briefly occupies one of the server's unauthenticated connection slots, so there is
+  // no reason to be eager about it.
+  useEffect(() => {
+    if (connections.length === 0) return;
+    let cancelled = false;
+
+    const sweep = async () => {
+      const targets = [...connections];
+      while (targets.length > 0 && !cancelled) {
+        const batch = targets.splice(0, 5);
+        const results = await Promise.all(batch.map(async (connection) => {
+          const result = await window.electron
+            .probeHost({ host: connection.host, port: connection.port || 22 })
+            .catch(() => ({ ok: false as const }));
+          return [connection.id, { ms: result.ok ? result.ms ?? null : null }] as const;
+        }));
+        if (cancelled) return;
+        setProbes((current) => ({ ...current, ...Object.fromEntries(results) }));
+      }
+    };
+
+    void sweep();
+    const timer = setInterval(() => void sweep(), 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [connections]);
 
   const copyAddress = async (connection: SSHConnection) => {
     try {
@@ -66,7 +164,63 @@ export function ServerHome({ connections, sessions, onConnect, onNew, onEdit, on
     <main className="relative z-10 h-full overflow-hidden">
       {/* Padded past the floating button so the last row never hides underneath it. */}
       <div className="h-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1440px] px-5 pb-24 pt-12 lg:px-6">
+        <div className="mx-auto w-full max-w-[1440px] px-5 pb-24 pt-7 lg:px-6">
+          {/* Bottom margin clears the slab that sits above the first row of cards. */}
+          <header className="mb-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <h1 className="text-[22px] font-semibold tracking-tight">{t(greetingKey(hour))}</h1>
+
+            {connections.length > 0 && (
+              <div className="flex items-center gap-3">
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t('home.searchPlaceholder')}
+                  className="h-9 w-[220px] rounded-xl bg-background/55 px-3 text-xs"
+                  aria-label={t('home.searchPlaceholder')}
+                />
+
+                {/* A segmented pair rather than one toggle button beside the field: two
+                    buttons of the same weight read as a filter, where a lone button
+                    looked like it had been stuck onto the search box. Matches the
+                    auth-method control in the connection form. */}
+                <div className="flex shrink-0 items-center gap-1 rounded-xl bg-foreground/[0.045] p-1">
+                  {[
+                    { value: false, label: t('home.filterAll') },
+                    { value: true, label: t('home.filterConnected') },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => setOnlyConnected(option.value)}
+                      className={cn(
+                        'h-7 rounded-lg px-3 text-[11px] font-medium transition-colors',
+                        onlyConnected === option.value
+                          ? 'bg-foreground text-background'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </header>
+
+          {/* The extra margin is not decoration: each card's slab reaches 32px above
+              it, so a plain gap here collapses to almost nothing. */}
+          <div className="mb-[72px]">
+            {connections.length > 0 && (
+              <HomeOverview />
+            )}
+          </div>
+
+          {connections.length > 0 && visible.length === 0 && (
+            <div className="flex min-h-[30vh] flex-col items-center justify-center text-center">
+              <p className="text-xs text-muted-foreground">{t('home.noMatches')}</p>
+            </div>
+          )}
+
           {connections.length === 0 && (
             <div className="flex min-h-[62vh] flex-col items-center justify-center text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-[calc(20px*var(--radius-scale))] border border-dashed border-border/70 bg-background/50">
@@ -78,11 +232,12 @@ export function ServerHome({ connections, sessions, onConnect, onNew, onEdit, on
           )}
 
           <div className="grid gap-x-4 gap-y-14 sm:grid-cols-2 xl:grid-cols-3">
-          {connections.map((connection) => {
+          {visible.map((connection) => {
             const session = sessions.find((item) => item.connection.id === connection.id);
             const status = statusMeta(session?.status, t);
             const deleting = pendingDeleteId === connection.id;
             const connected = session?.status === 'connected';
+            const probe = probes[connection.id];
             const providerLink = providerLinkOf(connection.providerUrl);
 
             return (
@@ -229,6 +384,20 @@ export function ServerHome({ connections, sessions, onConnect, onNew, onEdit, on
                         <span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
                         <HugeiconsIcon icon={Key02Icon} className="h-3 w-3" />
                         <span>{connection.authType === 'privateKey' ? t('home.authKey') : t('home.authPassword')}</span>
+                        {relativeTime(lastConnectedAt[connection.id], t) && (
+                          <>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
+                            <span>{relativeTime(lastConnectedAt[connection.id], t)}</span>
+                          </>
+                        )}
+                        {probe && (
+                          <>
+                            <span className="h-1 w-1 rounded-full bg-muted-foreground/35" />
+                            <span className={cn('font-medium', latencyClass(probe))}>
+                              {probe.ms === null ? t('home.unreachable') : `${probe.ms}ms`}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                     {/* The only hint that the card itself is the action. */}

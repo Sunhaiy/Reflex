@@ -8,6 +8,11 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:3002 ws://127.0.0.1:3002; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>Reflex</title>
+    <!-- Matches the window background so any frame before the cover paints is not
+         a flash of white. -->
+    <style>
+      html, body { margin: 0; background: #08080a; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

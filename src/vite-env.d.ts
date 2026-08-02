@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import type { StoreKey } from './shared/storeKeys';
 import type {
   ActivityLine,
   ActivityScope,
@@ -19,6 +20,8 @@ declare global {
   interface Window {
     electron: {
       getVersion: () => Promise<string>;
+      probeHost: (target: { host: string; port?: number }) => Promise<{ ok: boolean; ms?: number }>;
+      signalFirstFrame: () => void;
       openFileDialog: (opts?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
       connectSSH: (args: { connection: SSHConnection; sessionId: string }) => Promise<{ success: boolean; error?: string }>;
       onTerminalData: (callback: (event: unknown, payload: { id: string; data: string }) => void) => () => void;
@@ -59,9 +62,9 @@ declare global {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
-      storeGet: (key: string) => Promise<unknown>;
-      storeSet: (key: string, value: unknown) => Promise<void>;
-      storeDelete: (key: string) => Promise<void>;
+      storeGet: (key: StoreKey) => Promise<unknown>;
+      storeSet: (key: StoreKey, value: unknown) => Promise<void>;
+      storeDelete: (key: StoreKey) => Promise<void>;
       usageGet: () => Promise<UsageStats>;
       usageRecord: (delta: UsageDelta) => void;
       onUsageStats: (callback: (stats: UsageStats) => void) => () => void;

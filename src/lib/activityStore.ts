@@ -32,6 +32,15 @@ export function startActivityCapture() {
     window.electron.onSSHActivity(({ id, scope, line }) => append(key(scope, id), line));
 }
 
+/**
+ * Appends a line produced in the renderer. Connection retries are driven here, not in
+ * the main process, so without this the overlay showed nothing while three attempts and
+ * their backoff went by — the wait had no explanation.
+ */
+export function appendActivity(scope: ActivityScope, sessionId: string, line: ActivityLine) {
+    append(key(scope, sessionId), line);
+}
+
 export function clearActivity(sessionId: string) {
     let changed = false;
     for (const scope of ['session', 'monitor'] as const) {

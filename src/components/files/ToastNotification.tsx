@@ -11,7 +11,7 @@ interface Props {
 
 const icons = {
     error: <HugeiconsIcon icon={CancelCircleIcon} className="w-4 h-4 text-destructive shrink-0" />,
-    success: <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-emerald-500 shrink-0" />,
+    success: <HugeiconsIcon icon={CheckmarkCircle02Icon} className="w-4 h-4 text-primary shrink-0" />,
     info: <HugeiconsIcon icon={InformationCircleIcon} className="w-4 h-4 text-blue-400 shrink-0" />,
 };
 
@@ -26,7 +26,7 @@ export function ToastNotification({ toasts, onDismiss }: Props) {
                         'flex items-start gap-2 px-3 py-2.5 rounded-xl border text-xs',
                         'bg-card/95 backdrop-blur-sm animate-in slide-in-from-bottom-2 fade-in',
                         t.type === 'error' && 'border-destructive/30',
-                        t.type === 'success' && 'border-emerald-500/30',
+                        t.type === 'success' && 'border-primary/30',
                         t.type === 'info' && 'border-blue-500/30',
                     )}
                 >

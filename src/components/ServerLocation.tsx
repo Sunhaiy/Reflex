@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
+import { splitTimezone } from '../shared/timezone';
 
 interface ServerLocationProps {
   /** IANA zone reported by the server, e.g. "Asia/Shanghai". Empty when it has none. */
@@ -9,15 +10,6 @@ interface ServerLocationProps {
 
 const COLLAPSED_HEIGHT = 88;
 const EXPANDED_HEIGHT = 208;
-
-/** "Asia/Shanghai" -> { city: 'Shanghai', region: 'Asia' } */
-function splitZone(timezone: string) {
-  const parts = timezone.split('/');
-  return {
-    region: parts[0]?.replace(/_/g, ' ') ?? '',
-    city: (parts[parts.length - 1] ?? '').replace(/_/g, ' '),
-  };
-}
 
 /** The server's own wall clock, derived from its zone — no request leaves this machine. */
 function localTimeIn(timezone: string) {
@@ -87,7 +79,7 @@ export function ServerLocation({ timezone }: ServerLocationProps) {
     return () => clearInterval(timer);
   }, [timezone]);
 
-  const { region, city } = splitZone(timezone);
+  const { region, city } = splitTimezone(timezone);
   const known = Boolean(timezone);
 
   const handleMove = (event: React.MouseEvent) => {
@@ -176,11 +168,11 @@ export function ServerLocation({ timezone }: ServerLocationProps) {
                 height="30"
                 viewBox="0 0 24 24"
                 fill="none"
-                style={{ filter: 'drop-shadow(0 0 10px rgba(52, 211, 153, 0.5))' }}
+                style={{ filter: 'drop-shadow(0 0 10px hsl(var(--primary) / 0.5))' }}
               >
                 <path
                   d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
-                  fill="#34D399"
+                  fill="hsl(var(--primary))"
                 />
                 <circle cx="12" cy="9" r="2.5" className="fill-background" />
               </svg>
@@ -202,12 +194,12 @@ export function ServerLocation({ timezone }: ServerLocationProps) {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="shrink-0 text-emerald-500 transition-all duration-300"
+              className="shrink-0 text-primary transition-all duration-300"
               style={{
                 opacity: expanded ? 0 : 1,
                 filter: hovered
-                  ? 'drop-shadow(0 0 8px rgba(52, 211, 153, 0.6))'
-                  : 'drop-shadow(0 0 4px rgba(52, 211, 153, 0.3))',
+                  ? 'drop-shadow(0 0 8px hsl(var(--primary) / 0.6))'
+                  : 'drop-shadow(0 0 4px hsl(var(--primary) / 0.3))',
               }}
             >
               <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
@@ -223,7 +215,7 @@ export function ServerLocation({ timezone }: ServerLocationProps) {
                   hovered && 'scale-105 bg-foreground/[0.08]',
                 )}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
                   {now}
                 </span>
@@ -251,7 +243,7 @@ export function ServerLocation({ timezone }: ServerLocationProps) {
               </div>
 
               <div
-                className="h-px origin-left bg-gradient-to-r from-emerald-500/50 via-emerald-400/30 to-transparent transition-transform duration-500 ease-out"
+                className="h-px origin-left bg-gradient-to-r from-primary/50 via-primary/30 to-transparent transition-transform duration-500 ease-out"
                 style={{ transform: `scaleX(${hovered || expanded ? 1 : 0.3})` }}
               />
             </div>

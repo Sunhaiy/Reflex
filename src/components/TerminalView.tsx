@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { queueUsage } from '../lib/usageTracker';
+import { log } from '../lib/logger';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -27,6 +28,11 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     if (!containerRef.current || !connectionId) return;
 
     let cleanupFn: (() => void) | undefined;
+    // Set the moment this terminal is torn down. initTerminal has an await in the
+    // middle and schedules several animation frames, and every one of those can land
+    // after disposal — xterm then throws reading `dimensions` off a renderer that no
+    // longer exists, which killed the session's whole render tree.
+    let disposed = false;
 
     const initTerminal = async () => {
       // Use current values from store for initialization
@@ -61,7 +67,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       // scrollback for good. Every fit goes through here.
       const safeFit = () => {
         const element = containerRef.current;
-        if (!element || element.clientWidth < 40 || element.clientHeight < 20) return false;
+        if (disposed || !element || element.clientWidth < 40 || element.clientHeight < 20) return false;
         try {
           fitAddon.fit();
           return true;
@@ -78,6 +84,10 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       if (rendererType === 'webgl') {
         try {
           const { WebglAddon } = await import('@xterm/addon-webgl');
+          if (disposed) {
+            term.dispose();
+            return () => { };
+          }
           const webglAddon = new WebglAddon();
           webglAddon.onContextLoss(() => {
             webglAddon.dispose();
@@ -95,6 +105,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       // --- Live theme/settings subscription (registered HERE because initTerminal
       // is async, so term doesn't exist yet when useEffect callbacks run) ---
       const applySettings = () => {
+        if (disposed) return;
         const t = useThemeStore.getState().terminalTheme;
         if (t) term.options.theme = { ...t, background: TRANSPARENT_BACKGROUND };
         const s = useSettingsStore.getState();
@@ -106,7 +117,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         term.options.cursorBlink = s.cursorBlink;
         term.options.scrollback = s.scrollback;
         term.options.drawBoldTextInBrightColors = s.brightBold;
-        try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
+        try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (error) { log.warn('[Terminal] Refresh failed', error); }
         safeFit();
       };
       const unsubTheme = useThemeStore.subscribe(applySettings);
@@ -133,8 +144,9 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         const detail = (e as CustomEvent).detail;
         if (detail?.connectionId === connectionId) {
           requestAnimationFrame(() => {
+            if (disposed) return;
             safeFit();
-            try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (_) { }
+            try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (error) { log.warn('[Terminal] Refresh failed', error); }
             term.focus();
           });
         }
@@ -152,7 +164,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         if (resizeFrame) return;
         resizeFrame = window.requestAnimationFrame(() => {
           resizeFrame = 0;
-          if (!safeFit()) return;
+          if (disposed || !safeFit()) return;
           // A plausible terminal is at least a couple of columns wide; anything smaller
           // means the measurement was taken mid-layout and must not reach the shell.
           if (term.cols > 2 && term.rows > 1 && (term.cols !== lastCols || term.rows !== lastRows)) {
@@ -169,13 +181,16 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       resizeObserver.observe(containerRef.current!);
 
       return () => {
+        disposed = true;
         unsubTheme();
         unsubSettings();
         window.removeEventListener('terminal-refresh', handleTermRefresh);
         if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
         try {
           cleanup();
-        } catch (e) { }
+        } catch (error) {
+          log.warn('[Terminal] Data listener teardown failed', error);
+        }
         resizeObserver.disconnect();
         try {
           if (term && !term.element?.parentElement) {
@@ -183,7 +198,9 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
           } else if (term) {
             term.dispose();
           }
-        } catch (e) { }
+        } catch (error) {
+          log.warn('[Terminal] Dispose failed', error);
+        }
         termRef.current = null;
       };
     };
@@ -206,6 +223,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
 
     return () => {
       isMounted = false;
+      disposed = true;
       if (cleanupFn) cleanupFn();
     };
   }, [connectionId, rendererType]);

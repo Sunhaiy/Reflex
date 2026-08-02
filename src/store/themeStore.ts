@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { StoreKey } from '../shared/storeKeys';
 import {
   accentColors,
   type AccentColorId,
@@ -32,7 +33,7 @@ function clampRadiusScale(value: unknown) {
 
 // Dragging a slider fires an event per pixel; persisting each one floods the IPC
 // channel and makes the drag stutter. The CSS variable still updates immediately.
-function debouncePersist<T>(key: string, delay = 250) {
+function debouncePersist<T>(key: StoreKey, delay = 250) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return (value: T) => {
     if (timer) clearTimeout(timer);

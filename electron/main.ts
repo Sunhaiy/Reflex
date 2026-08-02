@@ -18,8 +18,9 @@ let tray: Tray | null = null;
 let isQuitting = false;
 const DEV_SERVER_URL = 'http://127.0.0.1:3002';
 const WINDOW_STATE_KEY = 'windowState';
-const DEFAULT_WINDOW_SIZE = { width: 1200, height: 800 };
 const MIN_WINDOW_SIZE = { width: 720, height: 480 };
+/** Upper bound on the medium size, so a 4K display does not get a 2700px window. */
+const MEDIUM_WINDOW_MAX = { width: 1600, height: 1000 };
 
 interface WindowState {
   width: number;
@@ -27,6 +28,14 @@ interface WindowState {
   x?: number;
   y?: number;
   maximized: boolean;
+}
+
+/** Work area of whichever display the window was last on. */
+function workAreaFor(x: number | undefined, y: number | undefined, width: number, height: number) {
+  const display = x !== undefined && y !== undefined
+    ? screen.getDisplayMatching({ x, y, width, height })
+    : screen.getPrimaryDisplay();
+  return display.workArea;
 }
 
 function isPositionOnScreen(x: number, y: number, width: number, height: number) {
@@ -38,39 +47,70 @@ function isPositionOnScreen(x: number, y: number, width: number, height: number)
     && y < workArea.y + workArea.height);
 }
 
-function readWindowState(): WindowState {
-  const saved = getStore().get(WINDOW_STATE_KEY) as Partial<WindowState> | undefined;
-  const width = Math.max(MIN_WINDOW_SIZE.width, Math.round(Number(saved?.width) || DEFAULT_WINDOW_SIZE.width));
-  const height = Math.max(MIN_WINDOW_SIZE.height, Math.round(Number(saved?.height) || DEFAULT_WINDOW_SIZE.height));
-  const x = Number.isFinite(saved?.x) ? Math.round(saved!.x!) : undefined;
-  const y = Number.isFinite(saved?.y) ? Math.round(saved!.y!) : undefined;
-  const onScreen = x !== undefined && y !== undefined && isPositionOnScreen(x, y, width, height);
-
+/**
+ * The size the window takes when it is not maximized and the user has not chosen one
+ * yet. Proportional to the display rather than a fixed figure, so it stays genuinely
+ * medium on a laptop panel and on a large monitor alike.
+ */
+function mediumSize(area: { width: number; height: number }) {
   return {
-    width,
-    height,
-    x: onScreen ? x : undefined,
-    y: onScreen ? y : undefined,
-    // First run opens maximized; after that the last state wins.
-    maximized: saved?.maximized ?? true,
+    width: Math.round(Math.min(MEDIUM_WINDOW_MAX.width, Math.max(MIN_WINDOW_SIZE.width, area.width * 0.72))),
+    height: Math.round(Math.min(MEDIUM_WINDOW_MAX.height, Math.max(MIN_WINDOW_SIZE.height, area.height * 0.78))),
   };
 }
 
-function trackWindowState(window: BrowserWindow) {
+function readWindowState(): WindowState {
+  const saved = getStore().get(WINDOW_STATE_KEY) as Partial<WindowState> | undefined;
+  const savedWidth = Number(saved?.width);
+  const savedHeight = Number(saved?.height);
+  let x = Number.isFinite(saved?.x) ? Math.round(saved!.x!) : undefined;
+  let y = Number.isFinite(saved?.y) ? Math.round(saved!.y!) : undefined;
+
+  const probe = workAreaFor(x, y, savedWidth || MIN_WINDOW_SIZE.width, savedHeight || MIN_WINDOW_SIZE.height);
+  const medium = mediumSize(probe);
+  let width = Math.max(MIN_WINDOW_SIZE.width, Math.round(savedWidth || medium.width));
+  let height = Math.max(MIN_WINDOW_SIZE.height, Math.round(savedHeight || medium.height));
+
+  const area = workAreaFor(x, y, width, height);
+
+  // A restored size that fills the work area carries no information — covering the
+  // screen is precisely what "maximized" already records. Earlier builds wrote the
+  // synthetic startup geometry into this field, which left the restore button handing
+  // back a near-fullscreen window, so anything that large is discarded.
+  if (width >= area.width * 0.97 && height >= area.height * 0.97) {
+    const fallback = mediumSize(area);
+    width = fallback.width;
+    height = fallback.height;
+    x = undefined;
+    y = undefined;
+  }
+
+  if (x !== undefined && y !== undefined && !isPositionOnScreen(x, y, width, height)) {
+    x = undefined;
+    y = undefined;
+  }
+
+  // First run opens maximized; after that the last state wins.
+  return { width, height, x, y, maximized: saved?.maximized ?? true };
+}
+
+/**
+ * Persists geometry, keeping the restored size distinct from the maximized one.
+ *
+ * Tracking deliberately does not begin until the window is on screen. It opens at the
+ * work area size so the renderer paints at its final dimensions, and treating that
+ * synthetic geometry as a size the user chose is what overwrote their real one.
+ */
+function trackWindowState(window: BrowserWindow, initial: WindowState) {
   let saveTimer: NodeJS.Timeout | undefined;
+  let normal = { width: initial.width, height: initial.height, x: initial.x, y: initial.y };
+  let tracking = false;
 
   const save = () => {
     if (window.isDestroyed()) return;
-    const maximized = window.isMaximized();
-    // getNormalBounds reports the restored size even while maximized, so un-maximising
-    // later returns to the size the user actually chose.
-    const bounds = window.getNormalBounds();
     getStore().set(WINDOW_STATE_KEY, {
-      width: bounds.width,
-      height: bounds.height,
-      x: bounds.x,
-      y: bounds.y,
-      maximized,
+      ...normal,
+      maximized: window.isMaximized(),
     } satisfies WindowState);
   };
 
@@ -79,15 +119,31 @@ function trackWindowState(window: BrowserWindow) {
     saveTimer = setTimeout(save, 400);
   };
 
-  window.on('resize', scheduleSave);
-  window.on('move', scheduleSave);
+  const onGeometryChange = () => {
+    if (window.isDestroyed()) return;
+    if (tracking && !window.isMaximized() && !window.isMinimized() && !window.isFullScreen()) {
+      const bounds = window.getBounds();
+      normal = { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y };
+    }
+    scheduleSave();
+  };
+
+  window.on('resize', onGeometryChange);
+  window.on('move', onGeometryChange);
   window.on('maximize', scheduleSave);
-  window.on('unmaximize', scheduleSave);
+  window.on('unmaximize', onGeometryChange);
   window.on('close', () => {
     if (saveTimer) clearTimeout(saveTimer);
     save();
   });
+
+  return {
+    /** Enabled once the startup geometry has settled, so later changes are the user's. */
+    beginTracking: () => { tracking = true; },
+    normalBounds: () => ({ ...normal }),
+  };
 }
+
 const DEV_SERVER_RETRY_COUNT = 40;
 const DEV_SERVER_RETRY_DELAY_MS = 250;
 
@@ -124,12 +180,17 @@ const createWindow = () => {
   const supportsTransparency = process.platform === 'darwin';
 
   const windowState = readWindowState();
+  // Opening straight at the work area means the renderer paints at its final size, so
+  // maximising later is a state change with no reflow behind it. maximize() itself has
+  // to wait: it shows the window as a side effect, which would defeat `show: false`.
+  const workArea = workAreaFor(windowState.x, windowState.y, windowState.width, windowState.height);
+  const startBounds = windowState.maximized ? workArea : windowState;
 
   const window = new BrowserWindow({
-    width: windowState.width,
-    height: windowState.height,
-    x: windowState.x,
-    y: windowState.y,
+    width: startBounds.width,
+    height: startBounds.height,
+    x: startBounds.x,
+    y: startBounds.y,
     minWidth: MIN_WINDOW_SIZE.width,
     minHeight: MIN_WINDOW_SIZE.height,
     show: false,
@@ -148,11 +209,7 @@ const createWindow = () => {
   });
   mainWindow = window;
 
-  // Maximising happens here, while the window is still hidden and before the renderer
-  // has loaded, so it only ever paints at its final size. Doing it at reveal time meant
-  // the page rendered at the smaller size first and the resize flashed black.
-  if (windowState.maximized) window.maximize();
-  trackWindowState(window);
+  const tracker = trackWindowState(window, windowState);
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     void openExternalUrl(url).catch((error) => console.warn('[Main] Blocked external window:', error));
@@ -177,22 +234,50 @@ const createWindow = () => {
     logger.error('[Main] Window became unresponsive');
   });
 
-  // `ready-to-show` fires once the renderer has painted its first frame, while
-  // `did-finish-load` waits for every subresource. With a stylesheet carrying hundreds
-  // of @font-face rules that gap is the difference between the cover appearing at once
-  // and the user staring at nothing. Whichever lands first wins; the other is ignored.
+  // `ready-to-show` fires on the renderer's very first paint, which is the empty
+  // root element — revealing there showed a black window that then filled in, and the
+  // wordmark swapped typeface a moment later. Instead the renderer says when the cover
+  // has actually painted with its fonts resolved. `did-finish-load` and a hard timeout
+  // are only failsafes: a renderer that errors must never leave the window invisible.
   let revealed = false;
   const revealOnce = () => {
     if (revealed) return;
     revealed = true;
+    clearTimeout(revealFailsafe);
+    ipcMain.removeListener('renderer-first-frame', onFirstFrame);
+    if (windowState.maximized && !window.isMaximized()) {
+      window.maximize();
+      // Electron treats whatever we opened at — the work area — as the restored size,
+      // so hand back the saved one the first time the window is un-maximised. Centred
+      // when no position was stored, rather than skipped as it was before.
+      window.once('unmaximize', () => {
+        if (window.isDestroyed()) return;
+        const target = tracker.normalBounds();
+        const area = workAreaFor(target.x, target.y, target.width, target.height);
+        window.setBounds({
+          width: target.width,
+          height: target.height,
+          x: target.x ?? Math.round(area.x + (area.width - target.width) / 2),
+          y: target.y ?? Math.round(area.y + (area.height - target.height) / 2),
+        });
+      });
+    }
     revealWindow(window);
+    // The maximize above emits its own resize burst; only what follows is the user.
+    setTimeout(() => tracker.beginTracking(), 600);
   };
-  window.once('ready-to-show', revealOnce);
-  window.webContents.once('did-finish-load', revealOnce);
+  const onFirstFrame = (event: Electron.IpcMainEvent) => {
+    if (event.sender === window.webContents) revealOnce();
+  };
+  ipcMain.on('renderer-first-frame', onFirstFrame);
+  const revealFailsafe = setTimeout(revealOnce, 5000);
+  window.webContents.once('did-finish-load', () => setTimeout(revealOnce, 1500));
 
   void loadRenderer(window).catch((error) => {
     console.error('[Main] Unable to load renderer:', error);
-    revealWindow(window);
+    // Through revealOnce, not revealWindow, so the failsafe timer and the IPC listener
+    // are torn down too.
+    revealOnce();
   });
 
   window.on('close', (event) => {

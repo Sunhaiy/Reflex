@@ -1,8 +1,12 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { StoreKey } from '../src/shared/storeKeys';
 import type { ActivityLine, ActivityScope, SSHConnection, SystemStats, UsageDelta, UsageStats } from '../src/shared/types';
 
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
+  // Fired once the startup cover has painted and its fonts are in place, so the
+  // window is only revealed with finished content on screen.
+  signalFirstFrame: () => ipcRenderer.send('renderer-first-frame'),
   openFileDialog: (opts?: { title?: string; filters?: Electron.FileFilter[] }) => ipcRenderer.invoke('open-file-dialog', opts),
 
   connectSSH: (payload: { connection: SSHConnection; sessionId: string }) => ipcRenderer.invoke('ssh-connect', payload),
@@ -68,9 +72,9 @@ contextBridge.exposeInMainWorld('electron', {
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
-  storeGet: (key: string) => ipcRenderer.invoke('store-get', key),
-  storeSet: (key: string, value: unknown) => ipcRenderer.invoke('store-set', key, value),
-  storeDelete: (key: string) => ipcRenderer.invoke('store-delete', key),
+  storeGet: (key: StoreKey) => ipcRenderer.invoke('store-get', key),
+  storeSet: (key: StoreKey, value: unknown) => ipcRenderer.invoke('store-set', key, value),
+  storeDelete: (key: StoreKey) => ipcRenderer.invoke('store-delete', key),
   usageGet: (): Promise<UsageStats> => ipcRenderer.invoke('usage-get'),
   usageRecord: (delta: UsageDelta) => ipcRenderer.send('usage-record', delta),
   onUsageStats: (callback: (stats: UsageStats) => void) => {
@@ -81,6 +85,7 @@ contextBridge.exposeInMainWorld('electron', {
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   logWrite: (level: 'info' | 'warn' | 'error', message: string, detail?: unknown) =>
     ipcRenderer.send('log-write', { level, message, detail }),
+  probeHost: (target: { host: string; port?: number }) => ipcRenderer.invoke('probe-host', target),
   logReveal: () => ipcRenderer.invoke('log-reveal'),
   logPath: (): Promise<string> => ipcRenderer.invoke('log-path'),
   logRead: (maxLines?: number): Promise<string> => ipcRenderer.invoke('log-read', maxLines),

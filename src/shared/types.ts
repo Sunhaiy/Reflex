@@ -57,7 +57,6 @@ export interface UsageStats {
   terminalInputCharacters: number;
   totalConnectedMs: number;
   longestConnectionMs: number;
-  tokenUsage: number;
   activityByDay: Record<string, number>;
 }
 
@@ -70,7 +69,6 @@ export interface UsageDelta {
   terminalInputCharacters?: number;
   totalConnectedMs?: number;
   longestConnectionMs?: number;
-  tokenUsage?: number;
   activity?: number;
 }
 

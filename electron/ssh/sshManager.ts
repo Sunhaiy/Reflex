@@ -2,6 +2,7 @@ import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
 import { logger } from '../logger';
 
 import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection, SystemStats, FileEntry, CpuCore } from '../../src/shared/types';
+import { normalizeTimezone } from '../../src/shared/timezone';
 import type { WebContents } from 'electron';
 import { createReadStream, createWriteStream, existsSync, readFileSync, statSync } from 'fs';
 import * as iconv from 'iconv-lite';
@@ -27,7 +28,15 @@ export class SSHManager {
     private prevNetBySession: Map<string, { time: number; rx: number; tx: number }> = new Map();
     private monitorSectionsBySession: Map<string, Record<string, string>> = new Map();
     private monitorTokens: Map<string, number> = new Map();
+    private monitorChannels: Map<string, ClientChannel> = new Map();
+    private monitorBuffers: Map<string, string> = new Map();
+    private monitorWaiters: Map<string, {
+        sentinel: string;
+        resolve: (output: string) => void;
+        reject: (error: Error) => void;
+    }> = new Map();
     private nextMonitorToken = 0;
+    private nextMonitorSeq = 0;
     private nextActivityId = 0;
 
     // Stored so we can reconnect automatically
@@ -96,6 +105,10 @@ export class SSHManager {
 
     async connect(connection: SSHConnection, webContents: WebContents, sessionId: string): Promise<void> {
         console.log(`[SSH] New connection request: session=${sessionId}`);
+        // A retry arrives on the same sessionId. If the previous attempt's socket is
+        // still winding down, two sockets race to the same host — which is exactly what
+        // a server enforcing MaxStartups aborts. Tear the old one down first.
+        this.cleanup(sessionId);
         // Store for auto-reconnect
         this.connectionConfigs.set(sessionId, connection);
         this.webContentsBySession.set(sessionId, webContents);
@@ -144,7 +157,9 @@ export class SSHManager {
             host: connection.host,
             port: connection.port,
             username: connection.username,
-            readyTimeout: 30000,
+            // 30s x 3 attempts left the user waiting a minute and a half before any
+            // failure surfaced. A reachable host completes this phase in seconds.
+            readyTimeout: 15000,
             keepaliveInterval: 10000,
             keepaliveCountMax: 3,
             // Interactive terminal traffic gains little from forced zlib, while
@@ -284,13 +299,20 @@ export class SSHManager {
         const stream = this.streams.get(id);
         if (stream) {
             this.streams.delete(id);
-            try { stream.end(); } catch (e) { }
+            // Best effort: the stream is being discarded either way.
+            try { stream.end(); } catch { /* already closed */ }
         }
 
         const conn = this.connections.get(id);
         if (conn) {
             this.connections.delete(id);
-            try { conn.end(); } catch (e) { }
+            try { conn.end(); } catch { /* already closed */ }
+            // end() negotiates a clean SSH disconnect and simply never completes on a
+            // half-open socket, leaving the descriptor alive to collide with the next
+            // attempt. Force it closed shortly after asking nicely.
+            setTimeout(() => {
+                try { conn.destroy(); } catch { /* already destroyed */ }
+            }, 250);
         }
 
         // Note: do NOT clear connectionConfigs / webContentsBySession here —
@@ -446,8 +468,8 @@ export class SSHManager {
                 const fail = (error: Error) => {
                     if (settled) return;
                     settled = true;
-                    try { reader.destroy(); } catch (_) { }
-                    try { writer.destroy(); } catch (_) { }
+                    try { reader.destroy(); } catch { /* transfer already torn down */ }
+                    try { writer.destroy(); } catch { /* transfer already torn down */ }
                     reject(error);
                 };
 
@@ -494,8 +516,8 @@ export class SSHManager {
                 const fail = (error: Error) => {
                     if (settled) return;
                     settled = true;
-                    try { reader.destroy(); } catch (_) { }
-                    try { writer.destroy(); } catch (_) { }
+                    try { reader.destroy(); } catch { /* transfer already torn down */ }
+                    try { writer.destroy(); } catch { /* transfer already torn down */ }
                     reject(error);
                 };
 
@@ -608,6 +630,98 @@ export class SSHManager {
 
 
     // Monitoring
+    /** Drops the sampling channel; the next collection opens a fresh one. */
+    private closeMonitorChannel(id: string, error?: Error) {
+        const waiter = this.monitorWaiters.get(id);
+        if (waiter) {
+            this.monitorWaiters.delete(id);
+            waiter.reject(error || new Error('Monitor channel closed'));
+        }
+        this.monitorBuffers.delete(id);
+
+        const channel = this.monitorChannels.get(id);
+        if (!channel) return;
+        this.monitorChannels.delete(id);
+        try {
+            channel.removeAllListeners();
+            channel.on('error', () => { }); // swallow anything raised during teardown
+            channel.destroy();
+        } catch { /* the channel is being discarded; failures here change nothing */ }
+    }
+
+    private openMonitorChannel(id: string): Promise<ClientChannel> {
+        const existing = this.monitorChannels.get(id);
+        if (existing) return Promise.resolve(existing);
+
+        const conn = this.connections.get(id);
+        if (!conn) return Promise.reject(new Error('Not connected'));
+
+        return new Promise((resolve, reject) => {
+            // A bare `sh` with no PTY: nothing echoes what we write and there is no
+            // prompt, so the channel carries only the output we asked for.
+            conn.exec('/bin/sh', (error, channel) => {
+                if (error) return reject(error);
+                this.monitorChannels.set(id, channel);
+                this.monitorBuffers.set(id, '');
+                channel.on('data', (chunk: Buffer) => this.onMonitorData(id, chunk.toString()));
+                channel.stderr.on('data', () => { /* command noise is not part of a sample */ });
+                channel.on('close', () => this.closeMonitorChannel(id, new Error('Monitor channel closed')));
+                channel.on('error', (channelError: Error) => this.closeMonitorChannel(id, channelError));
+                resolve(channel);
+            });
+        });
+    }
+
+    private onMonitorData(id: string, chunk: string) {
+        const buffer = (this.monitorBuffers.get(id) || '') + chunk;
+        const waiter = this.monitorWaiters.get(id);
+        if (!waiter) {
+            this.monitorBuffers.set(id, buffer);
+            return;
+        }
+
+        const marker = buffer.indexOf(waiter.sentinel);
+        if (marker === -1) {
+            this.monitorBuffers.set(id, buffer);
+            return;
+        }
+
+        this.monitorWaiters.delete(id);
+        this.monitorBuffers.set(id, '');
+        waiter.resolve(buffer.slice(0, marker));
+    }
+
+    /**
+     * Runs one batch on the session's long-lived shell channel. Opening a fresh channel
+     * per sample cost an extra round trip every three seconds, which dominates the cost
+     * on a high-latency link. The trailing sentinel echo is what frames one sample's
+     * output from the next.
+     */
+    private async runOnMonitorChannel(id: string, command: string, timeoutMs: number): Promise<string> {
+        const channel = await this.openMonitorChannel(id);
+        const sentinel = `__RFX_SAMPLE_${++this.nextMonitorSeq}__`;
+
+        return new Promise<string>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                // A half-read frame would corrupt the next sample, so the channel goes
+                // with it rather than being reused in an unknown state.
+                this.closeMonitorChannel(id, new Error(`Collection timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+
+            this.monitorWaiters.set(id, {
+                sentinel,
+                resolve: (output) => { clearTimeout(timer); resolve(output); },
+                reject: (error) => { clearTimeout(timer); reject(error); },
+            });
+
+            try {
+                channel.write(`${command}\necho "${sentinel}"\n`);
+            } catch (error: any) {
+                this.closeMonitorChannel(id, error instanceof Error ? error : new Error(String(error)));
+            }
+        });
+    }
+
     startMonitoring(id: string, webContents: WebContents) {
         if (this.intervals.has(id)) return;
 
@@ -627,9 +741,12 @@ export class SSHManager {
     echo ">>>CPU"; grep '^cpu' /proc/stat;
     echo ">>>MEM"; grep -E '^(MemTotal|MemAvailable|Cached|Buffers):' /proc/meminfo;
     echo ">>>NET"; cat /proc/net/dev;
-    `;
-        const slowCommand = `
     echo ">>>UPTIME"; uptime -p;
+    `;
+        // df walks every mount and is by far the slowest part of a cycle on a busy or
+        // high-latency host. Everything above reads /proc and returns immediately, so
+        // the panel can paint without waiting on this one.
+        const slowCommand = `
     echo ">>>DISK"; df -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs;
     `;
 
@@ -644,73 +761,48 @@ export class SSHManager {
             pending = true;
 
             const includeStatic = cycle === 0;
-            const includeSlow = cycle % 5 === 0;
+            // Never on the first cycle: disks ride the 700ms primer instead, so the first
+            // reading reaches the panel a whole df sooner.
+            const includeSlow = cycle === 1 || (cycle > 0 && cycle % 5 === 0);
             const firstCycle = cycle === 0;
             cycle += 1;
             const cmd = `${includeStatic ? staticCommand : ''}${dynamicCommand}${includeSlow ? slowCommand : ''}`;
 
             if (firstCycle) {
                 this.emitActivity(id, 'Reading /etc/os-release, /proc/cpuinfo...', 'info', webContents, 'monitor');
-                this.emitActivity(id, 'Reading /proc/stat, /proc/meminfo, /proc/net/dev...', 'info', webContents, 'monitor');
-                this.emitActivity(id, 'Running uptime -p and df -B1...', 'info', webContents, 'monitor');
+                this.emitActivity(id, 'Reading /proc/stat, /proc/meminfo, /proc/net/dev, uptime...', 'info', webContents, 'monitor');
             }
 
-            let stream: any;
-            let timedOut = false;
-            const timeout = setTimeout(() => {
-                timedOut = true;
-                try {
-                    if (stream) {
-                        stream.removeAllListeners('error');
-                        stream.on('error', () => { }); // swallow post-destroy errors
-                        stream.destroy();
-                    }
-                } catch (_) { }
+            this.runOnMonitorChannel(id, cmd, 5000).then((output) => {
                 pending = false;
-            }, 5000); // 5s max per collection cycle
-
-            conn.exec(cmd, (err, s) => {
-                if (err) {
-                    this.emitActivity(id, `exec failed: ${err.message}`, 'error', webContents, 'monitor');
-                    clearTimeout(timeout); pending = false; return;
+                if (this.monitorTokens.get(id) !== monitorToken) return;
+                if (webContents.isDestroyed()) {
+                    this.stopMonitoring(id);
+                    return;
                 }
-                stream = s;
-                let output = '';
-                stream.on('data', (data: any) => output += data.toString());
-                stream.on('error', (streamError: Error) => {
-                    clearTimeout(timeout);
-                    pending = false;
-                    this.emitActivity(id, `stream error: ${streamError.message}`, 'error', webContents, 'monitor');
-                });
-                stream.on('close', () => {
-                    clearTimeout(timeout);
-                    pending = false;
-                    if (timedOut) {
-                        this.emitActivity(id, 'Collection timed out after 5s, retrying...', 'error', webContents, 'monitor');
-                        return;
-                    }
-                    if (this.monitorTokens.get(id) !== monitorToken) return;
-                    if (webContents.isDestroyed()) {
-                        this.stopMonitoring(id);
-                        return;
-                    }
-                    const stats = this.parseStats(id, output);
-                    if (stats) {
-                        if (firstCycle) {
-                            this.emitActivity(id, `Detected ${stats.os.distro}, ${stats.cpu.cores.length} cores.`, 'ok', webContents, 'monitor');
-                        }
-                        webContents.send('stats-update', { id, stats });
 
-                        // CPU and network are deltas between two readings, so the first
-                        // sample can only report zero. Take a second one right away
-                        // rather than leaving the panel empty for a whole interval.
-                        // A primer that fires after stopMonitoring is harmless: the
-                        // token check at the top of collect() discards it.
-                        if (firstCycle) setTimeout(collect, 700);
-                    } else if (firstCycle) {
+                const stats = this.parseStats(id, output);
+                if (!stats) {
+                    if (firstCycle) {
                         this.emitActivity(id, 'Sample received but could not be parsed.', 'error', webContents, 'monitor');
                     }
-                });
+                    return;
+                }
+
+                if (firstCycle) {
+                    this.emitActivity(id, `Detected ${stats.os.distro}, ${stats.cpu.cores.length} cores.`, 'ok', webContents, 'monitor');
+                }
+                webContents.send('stats-update', { id, stats });
+
+                // CPU and network are deltas between two readings, so the first sample
+                // can only report zero. Take a second one right away rather than leaving
+                // the panel empty for a whole interval. A primer that fires after
+                // stopMonitoring is harmless: the token check at the top discards it.
+                if (firstCycle) setTimeout(collect, 700);
+            }).catch((error: Error) => {
+                pending = false;
+                if (this.monitorTokens.get(id) !== monitorToken) return;
+                this.emitActivity(id, `Sample failed: ${error.message}`, 'error', webContents, 'monitor');
             });
         };
 
@@ -720,6 +812,7 @@ export class SSHManager {
     }
 
     stopMonitoring(id: string) {
+        this.closeMonitorChannel(id);
         this.monitorTokens.delete(id);
         const interval = this.intervals.get(id);
         if (interval) {
@@ -863,16 +956,7 @@ export class SSHManager {
             const osInfo = data['OS'] || '';
             const prettyName = osInfo.match(/PRETTY_NAME="([^"]+)"/)?.[1] || 'Linux';
             const uptime = data['UPTIME'] || '';
-            // Allow-list the real IANA areas rather than blocking known-bad values: a
-            // host with no timezone set reports 'UTC', 'Etc/UTC', 'Etc/GMT+8' or 'n/a',
-            // and both 'Etc/UTC' and 'n/a' satisfy a naive Area/City shape check — the
-            // latter would surface as the city "a" in the region "n". The UI has to show
-            // that it does not know rather than invent a place.
-            const rawTimezone = (data['TZ'] || '').trim().split('\n')[0].trim();
-            const IANA_AREAS = /^(Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\//;
-            const looksLikePlace = IANA_AREAS.test(rawTimezone)
-                && /^[A-Za-z]+\/[A-Za-z0-9_+\-/]+$/.test(rawTimezone);
-            const timezone = looksLikePlace ? rawTimezone : '';
+            const timezone = normalizeTimezone(data['TZ']);
 
             // CPU Info
             const cpuInfo = (data['CPU_INFO'] || '').split('\n');

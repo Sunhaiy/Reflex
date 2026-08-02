@@ -8,7 +8,6 @@ const ADDITIVE_FIELDS = [
   'keyboardPresses',
   'terminalInputCharacters',
   'totalConnectedMs',
-  'tokenUsage',
 ] as const;
 
 function safeCount(value: unknown) {
@@ -36,7 +35,6 @@ export function createEmptyUsageStats(now = Date.now()): UsageStats {
     terminalInputCharacters: 0,
     totalConnectedMs: 0,
     longestConnectionMs: 0,
-    tokenUsage: 0,
     activityByDay: {},
   };
 }

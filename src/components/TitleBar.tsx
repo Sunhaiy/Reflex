@@ -24,7 +24,7 @@ interface TitleBarProps {
 }
 
 function statusClass(status: SessionTab['status']) {
-  if (status === 'connected') return 'bg-emerald-400';
+  if (status === 'connected') return 'bg-primary';
   if (status === 'connecting') return 'animate-pulse bg-amber-400';
   return 'bg-rose-400';
 }

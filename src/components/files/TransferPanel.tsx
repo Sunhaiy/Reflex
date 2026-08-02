@@ -81,7 +81,7 @@ export function TransferPanel({ transfers, onClearHistory, onOpenLocation, onRet
                                     <span className="w-7 text-right text-[9px] tabular-nums text-muted-foreground">{transfer.progress}%</span>
                                 </div>
                             ) : transfer.status === 'done' ? (
-                                <span className="flex shrink-0 items-center gap-1 text-emerald-500">
+                                <span className="flex shrink-0 items-center gap-1 text-primary">
                                     <HugeiconsIcon icon={CheckmarkCircle02Icon} className="h-3.5 w-3.5" />
                                     {canOpen && <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5 text-muted-foreground" />}
                                 </span>
