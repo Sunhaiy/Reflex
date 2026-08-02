@@ -130,7 +130,7 @@ export class MonitorService {
 
       try {
           channel.write(`${command}\necho "${sentinel}"\n`);
-      } catch (error: any) {
+      } catch (error) {
           this.closeChannel(id, error instanceof Error ? error : new Error(String(error)));
       }
       });

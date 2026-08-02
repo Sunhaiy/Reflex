@@ -1,4 +1,5 @@
 import type { Client } from 'ssh2';
+import type { DockerContainer, DockerImage, RemoteProcess } from '../../src/shared/types';
 
 /** Host inspection that is just a shell command and a parse: processes and Docker. */
 export interface CommandHost {
@@ -20,7 +21,7 @@ function assertSafeIdentifier(value: string, label: string) {
 export class CommandService {
   constructor(private host: CommandHost) { }
 
-  async getProcesses(id: string): Promise<any[]> {
+  async getProcesses(id: string): Promise<RemoteProcess[]> {
       const { stdout } = await this.host.execCommand(
       id,
       'ps -ax -o pid,user,%cpu,%mem,comm,args',
@@ -53,7 +54,7 @@ export class CommandService {
       return new Promise((resolve, reject) => {
       conn.exec(`kill -9 ${pid}`, (err, stream) => {
           if (err) return reject(err);
-          stream.on('close', (code: any) => {
+          stream.on('close', (code: number | null) => {
               if (code === 0) resolve();
               else reject(new Error(`Process exited with code ${code}`));
           });
@@ -61,7 +62,7 @@ export class CommandService {
       });
   }
 
-  async getDockerContainers(id: string): Promise<any[]> {
+  async getDockerContainers(id: string): Promise<DockerContainer[]> {
       const command = 'docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.State}}|{{.Ports}}|{{.Label \\"com.docker.compose.project\\"}}"';
       const { stdout } = await this.host.execCommand(id, command, 2 * 1024 * 1024);
       return stdout.trim().split('\n').filter((line) => line.trim()).map((line) => {
@@ -97,7 +98,7 @@ export class CommandService {
       return `${stdout}${stderr}`;
   }
 
-  async dockerImages(id: string): Promise<any[]> {
+  async dockerImages(id: string): Promise<DockerImage[]> {
       const { stdout } = await this.host.execCommand(
       id,
       'docker images --format "{{.ID}}|{{.Repository}}|{{.Tag}}|{{.Size}}|{{.CreatedSince}}"',

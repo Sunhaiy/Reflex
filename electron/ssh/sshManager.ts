@@ -1,4 +1,4 @@
-import { Client, type ClientChannel } from 'ssh2';
+import { Client, type ClientChannel, type ConnectConfig } from 'ssh2';
 import { logger } from '../logger';
 
 import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection, FileEntry } from '../../src/shared/types';
@@ -144,8 +144,8 @@ export class SSHManager {
         target.send('ssh-activity', { id: sessionId, scope, line });
     }
 
-    private _buildConfig(connection: SSHConnection): any {
-        const config: any = {
+    private _buildConfig(connection: SSHConnection): ConnectConfig {
+        const config: ConnectConfig & { tryKeyboard?: boolean } = {
             host: connection.host,
             port: connection.port,
             username: connection.username,
@@ -154,9 +154,11 @@ export class SSHManager {
             readyTimeout: 15000,
             keepaliveInterval: 10000,
             keepaliveCountMax: 3,
-            // Interactive terminal traffic gains little from forced zlib, while
-            // ssh2 can emit "Invalid Zlib instance" during compressed teardown.
-            compress: false,
+            // ssh2 reads compression from algorithms.compress; a top-level `compress`
+            // was silently ignored, so this never took effect. Interactive terminal
+            // traffic gains little from zlib, and ssh2 can emit "Invalid Zlib instance"
+            // tearing a compressed session down, so offer only `none`.
+            algorithms: { compress: ['none'] },
         };
         if (connection.authType === 'privateKey' && connection.privateKeyPath) {
             config.privateKey = readFileSync(connection.privateKeyPath);
@@ -271,8 +273,9 @@ export class SSHManager {
                     this.emitStatus(sessionId, 'disconnected', webContents);
                 }
             });
-            try { conn.connect(this._buildConfig(connection)); } catch (err: any) {
-                this.emitActivity(sessionId, `Could not start connection: ${err?.message || err}`, 'error', webContents);
+            try { conn.connect(this._buildConfig(connection)); } catch (err) {
+                const reason = err instanceof Error ? err.message : String(err);
+                this.emitActivity(sessionId, `Could not start connection: ${reason}`, 'error', webContents);
                 this.cleanup(sessionId);
                 this.emitStatus(sessionId, 'disconnected', webContents);
                 reject(err);

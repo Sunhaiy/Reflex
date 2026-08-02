@@ -1,4 +1,4 @@
-import type { Client, SFTPWrapper } from 'ssh2';
+import type { Client, FileEntry as SftpDirEntry, SFTPWrapper, Stats } from 'ssh2';
 import { logger } from '../logger';
 import { createReadStream, createWriteStream, existsSync, statSync } from 'fs';
 import * as iconv from 'iconv-lite';
@@ -6,6 +6,14 @@ import type { ActivityLevel, ActivityScope, FileEntry } from '../../src/shared/t
 import type { WebContents } from 'electron';
 
 export type TransferProgressCallback = (transferred: number, total: number) => void;
+
+/** ssh2 attaches an SFTP status code to its errors; 2 is "no such file". */
+const SFTP_NO_SUCH_FILE = 2;
+function sftpErrorCode(error: unknown) {
+  return typeof (error as { code?: unknown })?.code === 'number'
+    ? (error as { code: number }).code
+    : undefined;
+}
 
 /**
  * What the SFTP work needs from the session manager. Declaring it as an interface keeps
@@ -78,7 +86,7 @@ export class SftpService {
   }
 
   // SFTP Operations
-  async sftpOperation(id: string, operation: (sftp: any) => Promise<any>): Promise<any> {
+  async sftpOperation<T>(id: string, operation: (sftp: SFTPWrapper) => Promise<T>): Promise<T> {
       try {
       const sftp = await this.openSftpSession(id);
       return await operation(sftp);
@@ -92,7 +100,7 @@ export class SftpService {
 
   async listFiles(id: string, remotePath: string): Promise<FileEntry[]> {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
-      sftp.readdir(remotePath, (err: any, list: any[]) => {
+      sftp.readdir(remotePath, (err, list: SftpDirEntry[]) => {
           if (err) return reject(err);
           const files: FileEntry[] = list.map(item => ({
               name: item.filename,
@@ -112,7 +120,7 @@ export class SftpService {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
       sftp.fastPut(localPath, remotePath, {
           step: (transferred: number, _chunk: number, total: number) => onProgress?.(transferred, total),
-      }, (err: any) => {
+      }, (err) => {
           if (err) reject(err);
           else resolve(undefined);
       });
@@ -123,7 +131,7 @@ export class SftpService {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
       sftp.fastGet(remotePath, localPath, {
           step: (transferred: number, _chunk: number, total: number) => onProgress?.(transferred, total),
-      }, (err: any) => {
+      }, (err) => {
           if (err) reject(err);
           else resolve(undefined);
       });
@@ -132,7 +140,7 @@ export class SftpService {
 
   async resumeDownloadFile(id: string, remotePath: string, localPath: string, onProgress?: TransferProgressCallback): Promise<void> {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
-      sftp.stat(remotePath, (statError: any, remoteStats: any) => {
+      sftp.stat(remotePath, (statError, remoteStats) => {
           if (statError) return reject(statError);
 
           const total = Number(remoteStats?.size) || 0;
@@ -233,8 +241,8 @@ export class SftpService {
           reader.pipe(writer);
       };
 
-      sftp.stat(remotePath, (error: any, stats: any) => {
-          if (error && error.code !== 2) {
+      sftp.stat(remotePath, (error, stats) => {
+          if (error && sftpErrorCode(error) !== SFTP_NO_SUCH_FILE) {
               reject(error);
               return;
           }
@@ -246,12 +254,12 @@ export class SftpService {
   async deleteFile(id: string, remotePath: string): Promise<void> {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
       // Check if directory first
-      sftp.stat(remotePath, (err: any, stats: any) => {
+      sftp.stat(remotePath, (err, stats) => {
           if (err) return reject(err);
           if (stats.isDirectory()) {
-              sftp.rmdir(remotePath, (err: any) => err ? reject(err) : resolve(undefined));
+              sftp.rmdir(remotePath, (err) => err ? reject(err) : resolve(undefined));
           } else {
-              sftp.unlink(remotePath, (err: any) => err ? reject(err) : resolve(undefined));
+              sftp.unlink(remotePath, (err) => err ? reject(err) : resolve(undefined));
           }
       });
       }));
@@ -259,7 +267,7 @@ export class SftpService {
 
   async createFolder(id: string, remotePath: string): Promise<void> {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
-      sftp.mkdir(remotePath, (err: any) => {
+      sftp.mkdir(remotePath, (err) => {
           if (err) {
               console.error(`sftp.mkdir failed for ${remotePath}:`, err);
               reject(err);
@@ -272,7 +280,7 @@ export class SftpService {
 
   async renameFile(id: string, oldPath: string, newPath: string): Promise<void> {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
-      sftp.rename(oldPath, newPath, (err: any) => err ? reject(err) : resolve(undefined));
+      sftp.rename(oldPath, newPath, (err) => err ? reject(err) : resolve(undefined));
       }));
   }
 
@@ -280,11 +288,11 @@ export class SftpService {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
       console.log(`Reading ${remotePath}...`);
       // Check size first to avoid crashing on huge files
-      sftp.stat(remotePath, (err: any, stats: any) => {
+      sftp.stat(remotePath, (err, stats) => {
           if (err) return reject(err);
           if (stats.size > 10 * 1024 * 1024) return reject(new Error('File too large (>10MB)'));
 
-          sftp.readFile(remotePath, (err: any, data: Buffer) => {
+          sftp.readFile(remotePath, (err, data) => {
               if (err) {
                   console.error(`sftp.readFile failed for ${remotePath}:`, err);
                   reject(err);
@@ -301,7 +309,7 @@ export class SftpService {
       return this.sftpOperation(id, (sftp) => new Promise((resolve, reject) => {
       console.log(`Writing to ${remotePath}...`);
       // sftp.writeFile is more reliable for small updates/creation than raw streams
-      sftp.writeFile(remotePath, iconv.encode(content, encoding), (err: any) => {
+      sftp.writeFile(remotePath, iconv.encode(content, encoding), (err) => {
           if (err) {
               console.error(`sftp.writeFile failed for ${remotePath}:`, err);
               reject(err);
@@ -319,7 +327,7 @@ export class SftpService {
       conn.exec('pwd', (err, stream) => {
           if (err) return resolve('.');
           let data = '';
-          stream.on('data', (chunk: any) => data += chunk.toString());
+          stream.on('data', (chunk: Buffer) => data += chunk.toString());
           stream.on('close', () => resolve(data.trim()));
       });
       });
