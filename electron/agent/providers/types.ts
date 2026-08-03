@@ -89,6 +89,12 @@ export interface Provider {
   /** Identifies the adapter in logs, not the vendor: 'anthropic' or 'openai'. */
   readonly kind: ProviderKind;
   complete(request: CompletionRequest, events: CompletionEvents): Promise<CompletionResult>;
+  /**
+   * Every model the configured endpoint will serve. Both protocols expose this at
+   * `/models`, and a self-hosted gateway's list is the only place its model names exist —
+   * there is nothing to hardcode them from.
+   */
+  listModels(): Promise<string[]>;
 }
 
 

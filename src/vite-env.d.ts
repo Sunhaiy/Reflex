@@ -50,6 +50,7 @@ declare global {
       agentConfigGet: () => Promise<AgentConfigView>;
       agentConfigSet: (patch: Partial<AgentConfig> & { apiKey?: string }) => Promise<AgentConfigView>;
       agentTest: () => Promise<{ ok: true } | { ok: false; error: string }>;
+      agentModels: () => Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
       agentSend: (payload: {
         sessionId: string;
         serverLabel: string;

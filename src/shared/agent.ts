@@ -12,15 +12,23 @@ export type ProviderKind = 'anthropic' | 'openai';
  *
  * `readonly` runs an allowlist of commands that only read. `ask` pauses before anything
  * that changes state. `auto` runs freely — except a short list of commands that would
- * destroy data or cut the connection, which stop in every mode.
+ * destroy data or cut the connection.
+ *
+ * `free` has nothing in its way at all, including that list. It is a deliberate choice
+ * with a real edge: the commands `auto` still stops for are the ones with no way back —
+ * a wiped disk, an SSH daemon stopped on a machine you reach only over SSH.
  */
-export type AgentMode = 'readonly' | 'ask' | 'auto';
+export type AgentMode = 'readonly' | 'ask' | 'auto' | 'free';
+
+/** Where the panel lives: under the terminal, or as a tab in the right column. */
+export type AgentDockPosition = 'bottom' | 'right';
 
 export interface AgentConfig {
   kind: ProviderKind;
   baseUrl: string;
   model: string;
   mode: AgentMode;
+  dock: AgentDockPosition;
 }
 
 /** What the settings page may see. There is no channel that returns the key itself. */
@@ -54,6 +62,21 @@ export type AgentEvent =
   | { type: 'usage'; inputTokens: number; outputTokens: number }
   | { type: 'done'; stopReason: AgentStopReason; turns: number }
   | { type: 'error'; message: string };
+
+/**
+ * Model families that cannot hold a conversation or call a tool, and so can only be a
+ * mistake in this field: image and audio generators, embeddings, speech, moderation.
+ *
+ * Matched conservatively on purpose. A gateway's list is whatever its operator put there,
+ * and the cost of the two mistakes is not symmetric — hiding a model the user needs is
+ * worse than listing one they would never pick, and the field stays free text either way.
+ */
+const NON_CHAT = /(^|[-_/])(embed|embedding|embeddings|tts|whisper|moderation|rerank|reranker)([-_.]|$)|[-_](image|audio|realtime|speech|transcribe|voice|video)([-_.]|$)|^dall-e|^sora/i;
+
+/** Whether a model id is worth offering as the agent's model. */
+export function isChatModel(id: string): boolean {
+  return !NON_CHAT.test(id);
+}
 
 export interface ProviderPreset {
   id: string;

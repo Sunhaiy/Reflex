@@ -124,6 +124,10 @@ export interface ApprovalRequest {
 export function decide({ tool, command, allowedGroups, mode }: ApprovalRequest): Decision {
   if (READ_ONLY_TOOLS.has(tool)) return { verdict: 'allow' };
 
+  // Free mode is checked before everything, including the always-confirm list. That is
+  // the whole of what it means: the user asked for no gate, so there is no gate.
+  if (mode === 'free') return { verdict: 'allow' };
+
   if (command) {
     const dangerous = ALWAYS_CONFIRM.find((rule) => rule.pattern.test(command));
     if (dangerous) {

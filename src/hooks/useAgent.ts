@@ -3,6 +3,7 @@ import { errorMessage } from '../lib/errors';
 import { log } from '../lib/logger';
 import type {
   AgentConfigView,
+  AgentDockPosition,
   AgentEvent,
   ApprovalAnswer,
   ApprovalQuestion,
@@ -96,6 +97,12 @@ export function useAgent(sessionId: string, serverLabel: string) {
     setBusy(false);
   }, [sessionId]);
 
+  const setDock = useCallback((dock: AgentDockPosition) => {
+    // Written through so the choice survives a restart, and read back so the panel and
+    // the settings page cannot disagree about where it lives.
+    void window.electron.agentConfigSet({ dock }).then(setConfig);
+  }, []);
+
   const shareFolder = useCallback(async () => {
     const picked = await window.electron.agentPickFolder().catch(() => null);
     if (picked) setLocalRoot(picked);
@@ -112,6 +119,7 @@ export function useAgent(sessionId: string, serverLabel: string) {
     stop,
     reset,
     refreshConfig,
+    setDock,
     shareFolder,
     clearFolder: useCallback(() => setLocalRoot(null), []),
   };
@@ -187,3 +195,6 @@ function apply(
       // `usage` is carried for later; nothing on screen reads it yet.
   }
 }
+
+/** The controller the panel renders. Held above the panel so moving it keeps the thread. */
+export type AgentController = ReturnType<typeof useAgent>;

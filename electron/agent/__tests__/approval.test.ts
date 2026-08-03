@@ -83,6 +83,27 @@ describe('auto mode', () => {
   });
 });
 
+describe('free mode', () => {
+  it('runs anything, including what every other mode stops for', () => {
+    // This is the whole point of the mode, and the reason it is worth a test: a change
+    // that quietly reinstated the always-confirm list here would look like a safety fix
+    // and would actually be a broken promise.
+    expect(verdict('rm -rf /', 'free')).toBe('allow');
+    expect(verdict('systemctl stop sshd', 'free')).toBe('allow');
+    expect(verdict('mkfs.ext4 /dev/sda1', 'free')).toBe('allow');
+    expect(verdict('shutdown -h now', 'free')).toBe('allow');
+  });
+
+  it('needs no group to have been approved first', () => {
+    expect(verdict('apt install nginx', 'free', NOTHING_ALLOWED)).toBe('allow');
+  });
+
+  it('allows the writing tools too', () => {
+    const decision = decide({ tool: 'write_file', mode: 'free', allowedGroups: NOTHING_ALLOWED });
+    expect(decision.verdict).toBe('allow');
+  });
+});
+
 describe('always-confirm list', () => {
   const dangerous = [
     ['rm -rf /', 'recursive delete at the filesystem root'],

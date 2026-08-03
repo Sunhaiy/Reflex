@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electron', {
   agentConfigGet: () => ipcRenderer.invoke('agent-config-get'),
   agentConfigSet: (patch: unknown) => ipcRenderer.invoke('agent-config-set', patch),
   agentTest: () => ipcRenderer.invoke('agent-test'),
+  agentModels: () => ipcRenderer.invoke('agent-models'),
   agentSend: (payload: unknown) => ipcRenderer.invoke('agent-send', payload),
   agentAnswer: (payload: unknown) => ipcRenderer.invoke('agent-answer', payload),
   agentCancel: (sessionId: string) => ipcRenderer.send('agent-cancel', sessionId),

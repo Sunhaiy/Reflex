@@ -25,6 +25,7 @@ const DEFAULT_CONFIG: AgentConfig = {
   baseUrl: 'https://api.anthropic.com',
   model: 'claude-opus-5',
   mode: 'ask',
+  dock: 'bottom',
 };
 
 /** Minimal surface so this module does not depend on how the store is constructed. */
@@ -69,6 +70,7 @@ export function getConfigView(store: ConfigStore): AgentConfigView {
     baseUrl: config.baseUrl,
     model: config.model,
     mode: config.mode,
+    dock: config.dock,
     hasKey: key.length > 0,
     keyHint: key ? key.slice(-4) : '',
   };
@@ -82,6 +84,7 @@ export function saveConfig(store: ConfigStore, patch: Partial<AgentConfig> & { a
     baseUrl: (patch.baseUrl ?? current.baseUrl).trim(),
     model: (patch.model ?? current.model).trim(),
     mode: patch.mode ?? current.mode,
+    dock: patch.dock ?? current.dock,
     apiKey: patch.apiKey === undefined ? current.apiKey : encrypt(patch.apiKey.trim()),
   };
   store.set(CONFIG_KEY, next);
@@ -104,6 +107,23 @@ export function createProvider(store: ConfigStore): Provider {
   return config.kind === 'anthropic'
     ? new AnthropicProvider(resolved)
     : new OpenAIProvider(resolved);
+}
+
+/**
+ * Every model the configured endpoint serves.
+ *
+ * A self-hosted gateway's whitelist is the only place its model names exist — there is
+ * nothing to hardcode them from, and typing one by hand is how you end up pointed at an
+ * image model.
+ */
+export async function listModels(
+  store: ConfigStore,
+): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
+  try {
+    return { ok: true, models: await createProvider(store).listModels() };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /**

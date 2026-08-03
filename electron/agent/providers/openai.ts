@@ -108,6 +108,13 @@ export class OpenAIProvider implements Provider {
       throw normaliseError(error, request.signal);
     }
   }
+
+  async listModels(): Promise<string[]> {
+    const ids: string[] = [];
+    // The SDK returns an async-iterable page that follows the cursor itself.
+    for await (const model of await this.client.models.list()) ids.push(model.id);
+    return ids.sort();
+  }
 }
 
 /**

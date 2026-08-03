@@ -1,22 +1,23 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   FolderOpenIcon,
+  AlignBoxBottomCenterIcon,
   PlusSignIcon,
   SentIcon,
+  AlignBoxMiddleRightIcon,
   StopIcon,
 } from '@hugeicons/core-free-icons';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
-import { useAgent } from '../../hooks/useAgent';
+import type { AgentController } from '../../hooks/useAgent';
 import { useTranslation } from '../../hooks/useTranslation';
 import type { AgentMode } from '../../shared/agent';
 import { AGENT_MODES, MODE_HINT, MODE_LABEL } from './modes';
 import { ApprovalCard } from './ApprovalCard';
 import { ToolCard } from './ToolCard';
 
-export function AgentPanel({ sessionId, serverLabel }: { sessionId: string; serverLabel: string }) {
+export function AgentPanel({ agent }: { agent: AgentController }) {
   const { t } = useTranslation();
-  const agent = useAgent(sessionId, serverLabel);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -29,6 +30,7 @@ export function AgentPanel({ sessionId, serverLabel }: { sessionId: string; serv
   }, [agent.blocks, agent.pending]);
 
   const mode = agent.config?.mode ?? 'ask';
+  const dock = agent.config?.dock ?? 'bottom';
   const setMode = (next: AgentMode) => {
     void window.electron.agentConfigSet({ mode: next }).then(() => agent.refreshConfig());
   };
@@ -53,9 +55,12 @@ export function AgentPanel({ sessionId, serverLabel }: { sessionId: string; serv
               title={t(MODE_HINT[option])}
               className={cn(
                 'h-6 rounded-md px-2 text-[10.5px] font-medium transition-colors',
-                mode === option
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:text-foreground',
+                mode !== option && 'text-muted-foreground hover:text-foreground',
+                // Free mode wears a different colour on purpose: nothing else on screen
+                // will tell you the guard rails are off once you stop looking here.
+                mode === option && (option === 'free'
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-foreground text-background'),
               )}
             >
               {t(MODE_LABEL[option])}
@@ -76,6 +81,18 @@ export function AgentPanel({ sessionId, serverLabel }: { sessionId: string; serv
         </button>
 
         <div className="flex-1" />
+
+        <button
+          type="button"
+          onClick={() => agent.setDock(dock === 'bottom' ? 'right' : 'bottom')}
+          title={dock === 'bottom' ? t('agent.dockRight') : t('agent.dockBottom')}
+          className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+        >
+          <HugeiconsIcon
+            icon={dock === 'bottom' ? AlignBoxMiddleRightIcon : AlignBoxBottomCenterIcon}
+            className="h-3.5 w-3.5"
+          />
+        </button>
 
         <button
           type="button"

@@ -1,7 +1,14 @@
 import { dialog, ipcMain, type WebContents } from 'electron';
 import type { Client } from 'ssh2';
 import { AgentService } from './service';
-import { createProvider, getConfigView, saveConfig, testConnection, type ConfigStore } from './config';
+import {
+  createProvider,
+  getConfigView,
+  listModels,
+  saveConfig,
+  testConnection,
+  type ConfigStore,
+} from './config';
 import type { AgentConfig, ApprovalAnswer } from '../../src/shared/agent';
 
 export interface AgentIpcHost {
@@ -32,6 +39,8 @@ export function registerAgentHandlers(host: AgentIpcHost, store: ConfigStore) {
   });
 
   ipcMain.handle('agent-test', () => testConnection(store));
+
+  ipcMain.handle('agent-models', () => listModels(store));
 
   ipcMain.handle('agent-send', async (event, payload: {
     sessionId: string;

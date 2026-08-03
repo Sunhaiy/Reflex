@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
 import { errorMessage } from '../../lib/errors';
 import { useTranslation } from '../../hooks/useTranslation';
 import { AGENT_MODES, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
-import { PROVIDER_PRESETS, type AgentConfigView } from '../../shared/agent';
+import { isChatModel, PROVIDER_PRESETS, type AgentConfigView } from '../../shared/agent';
 import { FieldLabel, SettingsCard } from './controls';
 
 type TestState = { state: 'idle' } | { state: 'running' } | { state: 'ok' } | { state: 'failed'; error: string };
@@ -19,6 +19,8 @@ export function AgentTab() {
   const [apiKey, setApiKey] = useState('');
   const [test, setTest] = useState<TestState>({ state: 'idle' });
   const [saved, setSaved] = useState(false);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     window.electron.agentConfigGet().then(setConfig).catch(() => undefined);
@@ -28,6 +30,13 @@ export function AgentTab() {
 
   const preset = PROVIDER_PRESETS.find(
     (item) => item.kind === config.kind && item.baseUrl === config.baseUrl,
+  );
+
+  // The model field is the filter too; an exact match shows the whole list again so a
+  // chosen model does not hide its neighbours.
+  const needle = config.model.trim().toLowerCase();
+  const matching = (models ?? []).filter(
+    (id) => !needle || id === config.model || id.toLowerCase().includes(needle),
   );
 
   const patch = (next: Partial<AgentConfigView>) => {
@@ -67,6 +76,22 @@ export function AgentTab() {
     setTest({ state: 'idle' });
   };
 
+  /**
+   * Saves first, then asks. The endpoint being listed is whatever is in the form, and it
+   * cannot be queried before it is stored — the key never crosses IPC twice.
+   */
+  const syncModels = async () => {
+    setSyncing(true);
+    try {
+      await save();
+      const result = await window.electron.agentModels();
+      setModels(result.ok ? result.models.filter(isChatModel) : []);
+      if (!result.ok) setTest({ state: 'failed', error: result.error });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const runTest = async () => {
     setTest({ state: 'running' });
     try {
@@ -99,14 +124,57 @@ export function AgentTab() {
           />
         </div>
 
-        <div className="grid grid-cols-[1fr_320px] items-center gap-6 border-t border-border/45 pt-4">
+        <div className="grid grid-cols-[1fr_320px] items-start gap-6 border-t border-border/45 pt-4">
           <FieldLabel title={t('settings.agent.model')} />
-          <Input
-            value={config.model}
-            onChange={(event) => patch({ model: event.target.value })}
-            spellCheck={false}
-            className="font-mono text-xs"
-          />
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                value={config.model}
+                onChange={(event) => patch({ model: event.target.value })}
+                spellCheck={false}
+                placeholder={models ? t('settings.agent.modelFilter') : undefined}
+                className="font-mono text-xs"
+              />
+              <Button
+                variant="outline"
+                className="shrink-0 gap-1.5 px-2.5"
+                onClick={() => void syncModels()}
+                disabled={syncing}
+              >
+                {syncing && <HugeiconsIcon icon={Loading02Icon} className="h-3.5 w-3.5 animate-spin" />}
+                {syncing ? t('settings.agent.syncing') : t('settings.agent.syncModels')}
+              </Button>
+            </div>
+
+            {models && (
+              <div className="rounded-xl border border-border/55 bg-background/35">
+                <p className="border-b border-border/45 px-2.5 py-1.5 text-[10.5px] text-muted-foreground">
+                  {models.length > 0
+                    ? t('settings.agent.modelsFound', { count: models.length })
+                    : t('settings.agent.modelsNone')}
+                </p>
+                {/* The model field doubles as the filter, so a twenty-model gateway is
+                    narrowed by typing rather than by scrolling. */}
+                <div className="max-h-48 overflow-y-auto p-1">
+                  {matching.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => patch({ model: id })}
+                      className={cn(
+                        'block w-full truncate rounded-lg px-2 py-1 text-left font-mono text-[11px] transition-colors',
+                        id === config.model
+                          ? 'bg-foreground/[0.09] text-foreground'
+                          : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground',
+                      )}
+                    >
+                      {id}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-[1fr_320px] items-start gap-6 border-t border-border/45 pt-4">

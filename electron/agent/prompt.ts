@@ -18,6 +18,14 @@ const MODE_NOTES: Record<AgentMode, string> = {
     + 'to dodge a prompt.',
   auto: 'You are in auto mode and may act without asking. A short list of commands that '
     + 'would destroy data or cut the connection still stops for confirmation.',
+  // Nothing downstream will stop a bad command here, so the model is told it is now the
+  // only thing standing between a mistake and an unrecoverable server.
+  free: 'You are in free mode. Nothing will ask the user to confirm anything, including '
+    + 'commands that wipe a disk or stop the SSH daemon you are connected through. You '
+    + 'are the only remaining check, so behave like it: prefer the narrower command, '
+    + 'confirm a path exists before deleting through it, and back a config up before '
+    + 'replacing it. Do not run something destructive to test a hypothesis — verify the '
+    + 'hypothesis first.',
 };
 
 /**

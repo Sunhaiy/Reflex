@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../hooks/useTranslation';
 import { AgentPanel } from './AgentPanel';
+import type { AgentController } from '../../hooks/useAgent';
 
 /** The terminal never shrinks below this, however far the divider is dragged. */
 const MIN_TERMINAL = 140;
@@ -14,9 +15,8 @@ const MIN_PANEL = 160;
  */
 let rememberedHeight = 300;
 
-export function AgentDock({ sessionId, serverLabel, children }: {
-  sessionId: string;
-  serverLabel: string;
+export function AgentDock({ agent, children }: {
+  agent: AgentController;
   children: React.ReactNode;
 }) {
   const { t } = useTranslation();
@@ -102,11 +102,11 @@ export function AgentDock({ sessionId, serverLabel, children }: {
           />
         </button>
 
-        {/* Mounted only while open: the panel subscribes to the event stream, and a
-            closed dock on every tab would keep as many listeners as there are sessions. */}
+        {/* Rendered only while open. The conversation itself lives a level up, so this
+            costs nothing but the markup. */}
         {open && (
           <div className="min-h-0 flex-1">
-            <AgentPanel sessionId={sessionId} serverLabel={serverLabel} />
+            <AgentPanel agent={agent} />
           </div>
         )}
       </div>
