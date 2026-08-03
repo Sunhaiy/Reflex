@@ -12,6 +12,7 @@ export const ko: LocaleBundle = {
       agent: {
         title: "에이전트",
         desc: "어떤 모델을 쓸지, 그리고 어디까지 스스로 할지.",
+        custom: "사용자 지정",
         provider: "제공자",
         baseUrl: "API 주소",
         model: "모델",

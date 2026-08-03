@@ -12,6 +12,7 @@ export const it: LocaleBundle = {
       agent: {
         title: "Agente",
         desc: "Quale modello usa l'agente e quanto può fare da solo.",
+        custom: "Personalizzato",
         provider: "Fornitore",
         baseUrl: "Indirizzo API",
         model: "Modello",

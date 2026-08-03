@@ -36,6 +36,14 @@ export function AgentTab() {
     setSaved(false);
   };
 
+  // 'custom' is a rendered option rather than a real preset: without it the Select finds
+  // no match for a hand-edited address and falls back to showing its placeholder, which
+  // reads as "nothing is configured" when in fact something is.
+  const presetOptions = [
+    ...PROVIDER_PRESETS.map((item) => ({ label: item.label, value: item.id })),
+    { label: t('settings.agent.custom'), value: 'custom' },
+  ];
+
   const applyPreset = (id: string) => {
     const chosen = PROVIDER_PRESETS.find((item) => item.id === id);
     if (!chosen) return;
@@ -77,7 +85,7 @@ export function AgentTab() {
           <Select
             value={preset?.id ?? 'custom'}
             onChange={applyPreset}
-            options={PROVIDER_PRESETS.map((item) => ({ label: item.label, value: item.id }))}
+            options={presetOptions}
           />
         </div>
 

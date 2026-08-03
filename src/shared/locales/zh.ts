@@ -12,6 +12,7 @@ export const zh: LocaleBundle = {
       agent: {
         title: "Agent",
         desc: "Agent 用哪个模型，以及它可以自己做到什么程度。",
+        custom: "自定义",
         provider: "服务商",
         baseUrl: "API 地址",
         model: "模型",

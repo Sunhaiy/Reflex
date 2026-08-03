@@ -15,6 +15,7 @@ export const en = {
       agent: {
         title: "Agent",
         desc: "Which model the agent uses, and how much it may do on its own.",
+        custom: "Custom",
         provider: "Provider",
         baseUrl: "API address",
         model: "Model",

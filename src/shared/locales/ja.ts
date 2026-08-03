@@ -12,6 +12,7 @@ export const ja: LocaleBundle = {
       agent: {
         title: "エージェント",
         desc: "使用するモデルと、どこまで自分で進めてよいか。",
+        custom: "カスタム",
         provider: "プロバイダー",
         baseUrl: "API アドレス",
         model: "モデル",
