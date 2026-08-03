@@ -1,5 +1,6 @@
 import type { Client, SFTPWrapper } from 'ssh2';
 import { logger } from '../logger';
+import { planUpload, uploadFiles, type TransferPlan, type UploadProgress } from './transfer';
 
 /** The agent needs the authenticated connection and nothing else from the session layer. */
 export interface FilesHost {
@@ -155,6 +156,31 @@ export class AgentFiles {
     const next = current.slice(0, first) + newString + current.slice(first + oldString.length);
     await this.write(path, next);
     return { replacedAt: current.slice(0, first).split('\n').length };
+  }
+
+  /**
+   * Pushes a whole project up. The channel stays owned here while the walking and the
+   * exclusion rules live in transfer.ts, which keeps that logic testable without a socket.
+   */
+  async uploadDirectory(
+    localRoot: string,
+    remoteRoot: string,
+    onProgress: (progress: UploadProgress) => void,
+    options: { maxFiles?: number; signal?: AbortSignal } = {},
+  ): Promise<TransferPlan> {
+    const plan = await planUpload(localRoot);
+    // Checked against the plan, before a single byte moves — refusing afterwards would
+    // report a limit that had already been exceeded.
+    if (options.maxFiles !== undefined && plan.files.length > options.maxFiles) {
+      throw new Error(
+        `${plan.files.length} files is more than one upload should carry; narrow the folder `
+        + 'or add exclusions to .gitignore',
+      );
+    }
+
+    await this.withSftp((sftp) =>
+      uploadFiles(sftp, localRoot, remoteRoot, plan.files, onProgress, options.signal));
+    return plan;
   }
 
   private async readWhole(path: string): Promise<string> {

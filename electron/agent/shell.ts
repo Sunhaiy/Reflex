@@ -20,6 +20,13 @@ export interface ShellResult {
 /** Streamed live so a long build is watchable rather than a three-minute blank. */
 export type ShellOutputListener = (chunk: string, stream: 'stdout' | 'stderr') => void;
 
+export interface RunOptions {
+  /** Runs in this directory without moving the persistent one. */
+  cwd?: string;
+  timeoutMs?: number;
+  onOutput?: ShellOutputListener;
+}
+
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 900_000;
 /** Batched at roughly one frame, matching how terminal output is forwarded. */
@@ -100,6 +107,10 @@ interface PendingCommand {
   sentinel: string;
   stdout: string;
   stderr: string;
+  onOutput?: ShellOutputListener;
+  /** Output waiting for the next flush, batched so one write is not one IPC message. */
+  queued: string;
+  flushTimer: NodeJS.Timeout | null;
   settle: (result: ShellResult) => void;
   fail: (error: Error) => void;
   timer: NodeJS.Timeout;
@@ -129,7 +140,6 @@ export class AgentShell {
   constructor(
     private readonly host: ShellHost,
     private readonly sessionId: string,
-    private readonly onOutput: ShellOutputListener,
   ) { }
 
   private openChannel(): Promise<ClientChannel> {
@@ -142,33 +152,19 @@ export class AgentShell {
       conn.exec('/bin/sh', (error, channel) => {
         if (error) return reject(error);
         this.channel = channel;
-
         let buffer = '';
-        let flushTimer: NodeJS.Timeout | null = null;
-        let queued = '';
-
-        // Output reaches the UI in frame-sized batches; a chatty build would otherwise
-        // put one IPC message on the wire per write.
-        const flush = () => {
-          flushTimer = null;
-          if (!queued) return;
-          const chunk = queued;
-          queued = '';
-          this.onOutput(chunk, 'stdout');
-        };
 
         channel.on('data', (data: Buffer) => {
-          const text = data.toString('utf-8');
-          buffer = this.consumeStdout(buffer + text, (visible) => {
-            queued += visible;
-            if (!flushTimer) flushTimer = setTimeout(flush, STREAM_FLUSH_MS);
-          });
+          buffer = this.consumeStdout(buffer + data.toString('utf-8'));
         });
 
         channel.stderr.on('data', (data: Buffer) => {
           const text = data.toString('utf-8');
-          if (this.pending) this.pending.stderr += text;
-          this.onOutput(text, 'stderr');
+          const pending = this.pending;
+          if (!pending) return;
+          pending.stderr += text;
+          // stderr is low-volume next to stdout, so it goes straight out unbatched.
+          pending.onOutput?.(text, 'stderr');
         });
 
         channel.on('close', () => this.handleChannelLoss(new Error('Shell channel closed')));
@@ -179,57 +175,69 @@ export class AgentShell {
     });
   }
 
-  private consumeStdout(buffer: string, emit: (visible: string) => void): string {
+  private consumeStdout(buffer: string): string {
     const pending = this.pending;
-    if (!pending) {
-      // Output with nothing waiting on it means the command already settled; show it.
-      emit(buffer);
-      return '';
-    }
+    // Output with nothing waiting on it belongs to a command that already settled.
+    if (!pending) return '';
 
     const frame = consumeFrame(buffer, pending.sentinel);
     if (frame.visible) {
       pending.stdout += frame.visible;
-      emit(frame.visible);
+      this.queue(pending, frame.visible);
     }
     if (frame.exitCode !== undefined) this.finish(pending, frame.exitCode, false);
     return frame.rest;
+  }
+
+  private queue(pending: PendingCommand, chunk: string) {
+    if (!pending.onOutput) return;
+    pending.queued += chunk;
+    if (!pending.flushTimer) {
+      pending.flushTimer = setTimeout(() => this.flush(pending), STREAM_FLUSH_MS);
+    }
+  }
+
+  private flush(pending: PendingCommand) {
+    if (pending.flushTimer) {
+      clearTimeout(pending.flushTimer);
+      pending.flushTimer = null;
+    }
+    if (!pending.queued) return;
+    const chunk = pending.queued;
+    pending.queued = '';
+    pending.onOutput?.(chunk, 'stdout');
+  }
+
+  private settle(pending: PendingCommand, exitCode: number | null, timedOut: boolean) {
+    // Flushed synchronously before the command ends, so a batch in flight cannot land
+    // after the next command has started and be attributed to it.
+    this.flush(pending);
+    const stdout = clampOutput(pending.stdout);
+    const stderr = clampOutput(pending.stderr);
+    pending.settle({
+      stdout: stdout.text,
+      stderr: stderr.text,
+      exitCode,
+      timedOut,
+      truncated: stdout.truncated || stderr.truncated,
+    });
   }
 
   private finish(pending: PendingCommand, exitCode: number | null, timedOut: boolean) {
     if (this.pending !== pending) return;
     this.pending = null;
     clearTimeout(pending.timer);
-
     // stderr is a separate stream and can land just after the stdout sentinel.
-    setTimeout(() => {
-      const stdout = clampOutput(pending.stdout);
-      const stderr = clampOutput(pending.stderr);
-      pending.settle({
-        stdout: stdout.text,
-        stderr: stderr.text,
-        exitCode,
-        timedOut,
-        truncated: stdout.truncated || stderr.truncated,
-      });
-    }, STDERR_DRAIN_MS);
+    setTimeout(() => this.settle(pending, exitCode, timedOut), STDERR_DRAIN_MS);
   }
 
   private handleChannelLoss(error: Error) {
-    const channel = this.channel;
-    this.channel = null;
-    if (channel) {
-      try {
-        channel.removeAllListeners();
-        channel.on('error', () => { /* swallow anything raised while tearing down */ });
-        channel.destroy();
-      } catch { /* the channel is being discarded either way */ }
-    }
-
+    this.resetChannel();
     const pending = this.pending;
     if (!pending) return;
     this.pending = null;
     clearTimeout(pending.timer);
+    if (pending.flushTimer) clearTimeout(pending.flushTimer);
     pending.fail(error);
   }
 
@@ -238,22 +246,18 @@ export class AgentShell {
    * rejection — to an agent an exit code is evidence, and throwing it away as an
    * exception string is how a fixable failure becomes an opaque one.
    */
-  run(command: string, options: { cwd?: string; timeoutMs?: number } = {}): Promise<ShellResult> {
+  run(command: string, options: RunOptions = {}): Promise<ShellResult> {
     const next = this.tail.then(() => this.runExclusive(command, options));
     // The queue must survive a failed command, or one rejection stalls every later call.
     this.tail = next.catch(() => undefined);
     return next;
   }
 
-  private async runExclusive(
-    command: string,
-    options: { cwd?: string; timeoutMs?: number },
-  ): Promise<ShellResult> {
+  private async runExclusive(command: string, options: RunOptions): Promise<ShellResult> {
     if (this.disposed) throw new Error('Agent shell has been closed');
 
     const channel = await this.openChannel();
-    const sequence = ++this.sequence;
-    const sentinel = `__RFX_${this.token}_${sequence}__`;
+    const sentinel = `__RFX_${this.token}_${++this.sequence}__`;
     const timeoutMs = Math.min(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
     // A subshell keeps `cwd` scoped to this one command while leaving a bare `cd` the
@@ -267,23 +271,18 @@ export class AgentShell {
         sentinel,
         stdout: '',
         stderr: '',
+        onOutput: options.onOutput,
+        queued: '',
+        flushTimer: null,
         settle,
         fail,
         timer: setTimeout(() => {
           // Without a PTY there is no signal to send, so the channel goes. The remote
           // process may outlive it — the result says so, and the agent can go kill it.
           logger.error(`[Agent] Command timed out after ${timeoutMs}ms: ${command.slice(0, 120)}`);
-          const stdout = clampOutput(pending.stdout);
-          const stderr = clampOutput(pending.stderr);
           this.pending = null;
           this.resetChannel();
-          settle({
-            stdout: stdout.text,
-            stderr: stderr.text,
-            exitCode: null,
-            timedOut: true,
-            truncated: stdout.truncated || stderr.truncated,
-          });
+          this.settle(pending, null, true);
         }, timeoutMs),
       };
 
@@ -316,6 +315,7 @@ export class AgentShell {
     if (pending) {
       this.pending = null;
       clearTimeout(pending.timer);
+      if (pending.flushTimer) clearTimeout(pending.flushTimer);
       pending.fail(new Error('Agent shell closed'));
     }
     this.resetChannel();
