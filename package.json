@@ -70,6 +70,7 @@
     ]
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/eb-garamond": "^5.3.0",
     "@fontsource-variable/figtree": "^5.3.0",
@@ -101,6 +102,8 @@
     "clsx": "^2.1.0",
     "electron-store": "^8.1.0",
     "iconv-lite": "^0.7.3",
+    "ignore": "^7.0.6",
+    "openai": "^7.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ssh2": "^1.15.0",
