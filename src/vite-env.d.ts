@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 import type { StoreKey } from './shared/storeKeys';
 import type {
+  AgentConfig,
+  AgentConfigView,
+  AgentEvent,
+  ApprovalAnswer,
+} from './shared/agent';
+import type {
   ActivityLine,
   ActivityScope,
   DockerAction,
@@ -41,6 +47,26 @@ declare global {
       sftpReadFile: (id: string, path: string) => Promise<RemoteFilePayload>;
       sftpWriteFile: (id: string, path: string, content: string, encoding?: string) => Promise<void>;
       getPathForFile: (file: File) => string;
+      agentConfigGet: () => Promise<AgentConfigView>;
+      agentConfigSet: (patch: Partial<AgentConfig> & { apiKey?: string }) => Promise<AgentConfigView>;
+      agentTest: () => Promise<{ ok: true } | { ok: false; error: string }>;
+      agentSend: (payload: {
+        sessionId: string;
+        serverLabel: string;
+        message: string;
+        localRoot: string | null;
+      }) => Promise<{ ok: true } | { ok: false; error: string }>;
+      agentAnswer: (payload: {
+        sessionId: string;
+        callId: string;
+        answer: ApprovalAnswer;
+      }) => Promise<boolean>;
+      agentCancel: (sessionId: string) => void;
+      agentReset: (sessionId: string) => Promise<void>;
+      agentPickFolder: () => Promise<string | null>;
+      onAgentEvent: (
+        callback: (payload: { sessionId: string; event: AgentEvent }) => void,
+      ) => () => void;
       openDialog: () => Promise<string | undefined>;
       saveDialog: (defaultName: string) => Promise<string | undefined>;
       showItemInFolder: (filePath: string) => Promise<void>;

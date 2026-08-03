@@ -8,6 +8,7 @@ import { STORE_KEYS } from '../src/shared/storeKeys.js';
 import { mergeUsageDelta, normalizeUsageStats } from '../src/shared/usage.js';
 import { SSHManager } from './ssh/sshManager.js';
 import { getLogDirectory, getLogFilePath, readRecentLog, writeLog, type LogLevel } from './logger.js';
+import { registerAgentHandlers } from './agent/ipc.js';
 
 const store = new Store();
 
@@ -328,7 +329,14 @@ export function setupIpcHandlers() {
     }
   });
 
+  const agent = registerAgentHandlers(
+    { getConnection: (sessionId) => sshManager.getConnection(sessionId) },
+    store,
+  );
+
   ipcMain.handle('ssh-disconnect', (_event, sessionId: string) => {
+    // The agent's channels ride the same connection, so they go with it.
+    agent.dispose(sessionId);
     sshManager.disconnect(sessionId);
   });
 

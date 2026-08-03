@@ -313,6 +313,15 @@ export class SSHManager {
         this.webContentsBySession.delete(id);
     }
 
+    /**
+     * The authenticated connection, for the agent to open its own channels on. This is
+     * the whole of the agent's dependency on the session layer: it shares the connection
+     * and nothing else, because the methods here are shaped for the UI rather than for it.
+     */
+    getConnection(id: string) {
+        return this.connections.get(id);
+    }
+
     write(id: string, data: string) {
         const stream = this.streams.get(id);
         if (stream) stream.write(data);

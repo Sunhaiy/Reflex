@@ -9,6 +9,10 @@
  * vendor.
  */
 
+import type { ProviderKind } from '../../../src/shared/agent';
+
+export type { ProviderKind };
+
 export interface TextPart {
   type: 'text';
   text: string;
@@ -87,7 +91,6 @@ export interface Provider {
   complete(request: CompletionRequest, events: CompletionEvents): Promise<CompletionResult>;
 }
 
-export type ProviderKind = 'anthropic' | 'openai';
 
 export interface ProviderConfig {
   kind: ProviderKind;

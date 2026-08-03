@@ -1,19 +1,9 @@
 import { decide, type AgentMode } from './approval';
 import { findTool, TOOL_DEFINITIONS, type ToolContext } from './tools';
 import type { Message, MessagePart, Provider, ToolCallPart, ToolResultPart } from './providers/types';
+import type { ApprovalAnswer, ApprovalQuestion } from '../../src/shared/agent';
 
-/** What the user answered when asked to approve one call. */
-export type ApprovalAnswer = 'allow' | 'always' | 'deny';
-
-export interface ApprovalQuestion {
-  callId: string;
-  tool: string;
-  command?: string;
-  input: Record<string, unknown>;
-  reason: string;
-  /** Empty when this kind cannot be remembered; the UI hides "always allow" then. */
-  group: string;
-}
+export type { ApprovalAnswer, ApprovalQuestion };
 
 export interface AgentEvents {
   onText(delta: string): void;
@@ -36,9 +26,11 @@ export interface RunOptions {
 }
 
 export interface RunOutcome {
-  stopReason: 'done' | 'max_turns' | 'aborted' | 'denied';
+  stopReason: 'done' | 'max_turns' | 'aborted';
   turns: number;
   usage: { inputTokens: number; outputTokens: number };
+  /** The history including this run, for the caller to carry into the next message. */
+  messages: Message[];
 }
 
 const DEFAULT_MAX_TURNS = 60;
@@ -66,7 +58,7 @@ export async function runAgent(
   let turns = 0;
 
   while (turns < maxTurns) {
-    if (signal.aborted) return { stopReason: 'aborted', turns, usage };
+    if (signal.aborted) return { stopReason: 'aborted', turns, usage, messages };
     turns += 1;
 
     const result = await provider.complete(
@@ -86,18 +78,18 @@ export async function runAgent(
     assistantParts.push(...result.toolCalls);
     if (assistantParts.length > 0) messages.push({ role: 'assistant', parts: assistantParts });
 
-    if (result.toolCalls.length === 0) return { stopReason: 'done', turns, usage };
+    if (result.toolCalls.length === 0) return { stopReason: 'done', turns, usage, messages };
 
     const results: ToolResultPart[] = [];
     for (const call of result.toolCalls) {
-      if (signal.aborted) return { stopReason: 'aborted', turns, usage };
+      if (signal.aborted) return { stopReason: 'aborted', turns, usage, messages };
       results.push(await executeCall(call, { mode, context, events, allowedGroups }));
     }
 
     messages.push({ role: 'tool', parts: results });
   }
 
-  return { stopReason: 'max_turns', turns, usage };
+  return { stopReason: 'max_turns', turns, usage, messages };
 }
 
 interface ExecuteDeps {

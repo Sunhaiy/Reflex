@@ -7,7 +7,10 @@
  * — an over-broad `rm`, a stray `systemctl stop ssh` — stop and ask.
  */
 
-export type AgentMode = 'readonly' | 'ask' | 'auto';
+
+import type { AgentMode } from '../../src/shared/agent';
+
+export type { AgentMode };
 
 export type Decision =
   | { verdict: 'allow' }
