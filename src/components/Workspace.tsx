@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { TerminalConnecting } from './ConnectingOverlay';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ResizableLayout } from './ResizableLayout';
+import { AgentDock } from './agent/AgentDock';
 import type { SessionStatus } from '../shared/types';
 
 const RightPanel = lazy(() => import('./RightPanel').then((module) => ({ default: module.RightPanel })));
@@ -10,6 +11,8 @@ const TerminalView = lazy(() => import('./TerminalView').then((module) => ({ def
 
 interface WorkspaceProps {
   sessionId: string;
+  /** What the connection is called, so the agent can name it back. */
+  serverLabel: string;
   status: SessionStatus;
   /** False while another tab is in front; the panes stay mounted regardless. */
   active: boolean;
@@ -20,7 +23,7 @@ interface WorkspaceProps {
  * rather than unmounted: tearing these down on a tab switch dropped the terminal's
  * scrollback and the monitor's collected history, so switching back meant a reload.
  */
-export function Workspace({ sessionId, status, active }: WorkspaceProps) {
+export function Workspace({ sessionId, serverLabel, status, active }: WorkspaceProps) {
   return (
     <div
       className="absolute inset-0 flex flex-col"
@@ -37,13 +40,15 @@ export function Workspace({ sessionId, status, active }: WorkspaceProps) {
           }
           middleContent={
             <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background/28">
-              <div className="relative min-h-0 flex-1 overflow-hidden">
+              {/* The agent shares this column with the terminal rather than taking one of
+                  its own: the two are read together, and the charts keep their width. */}
+              <AgentDock sessionId={sessionId} serverLabel={serverLabel}>
                 <ErrorBoundary name="Terminal">
                   <Suspense fallback={null}>
                     <TerminalView connectionId={sessionId} />
                   </Suspense>
                 </ErrorBoundary>
-              </div>
+              </AgentDock>
               {status === 'connecting' && <TerminalConnecting connectionId={sessionId} />}
             </div>
           }

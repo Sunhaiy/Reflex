@@ -191,6 +191,7 @@ function App() {
                 <Workspace
                   key={session.uniqueId}
                   sessionId={session.uniqueId}
+                  serverLabel={session.connection.name}
                   status={session.status}
                   active={page === 'workspace' && session.uniqueId === activeSessionId}
                 />

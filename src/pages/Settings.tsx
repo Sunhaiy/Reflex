@@ -1,5 +1,5 @@
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
-import { ComputerTerminal01Icon, PaintBoardIcon, Settings01Icon } from '@hugeicons/core-free-icons';
+import { ComputerTerminal01Icon, PaintBoardIcon, Settings01Icon, SparklesIcon } from '@hugeicons/core-free-icons';
 
 import { useEffect, useState } from 'react';
 
@@ -13,9 +13,10 @@ import { useTranslation } from '../hooks/useTranslation';
 import { loadAllFonts } from '../lib/fontLoader';
 import { AppearanceTab } from './settings/AppearanceTab';
 import { AppTab } from './settings/AppTab';
+import { AgentTab } from './settings/AgentTab';
 import { TerminalTab } from './settings/TerminalTab';
 
-type SettingsTab = 'app' | 'appearance' | 'terminal';
+type SettingsTab = 'app' | 'appearance' | 'terminal' | 'agent';
 
 export function Settings() {
   // The picker previews each option in its own typeface, so this is the moment
@@ -67,6 +68,7 @@ export function Settings() {
     app: t('settings.tabs.app'),
     appearance: t('settings.tabs.appearance'),
     terminal: t('settings.tabs.terminal'),
+    agent: t('settings.tabs.agent'),
   };
 
   useEffect(() => {
@@ -77,6 +79,7 @@ export function Settings() {
     { id: 'app', label: copy.app, description: '', icon: Settings01Icon },
     { id: 'appearance', label: copy.appearance, description: '', icon: PaintBoardIcon },
     { id: 'terminal', label: copy.terminal, description: t('settings.terminal.fontFamilyDesc'), icon: ComputerTerminal01Icon },
+    { id: 'agent', label: copy.agent, description: t('settings.agent.desc'), icon: SparklesIcon },
   ];
 
   const tabGroups: Array<{ label: string; items: typeof tabs }> = [{ label: '', items: tabs }];
@@ -148,6 +151,7 @@ export function Settings() {
           {activeTab === 'appearance' && <AppearanceTab />}
           {activeTab === 'terminal' && <TerminalTab />}
           {activeTab === 'app' && <AppTab />}
+          {activeTab === 'agent' && <AgentTab />}
           <div className="h-4" />
         </div>
       </main>
