@@ -350,6 +350,7 @@ export const en = {
       noSelection: "No selection",
     },
     agent: {
+      compacted: "Earlier steps were folded into a summary to stay inside the context window.",
       context: "Context",
       contextTitle: "{used} of {budget} tokens carried into the last request. Older command output is dropped past this.",
       dockBottom: "Move under the terminal",

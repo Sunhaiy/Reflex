@@ -33,6 +33,12 @@ export function estimateTokens(messages: Message[]): number {
   return Math.ceil(characters / 4);
 }
 
+/** How much of the conversation is folded when dropping output is not enough. */
+const FOLD_FRACTION = 0.6;
+
+/** Below this there is nothing worth folding; two exchanges summarise to no less. */
+const MIN_FOLDABLE = 6;
+
 function stub(part: Extract<MessagePart, { type: 'tool_result' }>): MessagePart {
   const lines = part.content.split('\n').length;
   return {
@@ -90,4 +96,67 @@ export function compactHistory(
   }
 
   return compacted;
+}
+
+/** Flattens a stretch of the conversation into something a model can be asked about. */
+export function transcribe(messages: Message[]): string {
+  const lines: string[] = [];
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === 'text') lines.push(`${message.role}: ${part.text}`);
+      if (part.type === 'tool_call') {
+        lines.push(`${message.role} called ${part.name}: ${JSON.stringify(part.input).slice(0, 500)}`);
+      }
+      if (part.type === 'tool_result') {
+        lines.push(`result${part.isError ? ' (failed)' : ''}: ${part.content.slice(0, 800)}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+export const SUMMARY_MARKER = '[Earlier in this task]';
+
+/**
+ * Folds the older part of the conversation into a written summary.
+ *
+ * The reason this exists at all: dropping tool output stops helping once the transcript
+ * is mostly the model's own reasoning, and at that point trimming has nothing left to
+ * take. Folding is lossy in a way dropping output is not, so it is the fallback and not
+ * the first move.
+ *
+ * The opening message is always kept verbatim — it is the task, and a summary of the goal
+ * is exactly the thing that must not drift.
+ *
+ * `summarise` is injected rather than called directly so this can be tested without a
+ * provider, and so the caller decides which model pays for it.
+ */
+export async function foldOldest(
+  messages: Message[],
+  summarise: (transcript: string) => Promise<string>,
+): Promise<Message[]> {
+  if (messages.length < MIN_FOLDABLE) return messages;
+
+  const cut = Math.max(1, Math.floor(messages.length * FOLD_FRACTION));
+  const [task, ...rest] = messages;
+  const older = rest.slice(0, cut - 1);
+  const recent = rest.slice(cut - 1);
+  if (older.length === 0) return messages;
+
+  const summary = await summarise(transcribe(older));
+  if (!summary.trim()) return messages;
+
+  return [
+    task,
+    { role: 'user', parts: [{ type: 'text', text: `${SUMMARY_MARKER}\n${summary.trim()}` }] },
+    // A tool turn cannot open a stretch of history: its results would answer calls that
+    // are no longer there. Anything orphaned that way is folded in with the older half.
+    ...dropLeadingToolResults(recent),
+  ];
+}
+
+function dropLeadingToolResults(messages: Message[]): Message[] {
+  let start = 0;
+  while (start < messages.length && messages[start].role === 'tool') start += 1;
+  return messages.slice(start);
 }

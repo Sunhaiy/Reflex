@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactHistory, estimateTokens } from '../context';
+import { compactHistory, estimateTokens, foldOldest, SUMMARY_MARKER, transcribe } from '../context';
 import type { Message } from '../providers/types';
 
 function conversation(resultCount: number, resultChars: number): Message[] {
@@ -105,5 +105,65 @@ describe('estimateTokens', () => {
 
   it('is zero for an empty conversation', () => {
     expect(estimateTokens([])).toBe(0);
+  });
+});
+
+describe('foldOldest', () => {
+  const summarise = async (transcript: string) => `summary of ${transcript.split('\n').length} lines`;
+
+  it('leaves a short conversation alone — there is nothing worth folding', async () => {
+    const messages = conversation(1, 100);
+    expect(await foldOldest(messages, summarise)).toBe(messages);
+  });
+
+  it('keeps the opening message verbatim', async () => {
+    // It is the task. A summary of the goal is the one thing that must not drift.
+    const folded = await foldOldest(conversation(10, 100), summarise);
+    expect(folded[0]).toEqual({ role: 'user', parts: [{ type: 'text', text: 'deploy the blog' }] });
+  });
+
+  it('replaces the older half with one marked summary', async () => {
+    const folded = await foldOldest(conversation(10, 100), summarise);
+    const second = folded[1];
+
+    expect(second.role).toBe('user');
+    expect(second.parts[0]).toMatchObject({ type: 'text' });
+    expect((second.parts[0] as { text: string }).text).toContain(SUMMARY_MARKER);
+    expect(folded.length).toBeLessThan(conversation(10, 100).length);
+  });
+
+  it('never leaves a tool result answering a call that was folded away', async () => {
+    // A tool turn opening the kept history would reference tool_use ids that no longer
+    // exist, which every provider rejects.
+    const folded = await foldOldest(conversation(10, 100), summarise);
+    expect(folded.slice(2).findIndex((message) => message.role === 'tool')).not.toBe(0);
+  });
+
+  it('keeps the conversation as it was when the summary comes back empty', async () => {
+    const messages = conversation(10, 100);
+    expect(await foldOldest(messages, async () => '   ')).toBe(messages);
+  });
+});
+
+describe('transcribe', () => {
+  it('renders text, calls and results as readable lines', () => {
+    const text = transcribe([
+      { role: 'assistant', parts: [
+        { type: 'text', text: 'checking docker' },
+        { type: 'tool_call', id: 'c1', name: 'shell', input: { command: 'docker ps' } },
+      ] },
+      { role: 'tool', parts: [{ type: 'tool_result', id: 'c1', content: 'no containers', isError: false }] },
+    ]);
+
+    expect(text).toContain('assistant: checking docker');
+    expect(text).toContain('called shell');
+    expect(text).toContain('result: no containers');
+  });
+
+  it('marks a failed result as failed', () => {
+    const text = transcribe([
+      { role: 'tool', parts: [{ type: 'tool_result', id: 'c1', content: 'boom', isError: true }] },
+    ]);
+    expect(text).toContain('result (failed): boom');
   });
 });

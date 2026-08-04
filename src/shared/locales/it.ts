@@ -347,6 +347,7 @@ export const it: LocaleBundle = {
       noSelection: "Nessuna selezione",
     },
     agent: {
+      compacted: "I passaggi precedenti sono stati riassunti per restare nella finestra di contesto.",
       context: "Contesto",
       contextTitle: "{used} di {budget} token nell'ultima richiesta. Oltre, l'output dei comandi più vecchi viene scartato.",
       dockBottom: "Sposta sotto il terminale",

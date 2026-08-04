@@ -74,6 +74,7 @@ export type AgentEvent =
   | { type: 'tool_end'; callId: string; output: string; isError: boolean }
   | { type: 'approval'; question: ApprovalQuestion }
   | { type: 'usage'; inputTokens: number; outputTokens: number }
+  | { type: 'compacted' }
   | { type: 'done'; stopReason: AgentStopReason; turns: number }
   | { type: 'error'; message: string };
 

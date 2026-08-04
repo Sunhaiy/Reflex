@@ -1,5 +1,5 @@
 import { decide, type AgentMode } from './approval';
-import { compactHistory } from './context';
+import { compactHistory, estimateTokens, foldOldest } from './context';
 import { findTool, TOOL_DEFINITIONS, type ToolContext } from './tools';
 import type { Message, MessagePart, Provider, ToolCallPart, ToolResultPart } from './providers/types';
 import type { ApprovalAnswer, ApprovalQuestion } from '../../src/shared/agent';
@@ -7,6 +7,8 @@ import type { ApprovalAnswer, ApprovalQuestion } from '../../src/shared/agent';
 export type { ApprovalAnswer, ApprovalQuestion };
 
 export interface AgentEvents {
+  /** The older half was folded into a summary; the panel says so. */
+  onCompacted(): void;
   onText(delta: string): void;
   onToolStart(call: ToolCallPart): void;
   onToolOutput(callId: string, chunk: string): void;
@@ -64,16 +66,22 @@ export async function runAgent(
     if (signal.aborted) return { stopReason: 'aborted', turns, usage, messages };
     turns += 1;
 
-    // Compacted per turn rather than mutated in place: the full transcript stays intact
-    // for the panel and for the next turn's decision, while what goes on the wire loses
-    // the output of commands the model has long since acted on.
+    // Dropping old output is tried first and costs nothing. Folding the conversation
+    // into a summary is lossy and costs a request, so it only happens once trimming has
+    // nothing left to take — and it rewrites the stored history, so it happens once
+    // rather than on every subsequent turn.
+    let outgoing = compactHistory(messages, { maxTokens: options.contextBudget });
+    if (estimateTokens(outgoing) > (options.contextBudget ?? Infinity)) {
+      const folded = await foldOldest(messages, (transcript) => summarise(provider, transcript, signal));
+      if (folded !== messages) {
+        messages.splice(0, messages.length, ...folded);
+        outgoing = compactHistory(messages, { maxTokens: options.contextBudget });
+        events.onCompacted();
+      }
+    }
+
     const result = await provider.complete(
-      {
-        system,
-        messages: compactHistory(messages, { maxTokens: options.contextBudget }),
-        tools: TOOL_DEFINITIONS,
-        signal,
-      },
+      { system, messages: outgoing, tools: TOOL_DEFINITIONS, signal },
       {
         onText: (delta) => events.onText(delta),
         onToolCall: (call) => events.onToolStart(call),
@@ -101,6 +109,28 @@ export async function runAgent(
   }
 
   return { stopReason: 'max_turns', turns, usage, messages };
+}
+
+/**
+ * Asks the same model to write the summary. No tools are offered: this is a reading
+ * task, and a model handed a shell here would try to verify what it was summarising.
+ */
+async function summarise(provider: Provider, transcript: string, signal: AbortSignal): Promise<string> {
+  const result = await provider.complete(
+    {
+      system: 'You are compacting the record of a server deployment so the work can '
+        + 'continue without it. Write a brief for whoever picks this up: what was asked, '
+        + 'what has been done and verified, what failed and why, what state the server is '
+        + 'in now, and what is left. Keep every path, port, service name, package version '
+        + 'and command that still matters — those cannot be recovered once this is gone. '
+        + 'Drop the narration. Write prose, no preamble.',
+      messages: [{ role: 'user', parts: [{ type: 'text', text: transcript }] }],
+      tools: [],
+      signal,
+    },
+    { onText: () => undefined, onToolCall: () => undefined },
+  );
+  return result.text;
 }
 
 interface ExecuteDeps {

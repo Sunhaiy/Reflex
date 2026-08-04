@@ -84,6 +84,7 @@ class AgentConversation {
             type: 'tool_end', callId, output, isError,
           }),
           onUsage: (usage) => emit(this.sessionId, { type: 'usage', ...usage }),
+          onCompacted: () => emit(this.sessionId, { type: 'compacted' }),
           ask: (question) => this.askUser(question, emit),
         },
       });

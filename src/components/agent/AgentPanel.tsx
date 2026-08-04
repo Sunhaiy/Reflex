@@ -17,7 +17,7 @@ import { CompactMenu } from './CompactMenu';
 import { ApprovalCard } from './ApprovalCard';
 import { ToolCard } from './ToolCard';
 
-const iconButton = 'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.08] hover:text-foreground';
+const iconButton = 'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.08] hover:text-foreground';
 
 /**
  * The controls live along the bottom of the composer rather than in a header of their
@@ -98,6 +98,14 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             );
           }
 
+          if (block.kind === 'compacted') {
+            return (
+              <p key={block.id} className="border-t border-dashed border-border/50 pt-2 text-[11px] leading-5 text-muted-foreground">
+                {t('agent.compacted')}
+              </p>
+            );
+          }
+
           if (block.kind === 'stopped') {
             return (
               <p key={block.id} className="text-[11px] leading-5 text-muted-foreground">
@@ -129,7 +137,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
               onClick={() => void agent.shareFolder()}
               className="mt-1.5 flex h-7 items-center gap-1.5 rounded-lg bg-foreground/[0.07] px-2.5 text-[11px] font-medium transition-colors hover:bg-foreground/[0.12]"
             >
-              <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5" />
+              <HugeiconsIcon icon={FolderOpenIcon} className="h-4 w-4" />
               {t('agent.shareFolder')}
             </button>
           </div>
@@ -156,13 +164,13 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             }}
             rows={1}
             placeholder={t('agent.placeholder')}
-            className="max-h-32 min-h-[24px] w-full resize-none bg-transparent px-2.5 pt-2 text-[12px] leading-[1.5] outline-none placeholder:text-muted-foreground/70"
+            className="max-h-40 min-h-[46px] w-full resize-none bg-transparent px-3 pt-2.5 text-[12.5px] leading-[1.55] outline-none placeholder:text-muted-foreground/70"
           />
 
-          <div className="flex items-center gap-1 px-1.5 pb-1.5">
+          <div className="flex items-center gap-1.5 px-2 pb-2">
             <CompactMenu
               value={mode}
-              tone={mode === 'free' ? 'alert' : 'default'}
+              tone={mode === 'free' ? 'alert' : 'accent'}
               options={AGENT_MODES.map((option) => ({
                 value: option,
                 label: t(MODE_LABEL[option]),
@@ -193,7 +201,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
                   budget: budget.toLocaleString(),
                 })}
                 className={cn(
-                  'shrink-0 px-1 font-mono text-[10px] tabular-nums',
+                  'shrink-0 px-1 font-mono text-[10.5px] tabular-nums',
                   contextShare >= 0.9 ? 'text-amber-500' : 'text-muted-foreground/70',
                 )}
               >
@@ -216,12 +224,12 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             </button>
 
             <button type="button" onClick={agent.reset} title={t('agent.newTask')} className={iconButton}>
-              <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
+              <HugeiconsIcon icon={PlusSignIcon} className="h-4 w-4" />
             </button>
 
             {agent.busy ? (
               <button type="button" onClick={agent.stop} title={t('agent.stop')} className={iconButton}>
-                <HugeiconsIcon icon={StopIcon} className="h-3.5 w-3.5" />
+                <HugeiconsIcon icon={StopIcon} className="h-4 w-4" />
               </button>
             ) : (
               <button
@@ -231,7 +239,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
                 title={t('agent.send')}
                 className={cn(iconButton, 'disabled:opacity-35 disabled:hover:bg-transparent')}
               >
-                <HugeiconsIcon icon={SentIcon} className="h-3.5 w-3.5" />
+                <HugeiconsIcon icon={SentIcon} className="h-4 w-4" />
               </button>
             )}
           </div>

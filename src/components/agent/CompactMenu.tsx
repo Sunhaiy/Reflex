@@ -24,8 +24,11 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
   value: string;
   options: CompactMenuOption[];
   onChange: (value: string) => void;
-  /** `alert` marks a setting whose consequences the user should keep noticing. */
-  tone?: 'default' | 'alert';
+  /**
+   * `accent` is the theme colour, for the control the user reaches for most.
+   * `alert` marks a setting whose consequences they should keep noticing.
+   */
+  tone?: 'default' | 'accent' | 'alert';
   title?: string;
   maxWidth?: number;
 }) {
@@ -77,14 +80,14 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
         onClick={() => setOpen((current) => !current)}
         style={maxWidth ? { maxWidth } : undefined}
         className={cn(
-          'flex h-6 min-w-0 items-center gap-1 rounded-lg px-2 text-[10.5px] font-medium transition-colors',
-          tone === 'alert'
-            ? 'bg-rose-500 text-white hover:bg-rose-500/90'
-            : 'bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1]',
+          'flex h-7 min-w-0 items-center gap-1 rounded-lg px-2.5 text-[11.5px] font-medium transition-colors',
+          tone === 'alert' && 'bg-rose-500 text-white hover:bg-rose-500/90',
+          tone === 'accent' && 'bg-primary text-primary-foreground hover:bg-primary/90',
+          tone === 'default' && 'bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1]',
         )}
       >
         <span className="truncate">{selected?.label ?? value}</span>
-        <HugeiconsIcon icon={ArrowDown01Icon} className="h-2.5 w-2.5 shrink-0 opacity-60" />
+        <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 shrink-0 opacity-60" />
       </button>
 
       {open && position && createPortal(
@@ -96,7 +99,7 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
             bottom: openUpward ? window.innerHeight - position.top : undefined,
             minWidth: position.width,
           }}
-          className="glass-panel fixed z-[9999] max-h-56 max-w-[340px] overflow-y-auto rounded-xl p-1"
+          className="glass-panel fixed z-[9999] max-h-64 max-w-[340px] overflow-y-auto rounded-xl p-1"
         >
           {options.map((option) => (
             <button
@@ -121,7 +124,7 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
                 )}
               />
               <span className="min-w-0">
-                <span className="block truncate text-[11px] font-medium">{option.label}</span>
+                <span className="block truncate text-[11.5px] font-medium">{option.label}</span>
                 {option.hint && (
                   <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
                     {option.hint}

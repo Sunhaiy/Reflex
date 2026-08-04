@@ -347,6 +347,7 @@ export const ja: LocaleBundle = {
       noSelection: "未選択",
     },
     agent: {
+      compacted: "コンテキストに収めるため、以前の手順は要約にまとめられました。",
       context: "コンテキスト",
       contextTitle: "直前のリクエストで {used} / {budget} トークン。超えると古いコマンド出力が落とされます。",
       dockBottom: "ターミナルの下へ",

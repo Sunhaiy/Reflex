@@ -24,6 +24,8 @@ export type AgentBlock =
   | { kind: 'note'; id: string; text: string; tone: 'error' | 'muted' }
   /** The loop gave up rather than finished; the panel translates the count itself. */
   | { kind: 'stopped'; id: string; turns: number }
+  /** The older half was folded into a summary to stay inside the window. */
+  | { kind: 'compacted'; id: string }
   | {
     kind: 'tool';
     id: string;
@@ -217,6 +219,10 @@ function apply(
           ? { ...block, result: event.output, isError: event.isError, done: true }
           : block
       )));
+      return;
+
+    case 'compacted':
+      setBlocks((current) => [...current, { kind: 'compacted', id: nextId() }]);
       return;
 
     case 'approval':

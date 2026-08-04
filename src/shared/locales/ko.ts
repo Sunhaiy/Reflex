@@ -347,6 +347,7 @@ export const ko: LocaleBundle = {
       noSelection: "선택 없음",
     },
     agent: {
+      compacted: "컨텍스트 창에 맞추기 위해 이전 단계를 요약으로 접었습니다.",
       context: "컨텍스트",
       contextTitle: "마지막 요청에 {used} / {budget} 토큰. 넘으면 오래된 명령 출력이 삭제됩니다.",
       dockBottom: "터미널 아래로",

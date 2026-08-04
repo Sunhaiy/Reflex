@@ -347,6 +347,7 @@ export const zh: LocaleBundle = {
       noSelection: "未选择项目",
     },
     agent: {
+      compacted: "更早的步骤已压缩成摘要，以留在上下文窗口内。",
       context: "上下文",
       contextTitle: "上一次请求带了 {used} / {budget} token。超过之后旧命令的输出会被丢掉。",
       dockBottom: "移到终端下方",
