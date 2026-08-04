@@ -18,6 +18,8 @@ export const ko: LocaleBundle = {
         modelsFound: "이 엔드포인트에서 {count}개",
         modelsNone: "이 엔드포인트는 대화 가능한 모델을 반환하지 않았습니다.",
         modelFilter: "입력해 필터링",
+        contextBudget: "컨텍스트 예산",
+        contextBudgetDesc: "기록으로 가져갈 토큰 수. 넘으면 오래된 명령 출력을 버립니다. 사용하는 모델의 창보다 작게 설정하세요.",
         provider: "제공자",
         baseUrl: "API 주소",
         model: "모델",
@@ -345,6 +347,8 @@ export const ko: LocaleBundle = {
       noSelection: "선택 없음",
     },
     agent: {
+      context: "컨텍스트",
+      contextTitle: "마지막 요청에 {used} / {budget} 토큰. 넘으면 오래된 명령 출력이 삭제됩니다.",
       dockBottom: "터미널 아래로",
       dockRight: "오른쪽 열로",
       tabCharts: "차트",

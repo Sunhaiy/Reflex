@@ -25,6 +25,7 @@ export interface SendOptions {
   mode: AgentMode;
   localRoot: string | null;
   provider: Provider;
+  contextBudget: number;
 }
 
 /**
@@ -64,6 +65,7 @@ class AgentConversation {
           serverLabel: options.serverLabel,
         }),
         mode: options.mode,
+        contextBudget: options.contextBudget,
         context: {
           shell: this.shell,
           files: this.files,

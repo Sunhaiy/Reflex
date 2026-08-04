@@ -59,6 +59,7 @@ export function AgentTab() {
       baseUrl: config.baseUrl,
       model: config.model,
       mode: config.mode,
+      contextBudget: config.contextBudget,
       // Left out when untouched, so saving a model change never clears a stored key.
       ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
     });
@@ -143,6 +144,21 @@ export function AgentTab() {
                 : t('settings.agent.modelsNone')}
             </p>
           </div>
+        </div>
+
+        <div className="grid grid-cols-[1fr_320px] items-center gap-6 border-t border-border/45 pt-4">
+          <FieldLabel
+            title={t('settings.agent.contextBudget')}
+            description={t('settings.agent.contextBudgetDesc')}
+          />
+          <Input
+            type="number"
+            min={8000}
+            step={10000}
+            value={config.contextBudget}
+            onChange={(event) => patch({ contextBudget: Number(event.target.value) || 0 })}
+            className="font-mono text-xs"
+          />
         </div>
 
         <div className="grid grid-cols-[1fr_320px] items-start gap-6 border-t border-border/45 pt-4">

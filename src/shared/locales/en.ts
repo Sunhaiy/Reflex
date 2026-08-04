@@ -21,6 +21,8 @@ export const en = {
         modelsFound: "{count} models from this endpoint",
         modelsNone: "This endpoint returned no models you can chat with.",
         modelFilter: "Type to filter",
+        contextBudget: "Context budget",
+        contextBudgetDesc: "Tokens of history to carry before old command output is dropped. Set it below your model's window — a large window can afford a larger number.",
         provider: "Provider",
         baseUrl: "API address",
         model: "Model",
@@ -348,6 +350,8 @@ export const en = {
       noSelection: "No selection",
     },
     agent: {
+      context: "Context",
+      contextTitle: "{used} of {budget} tokens carried into the last request. Older command output is dropped past this.",
       dockBottom: "Move under the terminal",
       dockRight: "Move to the right column",
       tabCharts: "Charts",

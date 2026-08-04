@@ -18,6 +18,8 @@ export const it: LocaleBundle = {
         modelsFound: "{count} modelli da questo endpoint",
         modelsNone: "Questo endpoint non ha restituito modelli conversazionali.",
         modelFilter: "Scrivi per filtrare",
+        contextBudget: "Budget di contesto",
+        contextBudgetDesc: "Token di cronologia da portare prima di scartare l'output dei comandi più vecchi. Impostalo sotto la finestra del tuo modello.",
         provider: "Fornitore",
         baseUrl: "Indirizzo API",
         model: "Modello",
@@ -345,6 +347,8 @@ export const it: LocaleBundle = {
       noSelection: "Nessuna selezione",
     },
     agent: {
+      context: "Contesto",
+      contextTitle: "{used} di {budget} token nell'ultima richiesta. Oltre, l'output dei comandi più vecchi viene scartato.",
       dockBottom: "Sposta sotto il terminale",
       dockRight: "Sposta nella colonna destra",
       tabCharts: "Grafici",

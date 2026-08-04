@@ -73,6 +73,7 @@ export function registerAgentHandlers(host: AgentIpcHost, store: ConfigStore) {
       serverLabel: serverLabel || 'this server',
       message,
       mode: getConfigView(store).mode,
+      contextBudget: getConfigView(store).contextBudget,
       localRoot: localRoot || null,
       provider,
     });

@@ -18,6 +18,8 @@ export const zh: LocaleBundle = {
         modelsFound: "从这个地址拉到 {count} 个模型",
         modelsNone: "这个地址没有返回可对话的模型。",
         modelFilter: "输入可筛选",
+        contextBudget: "上下文预算",
+        contextBudgetDesc: "携带多少 token 的历史，超过就丢弃旧命令的输出。填低于你所用模型的窗口——窗口大就可以填大一些。",
         provider: "服务商",
         baseUrl: "API 地址",
         model: "模型",
@@ -345,6 +347,8 @@ export const zh: LocaleBundle = {
       noSelection: "未选择项目",
     },
     agent: {
+      context: "上下文",
+      contextTitle: "上一次请求带了 {used} / {budget} token。超过之后旧命令的输出会被丢掉。",
       dockBottom: "移到终端下方",
       dockRight: "移到右侧栏",
       tabCharts: "图表",

@@ -23,6 +23,8 @@ export interface RunOptions {
   events: AgentEvents;
   /** Stops a model that has started looping; each turn is one provider call. */
   maxTurns?: number;
+  /** Tokens of history to carry before old tool output is dropped. */
+  contextBudget?: number;
   signal: AbortSignal;
 }
 
@@ -66,7 +68,12 @@ export async function runAgent(
     // for the panel and for the next turn's decision, while what goes on the wire loses
     // the output of commands the model has long since acted on.
     const result = await provider.complete(
-      { system, messages: compactHistory(messages), tools: TOOL_DEFINITIONS, signal },
+      {
+        system,
+        messages: compactHistory(messages, { maxTokens: options.contextBudget }),
+        tools: TOOL_DEFINITIONS,
+        signal,
+      },
       {
         onText: (delta) => events.onText(delta),
         onToolCall: (call) => events.onToolStart(call),

@@ -40,6 +40,8 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
   const mode = agent.config?.mode ?? 'ask';
   const dock = agent.config?.dock ?? 'bottom';
   const models = agent.config?.models ?? [];
+  const budget = agent.config?.contextBudget ?? 60_000;
+  const contextShare = budget > 0 ? agent.contextTokens / budget : 0;
 
   const submit = () => {
     if (!draft.trim() || agent.busy) return;
@@ -180,6 +182,24 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
                 : [{ value: agent.config?.model ?? '', label: t('agent.noModels') }]}
               onChange={(next) => agent.setModel(next)}
             />
+
+            {/* Measured, not estimated: the endpoint's own count for the last request.
+                Shown so the point where old output starts being dropped is visible
+                rather than something the agent silently absorbs. */}
+            {agent.contextTokens > 0 && (
+              <span
+                title={t('agent.contextTitle', {
+                  used: agent.contextTokens.toLocaleString(),
+                  budget: budget.toLocaleString(),
+                })}
+                className={cn(
+                  'shrink-0 px-1 font-mono text-[10px] tabular-nums',
+                  contextShare >= 0.9 ? 'text-amber-500' : 'text-muted-foreground/70',
+                )}
+              >
+                {Math.round(agent.contextTokens / 1000)}k
+              </span>
+            )}
 
             <div className="flex-1" />
 

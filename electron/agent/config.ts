@@ -26,6 +26,7 @@ const DEFAULT_CONFIG: AgentConfig = {
   model: 'claude-opus-5',
   mode: 'ask',
   dock: 'bottom',
+  contextBudget: 60_000,
   models: [],
 };
 
@@ -72,6 +73,7 @@ export function getConfigView(store: ConfigStore): AgentConfigView {
     model: config.model,
     mode: config.mode,
     dock: config.dock,
+    contextBudget: config.contextBudget || 60_000,
     models: config.models ?? [],
     hasKey: key.length > 0,
     keyHint: key ? key.slice(-4) : '',
@@ -87,6 +89,7 @@ export function saveConfig(store: ConfigStore, patch: Partial<AgentConfig> & { a
     model: (patch.model ?? current.model).trim(),
     mode: patch.mode ?? current.mode,
     dock: patch.dock ?? current.dock,
+    contextBudget: Math.max(8_000, patch.contextBudget ?? current.contextBudget ?? 60_000),
     models: patch.models ?? current.models ?? [],
     apiKey: patch.apiKey === undefined ? current.apiKey : encrypt(patch.apiKey.trim()),
   };

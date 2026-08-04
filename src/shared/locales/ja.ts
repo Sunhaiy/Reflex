@@ -18,6 +18,8 @@ export const ja: LocaleBundle = {
         modelsFound: "このエンドポイントから {count} 件",
         modelsNone: "このエンドポイントは対話可能なモデルを返しませんでした。",
         modelFilter: "入力で絞り込み",
+        contextBudget: "コンテキスト予算",
+        contextBudgetDesc: "履歴として運ぶトークン数。超えると古いコマンド出力を破棄します。使用モデルのウィンドウより小さく設定してください。",
         provider: "プロバイダー",
         baseUrl: "API アドレス",
         model: "モデル",
@@ -345,6 +347,8 @@ export const ja: LocaleBundle = {
       noSelection: "未選択",
     },
     agent: {
+      context: "コンテキスト",
+      contextTitle: "直前のリクエストで {used} / {budget} トークン。超えると古いコマンド出力が落とされます。",
       dockBottom: "ターミナルの下へ",
       dockRight: "右カラムへ",
       tabCharts: "グラフ",

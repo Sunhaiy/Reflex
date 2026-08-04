@@ -30,6 +30,14 @@ export interface AgentConfig {
   mode: AgentMode;
   dock: AgentDockPosition;
   /**
+   * How many tokens of history to carry before old tool output starts being dropped.
+   *
+   * A setting rather than a constant because the window is a property of the model, and
+   * the model is the user's choice: trimming a million-token model at sixty thousand
+   * throws away output the agent could still have used.
+   */
+  contextBudget: number;
+  /**
    * What the endpoint said it serves, from the last sync. Stored rather than re-fetched
    * so the panel can offer a switch without a round trip, and so one address can carry
    * the several models it actually has.
