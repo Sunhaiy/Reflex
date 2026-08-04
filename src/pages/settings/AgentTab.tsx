@@ -7,7 +7,7 @@ import { Select } from '../../components/ui/select';
 import { cn } from '../../lib/utils';
 import { errorMessage } from '../../lib/errors';
 import { useTranslation } from '../../hooks/useTranslation';
-import { AGENT_MODES, EFFORT_LABEL, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
+import { AGENT_MODES, EFFORT_NAME, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
 import { PROVIDER_PRESETS, REASONING_EFFORTS, type AgentConfigView, type ReasoningEffort } from '../../shared/agent';
 import { FieldLabel, SettingsCard } from './controls';
 
@@ -155,7 +155,7 @@ export function AgentTab() {
           <Select
             value={config.effort}
             onChange={(value) => patch({ effort: value as ReasoningEffort })}
-            options={REASONING_EFFORTS.map((option) => ({ label: t(EFFORT_LABEL[option]), value: option }))}
+            options={REASONING_EFFORTS.map((option) => ({ label: EFFORT_NAME[option], value: option }))}
           />
         </div>
 

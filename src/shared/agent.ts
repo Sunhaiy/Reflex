@@ -27,9 +27,9 @@ export type AgentMode = 'readonly' | 'ask' | 'auto' | 'free';
  * differently by each protocol and several compatible gateways reject request bodies
  * carrying anything they do not recognise.
  */
-export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh'];
+export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 /** Where the panel lives: under the terminal, or as a tab in the right column. */
 export type AgentDockPosition = 'bottom' | 'right';

@@ -12,7 +12,7 @@ import { cn } from '../../lib/utils';
 import type { AgentController } from '../../hooks/useAgent';
 import { useTranslation } from '../../hooks/useTranslation';
 import type { AgentMode } from '../../shared/agent';
-import { AGENT_MODES, EFFORT_LABEL, MODE_HINT, MODE_LABEL } from './modes';
+import { AGENT_MODES, EFFORT_NAME, MODE_HINT, MODE_LABEL } from './modes';
 import { CompactMenu } from './CompactMenu';
 import { ContextRing } from './ContextRing';
 import { EffortSlider } from './EffortSlider';
@@ -195,12 +195,12 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
 
             <CompactMenu
               value={effort}
-              label={t(EFFORT_LABEL[effort])}
+              label={EFFORT_NAME[effort]}
               title={t('settings.agent.effort')}
               panel={<EffortSlider value={effort} onChange={agent.setEffort} />}
             />
 
-            <ContextRing used={agent.contextTokens} budget={budget} />
+            <ContextRing used={agent.contextTokens} budget={budget} spent={agent.spentTokens} />
 
             <div className="flex-1" />
 

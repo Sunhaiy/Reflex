@@ -54,6 +54,8 @@ export function useAgent(sessionId: string, serverLabel: string) {
   const [needsFolder, setNeedsFolder] = useState(false);
   // Measured, not estimated: what the endpoint charged for the last turn's input.
   const [contextTokens, setContextTokens] = useState(0);
+  // Input and output across the whole conversation, which is what it has cost.
+  const [spentTokens, setSpentTokens] = useState(0);
 
   // Read once per mount and refreshed after the settings page writes, so the panel knows
   // whether a key exists without ever being able to read it.
@@ -76,7 +78,10 @@ export function useAgent(sessionId: string, serverLabel: string) {
     return window.electron.onAgentEvent(({ sessionId: from, event }) => {
       if (from !== sessionId) return;
       apply(event, setBlocks, setPending, setBusy);
-      if (event.type === 'usage') setContextTokens(event.inputTokens);
+      if (event.type === 'usage') {
+        setContextTokens(event.inputTokens);
+        setSpentTokens((current) => current + event.inputTokens + event.outputTokens);
+      }
 
       if (event.type === 'tool_start' && event.tool === 'shell') {
         shellCalls.add(event.callId);
@@ -129,6 +134,7 @@ export function useAgent(sessionId: string, serverLabel: string) {
     setPending(null);
     setBusy(false);
     setContextTokens(0);
+    setSpentTokens(0);
   }, [sessionId]);
 
   /**
@@ -170,6 +176,7 @@ export function useAgent(sessionId: string, serverLabel: string) {
     stop,
     reset,
     contextTokens,
+    spentTokens,
     needsFolder,
     refreshConfig,
     setDock,

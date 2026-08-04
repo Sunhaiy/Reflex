@@ -17,10 +17,18 @@ export const MODE_HINT: Record<AgentMode, string> = {
   free: 'agent.modeFreeHint',
 };
 
-export const EFFORT_LABEL: Record<ReasoningEffort, string> = {
-  auto: 'agent.effortAuto',
-  low: 'agent.effortLow',
-  medium: 'agent.effortMedium',
-  high: 'agent.effortHigh',
-  xhigh: 'agent.effortXhigh',
+/**
+ * Tier names, not translations.
+ *
+ * The value on the wire is fixed by the providers — `low` through `max` and nothing else,
+ * since anything they do not recognise is a 400 — so the ladder is named rather than
+ * described, and reads the same in every language.
+ */
+export const EFFORT_NAME: Record<ReasoningEffort, string> = {
+  auto: 'Auto',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Ultra',
+  max: 'Max',
 };
