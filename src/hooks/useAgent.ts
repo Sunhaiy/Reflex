@@ -3,9 +3,11 @@ import { errorMessage } from '../lib/errors';
 import { log } from '../lib/logger';
 import { echoAgentCommand, echoAgentOutput, echoAgentResult } from '../lib/terminalEcho';
 import type {
+  AgentConfig,
   AgentConfigView,
   AgentDockPosition,
   AgentMode,
+  ReasoningEffort,
   AgentEvent,
   ApprovalAnswer,
   ApprovalQuestion,
@@ -129,21 +131,26 @@ export function useAgent(sessionId: string, serverLabel: string) {
     setContextTokens(0);
   }, [sessionId]);
 
-  // Written through and read back, so the panel and the settings page can never disagree
-  // about what is configured.
-  const setMode = useCallback((mode: AgentMode) => {
-    void window.electron.agentConfigSet({ mode }).then(setConfig);
-  }, []);
+  /**
+   * Applied locally first, and the reply is not written back.
+   *
+   * Two settings changed in quick succession race otherwise: each reply carries the whole
+   * record as it was when that request was served, so an earlier reply landing last
+   * silently reverts the later change — which is how picking a model could put the mode
+   * back to what it had been.
+   */
+  const patchConfig = useCallback((patch: Partial<AgentConfig>) => {
+    setConfig((current) => (current ? { ...current, ...patch } : current));
+    void window.electron.agentConfigSet(patch).catch((error) => {
+      log.error('[Agent] Could not save the agent settings', error);
+      refreshConfig();
+    });
+  }, [refreshConfig]);
 
-  const setModel = useCallback((model: string) => {
-    void window.electron.agentConfigSet({ model }).then(setConfig);
-  }, []);
-
-  const setDock = useCallback((dock: AgentDockPosition) => {
-    // Written through so the choice survives a restart, and read back so the panel and
-    // the settings page cannot disagree about where it lives.
-    void window.electron.agentConfigSet({ dock }).then(setConfig);
-  }, []);
+  const setMode = useCallback((mode: AgentMode) => patchConfig({ mode }), [patchConfig]);
+  const setModel = useCallback((model: string) => patchConfig({ model }), [patchConfig]);
+  const setEffort = useCallback((effort: ReasoningEffort) => patchConfig({ effort }), [patchConfig]);
+  const setDock = useCallback((dock: AgentDockPosition) => patchConfig({ dock }), [patchConfig]);
 
   const shareFolder = useCallback(async () => {
     const picked = await window.electron.agentPickFolder().catch(() => null);
@@ -166,6 +173,7 @@ export function useAgent(sessionId: string, serverLabel: string) {
     needsFolder,
     refreshConfig,
     setDock,
+    setEffort,
     setMode,
     setModel,
     shareFolder,

@@ -9,7 +9,7 @@
  * vendor.
  */
 
-import type { ProviderKind } from '../../../src/shared/agent';
+import type { ProviderKind, ReasoningEffort } from '../../../src/shared/agent';
 
 export type { ProviderKind };
 
@@ -104,6 +104,7 @@ export interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  effort: ReasoningEffort;
 }
 
 /** Thrown when a provider rejects the request; the loop turns it into a visible error. */

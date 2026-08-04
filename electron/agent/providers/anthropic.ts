@@ -40,10 +40,16 @@ export class AnthropicProvider implements Provider {
           system: [{ type: 'text', text: request.system, cache_control: { type: 'ephemeral' } }],
           tools: request.tools.map(toAnthropicTool),
           messages: request.messages.map(toAnthropicMessage),
-          // `thinking` is deliberately unset: the user may name any model here, and the
-          // config that suits one errors on another. Omitting it runs adaptive thinking
-          // on models where that is the default and no thinking elsewhere — never a 400.
-        },
+          // Unset unless asked for. The user may name any model here and the thinking
+          // config that suits one returns a 400 on another, so omitting it is the only
+          // choice that is safe across all of them.
+          ...(this.config.effort !== 'auto'
+            ? {
+              thinking: { type: 'adaptive' as const },
+              output_config: { effort: this.config.effort },
+            }
+            : {}),
+        } as Anthropic.MessageStreamParams,
         { signal: request.signal },
       );
 

@@ -25,6 +25,7 @@ const DEFAULT_CONFIG: AgentConfig = {
   baseUrl: 'https://api.anthropic.com',
   model: 'claude-opus-5',
   mode: 'ask',
+  effort: 'auto',
   dock: 'bottom',
   contextBudget: 60_000,
   models: [],
@@ -72,6 +73,7 @@ export function getConfigView(store: ConfigStore): AgentConfigView {
     baseUrl: config.baseUrl,
     model: config.model,
     mode: config.mode,
+    effort: config.effort ?? 'auto',
     dock: config.dock,
     contextBudget: config.contextBudget || 60_000,
     models: config.models ?? [],
@@ -88,6 +90,7 @@ export function saveConfig(store: ConfigStore, patch: Partial<AgentConfig> & { a
     baseUrl: (patch.baseUrl ?? current.baseUrl).trim(),
     model: (patch.model ?? current.model).trim(),
     mode: patch.mode ?? current.mode,
+    effort: patch.effort ?? current.effort ?? 'auto',
     dock: patch.dock ?? current.dock,
     contextBudget: Math.max(8_000, patch.contextBudget ?? current.contextBudget ?? 60_000),
     models: patch.models ?? current.models ?? [],
@@ -109,6 +112,7 @@ export function createProvider(store: ConfigStore): Provider {
     baseUrl: config.baseUrl,
     apiKey,
     model: config.model,
+    effort: config.effort ?? 'auto',
   };
   return config.kind === 'anthropic'
     ? new AnthropicProvider(resolved)

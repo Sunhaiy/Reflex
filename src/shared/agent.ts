@@ -20,6 +20,17 @@ export type ProviderKind = 'anthropic' | 'openai';
  */
 export type AgentMode = 'readonly' | 'ask' | 'auto' | 'free';
 
+/**
+ * How hard the model should think before answering.
+ *
+ * `auto` sends nothing at all, which is the only safe default: the field is spelled
+ * differently by each protocol and several compatible gateways reject request bodies
+ * carrying anything they do not recognise.
+ */
+export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh';
+
+export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh'];
+
 /** Where the panel lives: under the terminal, or as a tab in the right column. */
 export type AgentDockPosition = 'bottom' | 'right';
 
@@ -28,6 +39,7 @@ export interface AgentConfig {
   baseUrl: string;
   model: string;
   mode: AgentMode;
+  effort: ReasoningEffort;
   dock: AgentDockPosition;
   /**
    * How many tokens of history to carry before old tool output starts being dropped.

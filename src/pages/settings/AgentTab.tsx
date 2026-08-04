@@ -7,8 +7,8 @@ import { Select } from '../../components/ui/select';
 import { cn } from '../../lib/utils';
 import { errorMessage } from '../../lib/errors';
 import { useTranslation } from '../../hooks/useTranslation';
-import { AGENT_MODES, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
-import { PROVIDER_PRESETS, type AgentConfigView } from '../../shared/agent';
+import { AGENT_MODES, EFFORT_LABEL, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
+import { PROVIDER_PRESETS, REASONING_EFFORTS, type AgentConfigView, type ReasoningEffort } from '../../shared/agent';
 import { FieldLabel, SettingsCard } from './controls';
 
 type TestState = { state: 'idle' } | { state: 'running' } | { state: 'ok' } | { state: 'failed'; error: string };
@@ -59,6 +59,7 @@ export function AgentTab() {
       baseUrl: config.baseUrl,
       model: config.model,
       mode: config.mode,
+      effort: config.effort,
       contextBudget: config.contextBudget,
       // Left out when untouched, so saving a model change never clears a stored key.
       ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
@@ -144,6 +145,18 @@ export function AgentTab() {
                 : t('settings.agent.modelsNone')}
             </p>
           </div>
+        </div>
+
+        <div className="grid grid-cols-[1fr_320px] items-center gap-6 border-t border-border/45 pt-4">
+          <FieldLabel
+            title={t('settings.agent.effort')}
+            description={t('agent.effortAutoHint')}
+          />
+          <Select
+            value={config.effort}
+            onChange={(value) => patch({ effort: value as ReasoningEffort })}
+            options={REASONING_EFFORTS.map((option) => ({ label: t(EFFORT_LABEL[option]), value: option }))}
+          />
         </div>
 
         <div className="grid grid-cols-[1fr_320px] items-center gap-6 border-t border-border/45 pt-4">

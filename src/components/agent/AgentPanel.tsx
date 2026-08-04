@@ -11,8 +11,8 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import type { AgentController } from '../../hooks/useAgent';
 import { useTranslation } from '../../hooks/useTranslation';
-import type { AgentMode } from '../../shared/agent';
-import { AGENT_MODES, MODE_HINT, MODE_LABEL } from './modes';
+import { REASONING_EFFORTS, type AgentMode, type ReasoningEffort } from '../../shared/agent';
+import { AGENT_MODES, EFFORT_LABEL, MODE_HINT, MODE_LABEL } from './modes';
 import { CompactMenu } from './CompactMenu';
 import { ApprovalCard } from './ApprovalCard';
 import { ToolCard } from './ToolCard';
@@ -42,6 +42,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
   const models = agent.config?.models ?? [];
   const budget = agent.config?.contextBudget ?? 60_000;
   const contextShare = budget > 0 ? agent.contextTokens / budget : 0;
+  const effort = agent.config?.effort ?? 'auto';
 
   const submit = () => {
     if (!draft.trim() || agent.busy) return;
@@ -167,10 +168,10 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             className="max-h-40 min-h-[46px] w-full resize-none bg-transparent px-3 pt-2.5 text-[12.5px] leading-[1.55] outline-none placeholder:text-muted-foreground/70"
           />
 
-          <div className="flex items-center gap-1.5 px-2 pb-2">
+          <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2">
             <CompactMenu
               value={mode}
-              tone={mode === 'free' ? 'alert' : 'accent'}
+              tone="accent"
               options={AGENT_MODES.map((option) => ({
                 value: option,
                 label: t(MODE_LABEL[option]),
@@ -191,10 +192,21 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
               onChange={(next) => agent.setModel(next)}
             />
 
+            <CompactMenu
+              value={effort}
+              title={t(EFFORT_LABEL[effort])}
+              options={REASONING_EFFORTS.map((option) => ({
+                value: option,
+                label: t(EFFORT_LABEL[option]),
+                hint: option === 'auto' ? t('agent.effortAutoHint') : t('agent.effortHintOther'),
+              }))}
+              onChange={(next) => agent.setEffort(next as ReasoningEffort)}
+            />
+
             {/* Measured, not estimated: the endpoint's own count for the last request.
-                Shown so the point where old output starts being dropped is visible
-                rather than something the agent silently absorbs. */}
-            {agent.contextTokens > 0 && (
+                Always shown, so the budget is something you can watch approach rather
+                than something you discover by output going missing. */}
+            {(
               <span
                 title={t('agent.contextTitle', {
                   used: agent.contextTokens.toLocaleString(),
@@ -205,7 +217,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
                   contextShare >= 0.9 ? 'text-amber-500' : 'text-muted-foreground/70',
                 )}
               >
-                {Math.round(agent.contextTokens / 1000)}k
+                {Math.round(agent.contextTokens / 1000)}k/{Math.round(budget / 1000)}k
               </span>
             )}
 

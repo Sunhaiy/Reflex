@@ -45,10 +45,13 @@ export class OpenAIProvider implements Provider {
             ...request.messages.flatMap(toOpenAIMessages),
           ],
           tools: request.tools.map(toOpenAITool),
-          // `stream_options: {include_usage: true}` is deliberately not sent: several
-          // compatible endpoints reject unknown fields outright, and losing the token
-          // count is a far smaller problem than losing the request.
-        },
+          // Only sent when the user asked for it. The field is not in every compatible
+          // endpoint's schema, and the ones that validate strictly reject the whole
+          // request over an unknown key — so the default costs nothing.
+          ...(this.config.effort !== 'auto' ? { reasoning_effort: this.config.effort } : {}),
+          // `stream_options: {include_usage: true}` is deliberately not sent for the same
+          // reason; losing a token count is a far smaller problem than losing the request.
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
         { signal: request.signal },
       );
 
