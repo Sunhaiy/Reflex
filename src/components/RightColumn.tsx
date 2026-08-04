@@ -46,7 +46,7 @@ export function RightColumn({ sessionId, active, agent, agentDocked }: {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {option === 'charts' ? t('monitor.title') : t('agent.title')}
+              {option === 'charts' ? t('agent.tabCharts') : t('agent.title')}
             </button>
           ))}
         </div>

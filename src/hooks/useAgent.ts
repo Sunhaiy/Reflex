@@ -44,6 +44,9 @@ export function useAgent(sessionId: string, serverLabel: string) {
   const [pending, setPending] = useState<ApprovalQuestion | null>(null);
   const [config, setConfig] = useState<AgentConfigView | null>(null);
   const [localRoot, setLocalRoot] = useState<string | null>(null);
+  // Set when a local tool fails for want of one, so the panel can offer the picker at
+  // the moment it matters instead of parking a button in the header for every session.
+  const [needsFolder, setNeedsFolder] = useState(false);
 
   // Read once per mount and refreshed after the settings page writes, so the panel knows
   // whether a key exists without ever being able to read it.
@@ -77,6 +80,10 @@ export function useAgent(sessionId: string, serverLabel: string) {
       }
       if (event.type === 'tool_end' && shellCalls.delete(event.callId)) {
         echoAgentResult(sessionId, event.isError);
+      }
+      if (event.type === 'tool_end' && event.isError
+        && event.output.includes('No local folder has been shared')) {
+        setNeedsFolder(true);
       }
     });
   }, [sessionId]);
@@ -115,6 +122,10 @@ export function useAgent(sessionId: string, serverLabel: string) {
     setBusy(false);
   }, [sessionId]);
 
+  const setModel = useCallback((model: string) => {
+    void window.electron.agentConfigSet({ model }).then(setConfig);
+  }, []);
+
   const setDock = useCallback((dock: AgentDockPosition) => {
     // Written through so the choice survives a restart, and read back so the panel and
     // the settings page cannot disagree about where it lives.
@@ -123,7 +134,9 @@ export function useAgent(sessionId: string, serverLabel: string) {
 
   const shareFolder = useCallback(async () => {
     const picked = await window.electron.agentPickFolder().catch(() => null);
-    if (picked) setLocalRoot(picked);
+    if (!picked) return;
+    setLocalRoot(picked);
+    setNeedsFolder(false);
   }, []);
 
   return {
@@ -136,8 +149,10 @@ export function useAgent(sessionId: string, serverLabel: string) {
     answer,
     stop,
     reset,
+    needsFolder,
     refreshConfig,
     setDock,
+    setModel,
     shareFolder,
     clearFolder: useCallback(() => setLocalRoot(null), []),
   };

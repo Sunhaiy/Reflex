@@ -1,10 +1,10 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
-  FolderOpenIcon,
   AlignBoxBottomCenterIcon,
+  AlignBoxMiddleRightIcon,
+  FolderOpenIcon,
   PlusSignIcon,
   SentIcon,
-  AlignBoxMiddleRightIcon,
   StopIcon,
 } from '@hugeicons/core-free-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import type { AgentController } from '../../hooks/useAgent';
 import { useTranslation } from '../../hooks/useTranslation';
 import type { AgentMode } from '../../shared/agent';
 import { AGENT_MODES, MODE_HINT, MODE_LABEL } from './modes';
+import { HeaderMenu } from './HeaderMenu';
 import { ApprovalCard } from './ApprovalCard';
 import { ToolCard } from './ToolCard';
 
@@ -41,44 +42,33 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
     setDraft('');
   };
 
-  const folderName = agent.localRoot?.split(/[\\/]/).filter(Boolean).pop() ?? '';
+  const models = agent.config?.models ?? [];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border/45 px-2.5 py-1.5">
-        <div className="flex items-center gap-0.5 rounded-lg bg-foreground/[0.045] p-0.5">
-          {AGENT_MODES.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setMode(option)}
-              title={t(MODE_HINT[option])}
-              className={cn(
-                'h-6 rounded-md px-2 text-[10.5px] font-medium transition-colors',
-                mode !== option && 'text-muted-foreground hover:text-foreground',
-                // Free mode wears a different colour on purpose: nothing else on screen
-                // will tell you the guard rails are off once you stop looking here.
-                mode === option && (option === 'free'
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-foreground text-background'),
-              )}
-            >
-              {t(MODE_LABEL[option])}
-            </button>
-          ))}
-        </div>
+      <header className="flex shrink-0 items-center gap-1.5 border-b border-border/45 px-2 py-1.5">
+        <HeaderMenu
+          value={mode}
+          tone={mode === 'free' ? 'alert' : 'default'}
+          options={AGENT_MODES.map((option) => ({
+            value: option,
+            label: t(MODE_LABEL[option]),
+            hint: t(MODE_HINT[option]),
+          }))}
+          onChange={(next) => setMode(next as AgentMode)}
+        />
 
-        <button
-          type="button"
-          onClick={() => (agent.localRoot ? agent.clearFolder() : void agent.shareFolder())}
-          title={agent.localRoot ? t('agent.folderClear') : t('agent.folderHint')}
-          className="flex h-6 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[10.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-        >
-          <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">
-            {agent.localRoot ? t('agent.folderShared', { name: folderName }) : t('agent.folderNone')}
-          </span>
-        </button>
+        {/* Switching model is a panel-level decision, not a settings trip: which model
+            suits a task changes with the task. The list is whatever the last sync found. */}
+        <HeaderMenu
+          value={agent.config?.model ?? ''}
+          title={t('agent.model')}
+          maxWidth={150}
+          options={models.length > 0
+            ? models.map((id) => ({ value: id, label: id }))
+            : [{ value: agent.config?.model ?? '', label: t('agent.noModels') }]}
+          onChange={(next) => agent.setModel(next)}
+        />
 
         <div className="flex-1" />
 
@@ -86,7 +76,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
           type="button"
           onClick={() => agent.setDock(dock === 'bottom' ? 'right' : 'bottom')}
           title={dock === 'bottom' ? t('agent.dockRight') : t('agent.dockBottom')}
-          className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <HugeiconsIcon
             icon={dock === 'bottom' ? AlignBoxMiddleRightIcon : AlignBoxBottomCenterIcon}
@@ -98,7 +88,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
           type="button"
           onClick={agent.reset}
           title={t('agent.newTask')}
-          className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
         </button>
@@ -170,6 +160,23 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             </ToolCard>
           );
         })}
+
+        {/* Folder sharing is asked for at the moment it is needed rather than sitting in
+            the header. It is only relevant when deploying from this machine, which is a
+            fraction of what the agent gets asked to do. */}
+        {agent.needsFolder && !agent.localRoot && (
+          <div className="rounded-xl border border-border/55 bg-foreground/[0.03] px-2.5 py-2">
+            <p className="text-[11px] leading-5 text-muted-foreground">{t('agent.needFolder')}</p>
+            <button
+              type="button"
+              onClick={() => void agent.shareFolder()}
+              className="mt-1.5 flex h-7 items-center gap-1.5 rounded-lg bg-foreground/[0.07] px-2.5 text-[11px] font-medium transition-colors hover:bg-foreground/[0.12]"
+            >
+              <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5" />
+              {t('agent.shareFolder')}
+            </button>
+          </div>
+        )}
       </div>
 
       {agent.config && !agent.config.hasKey && (

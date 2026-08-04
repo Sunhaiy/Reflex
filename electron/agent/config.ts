@@ -3,7 +3,7 @@ import { logger } from '../logger';
 import { AnthropicProvider } from './providers/anthropic';
 import { OpenAIProvider } from './providers/openai';
 import type { Provider, ProviderConfig } from './providers/types';
-import type { AgentConfig, AgentConfigView } from '../../src/shared/agent';
+import { isChatModel, type AgentConfig, type AgentConfigView } from '../../src/shared/agent';
 
 /**
  * Deliberately absent from STORE_KEYS.
@@ -26,6 +26,7 @@ const DEFAULT_CONFIG: AgentConfig = {
   model: 'claude-opus-5',
   mode: 'ask',
   dock: 'bottom',
+  models: [],
 };
 
 /** Minimal surface so this module does not depend on how the store is constructed. */
@@ -71,6 +72,7 @@ export function getConfigView(store: ConfigStore): AgentConfigView {
     model: config.model,
     mode: config.mode,
     dock: config.dock,
+    models: config.models ?? [],
     hasKey: key.length > 0,
     keyHint: key ? key.slice(-4) : '',
   };
@@ -85,6 +87,7 @@ export function saveConfig(store: ConfigStore, patch: Partial<AgentConfig> & { a
     model: (patch.model ?? current.model).trim(),
     mode: patch.mode ?? current.mode,
     dock: patch.dock ?? current.dock,
+    models: patch.models ?? current.models ?? [],
     apiKey: patch.apiKey === undefined ? current.apiKey : encrypt(patch.apiKey.trim()),
   };
   store.set(CONFIG_KEY, next);
@@ -120,7 +123,11 @@ export async function listModels(
   store: ConfigStore,
 ): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
   try {
-    return { ok: true, models: await createProvider(store).listModels() };
+    // Filtered here rather than in the settings page, so the panel's switcher and the
+    // count shown after a sync are reading the same list.
+    const models = (await createProvider(store).listModels()).filter(isChatModel);
+    saveConfig(store, { models });
+    return { ok: true, models };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }

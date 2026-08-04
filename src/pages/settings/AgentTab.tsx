@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
 import { errorMessage } from '../../lib/errors';
 import { useTranslation } from '../../hooks/useTranslation';
 import { AGENT_MODES, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
-import { isChatModel, PROVIDER_PRESETS, type AgentConfigView } from '../../shared/agent';
+import { PROVIDER_PRESETS, type AgentConfigView } from '../../shared/agent';
 import { FieldLabel, SettingsCard } from './controls';
 
 type TestState = { state: 'idle' } | { state: 'running' } | { state: 'ok' } | { state: 'failed'; error: string };
@@ -19,7 +19,6 @@ export function AgentTab() {
   const [apiKey, setApiKey] = useState('');
   const [test, setTest] = useState<TestState>({ state: 'idle' });
   const [saved, setSaved] = useState(false);
-  const [models, setModels] = useState<string[] | null>(null);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -30,13 +29,6 @@ export function AgentTab() {
 
   const preset = PROVIDER_PRESETS.find(
     (item) => item.kind === config.kind && item.baseUrl === config.baseUrl,
-  );
-
-  // The model field is the filter too; an exact match shows the whole list again so a
-  // chosen model does not hide its neighbours.
-  const needle = config.model.trim().toLowerCase();
-  const matching = (models ?? []).filter(
-    (id) => !needle || id === config.model || id.toLowerCase().includes(needle),
   );
 
   const patch = (next: Partial<AgentConfigView>) => {
@@ -85,8 +77,8 @@ export function AgentTab() {
     try {
       await save();
       const result = await window.electron.agentModels();
-      setModels(result.ok ? result.models.filter(isChatModel) : []);
-      if (!result.ok) setTest({ state: 'failed', error: result.error });
+      if (result.ok) setConfig(await window.electron.agentConfigGet());
+      else setTest({ state: 'failed', error: result.error });
     } finally {
       setSyncing(false);
     }
@@ -132,7 +124,6 @@ export function AgentTab() {
                 value={config.model}
                 onChange={(event) => patch({ model: event.target.value })}
                 spellCheck={false}
-                placeholder={models ? t('settings.agent.modelFilter') : undefined}
                 className="font-mono text-xs"
               />
               <Button
@@ -146,34 +137,11 @@ export function AgentTab() {
               </Button>
             </div>
 
-            {models && (
-              <div className="rounded-xl border border-border/55 bg-background/35">
-                <p className="border-b border-border/45 px-2.5 py-1.5 text-[10.5px] text-muted-foreground">
-                  {models.length > 0
-                    ? t('settings.agent.modelsFound', { count: models.length })
-                    : t('settings.agent.modelsNone')}
-                </p>
-                {/* The model field doubles as the filter, so a twenty-model gateway is
-                    narrowed by typing rather than by scrolling. */}
-                <div className="max-h-48 overflow-y-auto p-1">
-                  {matching.map((id) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => patch({ model: id })}
-                      className={cn(
-                        'block w-full truncate rounded-lg px-2 py-1 text-left font-mono text-[11px] transition-colors',
-                        id === config.model
-                          ? 'bg-foreground/[0.09] text-foreground'
-                          : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground',
-                      )}
-                    >
-                      {id}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <p className="text-[11px] text-muted-foreground">
+              {config.models.length > 0
+                ? t('settings.agent.modelsFound', { count: config.models.length })
+                : t('settings.agent.modelsNone')}
+            </p>
           </div>
         </div>
 

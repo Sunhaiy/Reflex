@@ -29,6 +29,12 @@ export interface AgentConfig {
   model: string;
   mode: AgentMode;
   dock: AgentDockPosition;
+  /**
+   * What the endpoint said it serves, from the last sync. Stored rather than re-fetched
+   * so the panel can offer a switch without a round trip, and so one address can carry
+   * the several models it actually has.
+   */
+  models: string[];
 }
 
 /** What the settings page may see. There is no channel that returns the key itself. */
