@@ -1,4 +1,5 @@
 import { decide, type AgentMode } from './approval';
+import { compactHistory } from './context';
 import { findTool, TOOL_DEFINITIONS, type ToolContext } from './tools';
 import type { Message, MessagePart, Provider, ToolCallPart, ToolResultPart } from './providers/types';
 import type { ApprovalAnswer, ApprovalQuestion } from '../../src/shared/agent';
@@ -61,8 +62,11 @@ export async function runAgent(
     if (signal.aborted) return { stopReason: 'aborted', turns, usage, messages };
     turns += 1;
 
+    // Compacted per turn rather than mutated in place: the full transcript stays intact
+    // for the panel and for the next turn's decision, while what goes on the wire loses
+    // the output of commands the model has long since acted on.
     const result = await provider.complete(
-      { system, messages, tools: TOOL_DEFINITIONS, signal },
+      { system, messages: compactHistory(messages), tools: TOOL_DEFINITIONS, signal },
       {
         onText: (delta) => events.onText(delta),
         onToolCall: (call) => events.onToolStart(call),

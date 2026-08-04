@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { errorMessage } from '../lib/errors';
 import { log } from '../lib/logger';
+import { echoAgentCommand, echoAgentOutput, echoAgentResult } from '../lib/terminalEcho';
 import type {
   AgentConfigView,
   AgentDockPosition,
@@ -58,10 +59,27 @@ export function useAgent(sessionId: string, serverLabel: string) {
     setBlocks((current) => [...current, block]);
   }, []);
 
-  useEffect(() => window.electron.onAgentEvent(({ sessionId: from, event }) => {
-    if (from !== sessionId) return;
-    apply(event, setBlocks, setPending, setBusy);
-  }), [sessionId]);
+  useEffect(() => {
+    // Only shell calls are mirrored: a file read or an upload has nothing a terminal
+    // would show, and echoing their results would just be noise over the real work.
+    const shellCalls = new Set<string>();
+    return window.electron.onAgentEvent(({ sessionId: from, event }) => {
+      if (from !== sessionId) return;
+      apply(event, setBlocks, setPending, setBusy);
+
+      if (event.type === 'tool_start' && event.tool === 'shell') {
+        shellCalls.add(event.callId);
+        const command = event.input.command;
+        if (typeof command === 'string') echoAgentCommand(sessionId, command);
+      }
+      if (event.type === 'tool_output' && shellCalls.has(event.callId)) {
+        echoAgentOutput(sessionId, event.chunk);
+      }
+      if (event.type === 'tool_end' && shellCalls.delete(event.callId)) {
+        echoAgentResult(sessionId, event.isError);
+      }
+    });
+  }, [sessionId]);
 
   const send = useCallback(async (text: string) => {
     const message = text.trim();
