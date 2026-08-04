@@ -7,11 +7,18 @@ import type { DockerAction, DockerContainer } from '../../shared/types';
 import type { ContainerFilter, DockerTabProps } from './types';
 import { LogViewer } from './LogViewer';
 import { errorMessage } from '../../lib/errors';
+import { DockerCardsSkeleton } from '../ui/skeleton';
+
+const CARD_REVEAL = [
+    'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1',
+    'motion-safe:duration-300 fill-mode-backwards',
+].join(' ');
 
 export function ContainersTab({ connectionId }: { connectionId: string }) {
     const { t } = useTranslation();
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [loading, setLoading] = useState(false);
+    const [hasLoaded, setHasLoaded] = useState(false);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<ContainerFilter>('all');
@@ -41,12 +48,15 @@ export function ContainersTab({ connectionId }: { connectionId: string }) {
         } catch (err) {
             setError(errorMessage(err, t('dockerManager.fetchContainersFailed')));
         } finally {
+            setHasLoaded(true);
             fetchInFlightRef.current = false;
             setLoading(false);
         }
     };
 
     useEffect(() => {
+        setContainers([]);
+        setHasLoaded(false);
         fetchContainers();
         const interval = window.setInterval(fetchContainers, 8000);
         return () => window.clearInterval(interval);
@@ -188,10 +198,20 @@ export function ContainersTab({ connectionId }: { connectionId: string }) {
 
             {composeProjects.size > 0 && (
                 <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-                    {Array.from(composeProjects.entries()).map(([project, projectContainers]) => {
+                    {Array.from(composeProjects.entries()).map(([project, projectContainers], index) => {
                         const running = projectContainers.filter((item) => item.state?.toLowerCase() === 'running').length;
                         return (
-                            <div key={project} className="flex items-center gap-1.5 rounded-full border border-border/50 bg-background/32 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                            <div
+                                key={project}
+                                className={cn(
+                                    'flex items-center gap-1.5 rounded-full border border-border/50 bg-background/32 px-2 py-0.5 font-mono text-[10px] text-muted-foreground',
+                                    CARD_REVEAL,
+                                )}
+                                style={{
+                                    animationDelay: `${Math.min(index, 4) * 30}ms`,
+                                    animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                                }}
+                            >
                                 <HugeiconsIcon icon={Layers01Icon} className="h-3 w-3" />
                                 {project}
                                 <span className="opacity-60">{running}/{projectContainers.length}</span>
@@ -201,7 +221,9 @@ export function ContainersTab({ connectionId }: { connectionId: string }) {
                 </div>
             )}
 
-            <div className="flex-1 space-y-2 overflow-y-auto p-3">
+            <div className="flex-1 space-y-2 overflow-y-auto p-3" aria-busy={!hasLoaded || loading}>
+                {!hasLoaded && <DockerCardsSkeleton />}
+
                 {filtered.length === 0 && !loading && !error && (
                     <div className="py-8 text-center text-xs text-muted-foreground opacity-70">
                         <HugeiconsIcon icon={ContainerIcon} className="mx-auto mb-2 h-8 w-8 opacity-30" />
@@ -209,8 +231,18 @@ export function ContainersTab({ connectionId }: { connectionId: string }) {
                     </div>
                 )}
 
-                {filtered.map((container) => (
-                    <div key={container.id} className="overflow-hidden rounded-xl border border-border/65 bg-background/24 transition-colors hover:border-foreground/20">
+                {filtered.map((container, index) => (
+                    <div
+                        key={container.id}
+                        className={cn(
+                            'overflow-hidden rounded-xl border border-border/65 bg-background/24 transition-colors hover:border-foreground/20',
+                            CARD_REVEAL,
+                        )}
+                        style={{
+                            animationDelay: `${Math.min(index, 6) * 35}ms`,
+                            animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                        }}
+                    >
                         <div className="p-3">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">

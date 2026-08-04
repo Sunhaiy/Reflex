@@ -6,11 +6,18 @@ import { cn } from '../../lib/utils';
 import type { DockerImage } from '../../shared/types';
 import type { DockerTabProps } from './types';
 import { errorMessage } from '../../lib/errors';
+import { DockerCardsSkeleton } from '../ui/skeleton';
+
+const CARD_REVEAL = [
+    'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1',
+    'motion-safe:duration-300 fill-mode-backwards',
+].join(' ');
 
 export function ImagesTab({ connectionId }: { connectionId: string }) {
     const { t } = useTranslation();
     const [images, setImages] = useState<DockerImage[]>([]);
     const [loading, setLoading] = useState(false);
+    const [hasLoaded, setHasLoaded] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -25,11 +32,14 @@ export function ImagesTab({ connectionId }: { connectionId: string }) {
         } catch (err) {
             setError(errorMessage(err, t('common.error')));
         } finally {
+            setHasLoaded(true);
             setLoading(false);
         }
     };
 
     useEffect(() => {
+        setImages([]);
+        setHasLoaded(false);
         fetchImages();
     }, [connectionId]);
 
@@ -107,9 +117,21 @@ export function ImagesTab({ connectionId }: { connectionId: string }) {
                 </div>
             )}
 
-            <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                {filteredImages.map((image) => (
-                    <div key={image.id} className="rounded-xl border border-border/65 bg-background/24 p-3 transition-colors hover:border-foreground/20">
+            <div className="flex-1 space-y-2 overflow-y-auto p-3" aria-busy={!hasLoaded || loading}>
+                {!hasLoaded && <DockerCardsSkeleton />}
+
+                {filteredImages.map((image, index) => (
+                    <div
+                        key={image.id}
+                        className={cn(
+                            'rounded-xl border border-border/65 bg-background/24 p-3 transition-colors hover:border-foreground/20',
+                            CARD_REVEAL,
+                        )}
+                        style={{
+                            animationDelay: `${Math.min(index, 6) * 35}ms`,
+                            animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                        }}
+                    >
                         <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                                 <div className="truncate font-mono text-xs text-foreground/90">

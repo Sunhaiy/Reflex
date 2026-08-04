@@ -1,37 +1,27 @@
-import { HugeiconsIcon } from '@hugeicons/react';
-import {
-  ArrowRight01Icon,
-  Cancel01Icon,
-  CheckmarkCircle02Icon,
-  CloudUploadIcon,
-  File01Icon,
-  FileEditIcon,
-  FolderOpenIcon,
-  Loading02Icon,
-  SourceCodeIcon,
-} from '@hugeicons/core-free-icons';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../hooks/useTranslation';
 import type { AgentBlock } from '../../hooks/useAgent';
+import {
+  AnimatedGlobe,
+  ProcessCaret,
+  ProcessCheck,
+  ProcessError,
+} from './ProcessIcons';
+import styles from './AgentProcess.module.css';
 
-const ICONS: Record<string, typeof File01Icon> = {
-  shell: SourceCodeIcon,
-  read_file: File01Icon,
-  write_file: FileEditIcon,
-  edit_file: FileEditIcon,
-  upload_project: CloudUploadIcon,
-  list_local: FolderOpenIcon,
-  read_local: File01Icon,
-};
+const TOOL_LABELS = {
+  shell: 'agent.toolShell',
+  read_file: 'agent.toolReadFile',
+  write_file: 'agent.toolWriteFile',
+  edit_file: 'agent.toolEditFile',
+  upload_project: 'agent.toolUploadProject',
+  list_local: 'agent.toolListLocal',
+  read_local: 'agent.toolReadLocal',
+} as const;
 
 type ToolBlock = Extract<AgentBlock, { kind: 'tool' }>;
 
-/**
- * The one line that says what the agent is doing. A shell call shows its command, since
- * that is the whole of what the user is being asked to trust; the file tools show the
- * path they touch.
- */
 function summarise(block: ToolBlock): string {
   const input = block.input;
   if (typeof input.command === 'string') return input.command;
@@ -46,11 +36,14 @@ export function ToolCard({ block, children }: { block: ToolBlock; children?: Rea
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const streamRef = useRef<HTMLPreElement>(null);
-
-  const body = block.done ? (block.result ?? '') : block.output;
+  const body = block.done ? (block.result ?? block.output) : block.output;
   const hasBody = body.trim().length > 0;
+  const labelKey = TOOL_LABELS[block.tool as keyof typeof TOOL_LABELS];
 
-  // Follows the output while it streams, so a running build stays at the newest line.
+  useEffect(() => {
+    if (block.done && block.isError) setOpen(true);
+  }, [block.done, block.isError]);
+
   useEffect(() => {
     if (!open || block.done) return;
     const element = streamRef.current;
@@ -58,54 +51,50 @@ export function ToolCard({ block, children }: { block: ToolBlock; children?: Rea
   }, [block.done, body, open]);
 
   return (
-    <div className={cn(
-      'overflow-hidden rounded-xl border transition-colors',
-      block.isError ? 'border-rose-500/30 bg-rose-500/[0.04]' : 'border-border/55 bg-foreground/[0.02]',
-    )}>
+    <div className={styles.step} data-state={!block.done ? 'loading' : (block.isError ? 'error' : 'done')}>
+      <span className={cn(
+        styles.bullet,
+        !block.done && styles.bulletRunning,
+        block.done && !block.isError && styles.bulletDone,
+        block.isError && styles.bulletError,
+      )}>
+        {!block.done && <AnimatedGlobe />}
+        {block.done && !block.isError && <ProcessCheck />}
+        {block.done && block.isError && <ProcessError />}
+      </span>
+
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+        className={styles.toolButton}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
       >
-        <HugeiconsIcon
-          icon={ICONS[block.tool] ?? SourceCodeIcon}
-          className={cn('h-3.5 w-3.5 shrink-0', block.isError ? 'text-rose-500' : 'text-muted-foreground')}
-        />
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/85">
-          {summarise(block)}
+        <span className={cn(styles.stepTitle, !block.done && styles.shimmer)}>
+          {labelKey ? t(labelKey) : t('agent.execution')}
         </span>
-
-        {!block.done && (
-          <HugeiconsIcon icon={Loading02Icon} className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-        )}
-        {block.done && !block.isError && (
-          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="h-3.5 w-3.5 shrink-0 text-primary" />
-        )}
-        {block.done && block.isError && (
-          <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-        )}
-
-        <HugeiconsIcon
-          icon={ArrowRight01Icon}
-          className={cn(
-            'h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform',
-            open && 'rotate-90',
-          )}
-        />
+        <span className={styles.separator}>·</span>
+        <span className={styles.stepMeta} title={summarise(block)}>{summarise(block)}</span>
+        <span className={cn(styles.rowCaret, open && styles.rowCaretOpen)}>
+          <ProcessCaret />
+        </span>
       </button>
 
-      {open && (
-        <div className="border-t border-border/45 px-2.5 py-2">
+      <div
+        className={cn(styles.details, open && styles.detailsOpen)}
+        aria-hidden={!open}
+        {...(!open ? { inert: '' } : {})}
+      >
+        <div className={styles.detailsInner}>
           <pre
             ref={streamRef}
-            className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[10.5px] leading-[1.5] text-muted-foreground"
+            className={cn(styles.output, block.isError && styles.errorOutput)}
           >
             {hasBody ? body : t('agent.noOutput')}
           </pre>
         </div>
-      )}
+      </div>
 
-      {children}
+      {children && <div className="mt-1.5 overflow-hidden rounded-lg">{children}</div>}
     </div>
   );
 }

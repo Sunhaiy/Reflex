@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -9,6 +10,7 @@ const SIZE = 18;
 const STROKE = 2.5;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const TOOLTIP_MARGIN = 8;
 
 function compact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -36,11 +38,32 @@ export function ContextRing({ used, budget, spent }: {
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [tooltipLeft, setTooltipLeft] = useState<number | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLSpanElement>(null);
   const share = budget > 0 ? Math.min(1, used / budget) : 0;
   const nearFull = share >= NEAR_FULL;
 
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const bounds = triggerRef.current.getBoundingClientRect();
+    setTooltipLeft(bounds.left + bounds.width / 2);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    const tooltip = tooltipRef.current;
+    if (!open || tooltipLeft === null || !tooltip) return;
+    const half = tooltip.offsetWidth / 2;
+    const left = Math.min(
+      window.innerWidth - TOOLTIP_MARGIN - half,
+      Math.max(TOOLTIP_MARGIN + half, tooltipLeft),
+    );
+    if (Math.abs(left - tooltipLeft) > 0.5) setTooltipLeft(left);
+  }, [open, tooltipLeft]);
+
   return (
     <span
+      ref={triggerRef}
       className="relative flex shrink-0 items-center gap-1 px-0.5"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
@@ -76,8 +99,15 @@ export function ContextRing({ used, budget, spent }: {
         </span>
       )}
 
-      {open && (
-        <span className="glass-panel absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded-xl px-2.5 py-2">
+      {open && tooltipLeft !== null && createPortal(
+        <span
+          ref={tooltipRef}
+          style={{
+            left: tooltipLeft,
+            bottom: window.innerHeight - (triggerRef.current?.getBoundingClientRect().top ?? 0) + 8,
+          }}
+          className="context-tooltip pointer-events-none fixed z-[9999] w-max -translate-x-1/2 rounded-xl px-2.5 py-2 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-1 duration-150"
+        >
           <span className="block whitespace-nowrap text-[10.5px] leading-5 text-muted-foreground">
             {t('agent.contextWindow')}
             <span className="ml-1.5 font-mono tabular-nums text-foreground">
@@ -88,7 +118,8 @@ export function ContextRing({ used, budget, spent }: {
             {t('agent.tokensSpent')}
             <span className="ml-1.5 font-mono tabular-nums text-foreground">{compact(spent)}</span>
           </span>
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   );

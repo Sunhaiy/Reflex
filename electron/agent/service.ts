@@ -4,6 +4,7 @@ import { AgentShell, type ShellHost } from './shell';
 import { buildSystemPrompt } from './prompt';
 import { runAgent } from './loop';
 import type { Message, Provider } from './providers/types';
+import type { ConfigStore } from './config';
 import type {
   AgentEvent,
   AgentMode,
@@ -16,10 +17,15 @@ export type { AgentEvent };
 export interface AgentHost extends ShellHost { }
 
 
-export type AgentEmitter = (sessionId: string, event: AgentEvent) => void;
+export type AgentEmitter = (sessionId: string, conversationId: string, event: AgentEvent) => void;
 
 export interface SendOptions {
+  /** The SSH connection whose shell and files this conversation uses. */
   sessionId: string;
+  /** Stable saved-server id used to restore history after a new SSH session is created. */
+  connectionId: string;
+  /** A renderer-owned Agent conversation living on that SSH connection. */
+  conversationId: string;
   serverLabel: string;
   message: string;
   mode: AgentMode;
@@ -28,19 +34,97 @@ export interface SendOptions {
   contextBudget: number;
 }
 
+const MODEL_HISTORY_KEY = 'agentModelHistories';
+const MAX_SAVED_CONVERSATIONS = 30;
+
+interface StoredModelHistory {
+  updatedAt: number;
+  messages: Message[];
+}
+
+type StoredModelHistories = Record<string, Record<string, StoredModelHistory>>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isMessage(value: unknown): value is Message {
+  if (!isRecord(value) || !['user', 'assistant', 'tool'].includes(String(value.role))) return false;
+  if (!Array.isArray(value.parts)) return false;
+  return value.parts.every((part) => {
+    if (!isRecord(part) || typeof part.type !== 'string') return false;
+    if (part.type === 'text') return typeof part.text === 'string';
+    if (part.type === 'tool_call') {
+      return typeof part.id === 'string' && typeof part.name === 'string' && isRecord(part.input);
+    }
+    if (part.type === 'tool_result') {
+      return typeof part.id === 'string' && typeof part.content === 'string';
+    }
+    return false;
+  });
+}
+
+function readModelHistory(
+  store: ConfigStore,
+  connectionId: string,
+  conversationId: string,
+): Message[] {
+  const all = store.get(MODEL_HISTORY_KEY);
+  if (!isRecord(all)) return [];
+  const server = all[connectionId];
+  if (!isRecord(server)) return [];
+  const saved = server[conversationId];
+  if (!isRecord(saved) || !Array.isArray(saved.messages)) return [];
+  return saved.messages.filter(isMessage);
+}
+
+function saveModelHistory(
+  store: ConfigStore,
+  connectionId: string,
+  conversationId: string,
+  messages: Message[],
+) {
+  const current = store.get(MODEL_HISTORY_KEY);
+  const all: StoredModelHistories = isRecord(current)
+    ? { ...(current as StoredModelHistories) }
+    : {};
+  const existingServer = isRecord(all[connectionId]) ? all[connectionId] : {};
+  const server = {
+    ...existingServer,
+    [conversationId]: { updatedAt: Date.now(), messages },
+  };
+  const kept = Object.entries(server)
+    .sort(([, a], [, b]) => Number(b.updatedAt) - Number(a.updatedAt))
+    .slice(0, MAX_SAVED_CONVERSATIONS);
+  all[connectionId] = Object.fromEntries(kept);
+  store.set(MODEL_HISTORY_KEY, all);
+}
+
 /**
- * One conversation per SSH session, holding the history and the two channels the tools
- * work through. Both channels are torn down with the session, so nothing the agent set up
- * in its shell survives into an unrelated task.
+ * One Agent conversation, holding its own history and tool channels while using the SSH
+ * connection it was created for. Several conversations may therefore stay alive on the
+ * same server without mixing their model context or streamed events.
  */
 class AgentConversation {
-  history: Message[] = [];
+  history: Message[];
   readonly shell: AgentShell;
   readonly files: AgentFiles;
   private abort: AbortController | null = null;
   private readonly waiting = new Map<string, (answer: ApprovalAnswer) => void>();
 
-  constructor(host: AgentHost, private readonly sessionId: string) {
+  constructor(
+    host: AgentHost,
+    readonly sessionId: string,
+    readonly connectionId: string,
+    private readonly conversationId: string,
+    private readonly store: ConfigStore,
+  ) {
+    try {
+      this.history = readModelHistory(store, connectionId, conversationId);
+    } catch (error) {
+      logger.error('[Agent] Could not restore model history', error);
+      this.history = [];
+    }
     this.shell = new AgentShell(host, sessionId);
     this.files = new AgentFiles(host, sessionId);
   }
@@ -75,26 +159,35 @@ class AgentConversation {
         },
         signal: controller.signal,
         events: {
-          onText: (delta) => emit(this.sessionId, { type: 'text', delta }),
-          onToolStart: (call) => emit(this.sessionId, {
+          onText: (delta) => emit(this.sessionId, this.conversationId, { type: 'text', delta }),
+          onToolStart: (call) => emit(this.sessionId, this.conversationId, {
             type: 'tool_start', callId: call.id, tool: call.name, input: call.input,
           }),
-          onToolOutput: (callId, chunk) => emit(this.sessionId, { type: 'tool_output', callId, chunk }),
-          onToolEnd: (callId, output, isError) => emit(this.sessionId, {
+          onToolOutput: (callId, chunk, terminalChunk) => emit(this.sessionId, this.conversationId, {
+            type: 'tool_output', callId, chunk, terminalChunk,
+          }),
+          onToolEnd: (callId, output, isError) => emit(this.sessionId, this.conversationId, {
             type: 'tool_end', callId, output, isError,
           }),
-          onUsage: (usage) => emit(this.sessionId, { type: 'usage', ...usage }),
-          onCompacted: () => emit(this.sessionId, { type: 'compacted' }),
+          onUsage: (usage) => emit(this.sessionId, this.conversationId, { type: 'usage', ...usage }),
+          onCompacted: () => emit(this.sessionId, this.conversationId, { type: 'compacted' }),
           ask: (question) => this.askUser(question, emit),
         },
       });
 
       this.history = outcome.messages;
-      emit(this.sessionId, { type: 'done', stopReason: outcome.stopReason, turns: outcome.turns });
+      try {
+        saveModelHistory(this.store, this.connectionId, this.conversationId, this.history);
+      } catch (error) {
+        // Saving history is useful but must never turn a successful server operation
+        // into a visible Agent failure.
+        logger.error('[Agent] Could not save model history', error);
+      }
+      emit(this.sessionId, this.conversationId, { type: 'done', stopReason: outcome.stopReason, turns: outcome.turns });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Run failed for ${this.sessionId}`, error);
-      emit(this.sessionId, { type: 'error', message });
+      emit(this.sessionId, this.conversationId, { type: 'error', message });
     } finally {
       this.abort = null;
       // A cancel that lands mid-question would otherwise leave the loop parked forever.
@@ -105,7 +198,7 @@ class AgentConversation {
   private askUser(question: ApprovalQuestion, emit: AgentEmitter): Promise<ApprovalAnswer> {
     return new Promise((resolve) => {
       this.waiting.set(question.callId, resolve);
-      emit(this.sessionId, { type: 'approval', question });
+      emit(this.sessionId, this.conversationId, { type: 'approval', question });
     });
   }
 
@@ -134,50 +227,71 @@ class AgentConversation {
   }
 }
 
-/** Owns one conversation per SSH session and routes IPC into it. */
+/** Owns the independent Agent conversations and routes IPC into each one. */
 export class AgentService {
   private readonly conversations = new Map<string, AgentConversation>();
 
-  constructor(private readonly host: AgentHost, private readonly emit: AgentEmitter) { }
+  constructor(
+    private readonly host: AgentHost,
+    private readonly emit: AgentEmitter,
+    private readonly store: ConfigStore,
+  ) { }
 
-  private conversation(sessionId: string): AgentConversation {
-    const existing = this.conversations.get(sessionId);
-    if (existing) return existing;
-    const created = new AgentConversation(this.host, sessionId);
-    this.conversations.set(sessionId, created);
+  private conversation(options: SendOptions): AgentConversation {
+    const existing = this.conversations.get(options.conversationId);
+    if (existing) {
+      if (existing.sessionId !== options.sessionId) {
+        throw new Error('This Agent conversation belongs to another SSH session');
+      }
+      if (existing.connectionId !== options.connectionId) {
+        throw new Error('This Agent conversation belongs to another saved server');
+      }
+      return existing;
+    }
+    const created = new AgentConversation(
+      this.host,
+      options.sessionId,
+      options.connectionId,
+      options.conversationId,
+      this.store,
+    );
+    this.conversations.set(options.conversationId, created);
     return created;
   }
 
   send(options: SendOptions): Promise<void> {
-    return this.conversation(options.sessionId).send(options, this.emit);
+    return this.conversation(options).send(options, this.emit);
   }
 
-  answer(sessionId: string, callId: string, answer: ApprovalAnswer): boolean {
-    return this.conversations.get(sessionId)?.answer(callId, answer) ?? false;
+  answer(conversationId: string, callId: string, answer: ApprovalAnswer): boolean {
+    return this.conversations.get(conversationId)?.answer(callId, answer) ?? false;
   }
 
-  cancel(sessionId: string) {
-    this.conversations.get(sessionId)?.cancel();
+  cancel(conversationId: string) {
+    this.conversations.get(conversationId)?.cancel();
   }
 
-  isBusy(sessionId: string) {
-    return this.conversations.get(sessionId)?.busy ?? false;
+  isBusy(conversationId: string) {
+    return this.conversations.get(conversationId)?.busy ?? false;
   }
 
-  /** Forgets the conversation without touching the SSH session it ran on. */
-  reset(sessionId: string) {
-    this.dispose(sessionId);
-  }
-
-  /** Called when the SSH session goes away; the channels are already dead by then. */
-  dispose(sessionId: string) {
-    const conversation = this.conversations.get(sessionId);
+  private dispose(conversationId: string) {
+    const conversation = this.conversations.get(conversationId);
     if (!conversation) return;
-    this.conversations.delete(sessionId);
+    this.conversations.delete(conversationId);
     conversation.dispose();
   }
 
+  /** Called when an SSH session goes away; returns every event route it owned. */
+  disposeForSession(sessionId: string): string[] {
+    const ids = [...this.conversations.entries()]
+      .filter(([, conversation]) => conversation.sessionId === sessionId)
+      .map(([conversationId]) => conversationId);
+    for (const conversationId of ids) this.dispose(conversationId);
+    return ids;
+  }
+
   disposeAll() {
-    for (const sessionId of [...this.conversations.keys()]) this.dispose(sessionId);
+    for (const conversationId of [...this.conversations.keys()]) this.dispose(conversationId);
   }
 }

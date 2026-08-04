@@ -11,7 +11,7 @@ export interface AgentEvents {
   onCompacted(): void;
   onText(delta: string): void;
   onToolStart(call: ToolCallPart): void;
-  onToolOutput(callId: string, chunk: string): void;
+  onToolOutput(callId: string, chunk: string, terminalChunk?: string): void;
   onToolEnd(callId: string, output: string, isError: boolean): void;
   onUsage(usage: { inputTokens: number; outputTokens: number }): void;
   ask(question: ApprovalQuestion): Promise<ApprovalAnswer>;
@@ -186,7 +186,7 @@ async function executeCall(
   try {
     const output = await tool.run(call.input, {
       ...context,
-      report: (chunk) => events.onToolOutput(call.id, chunk),
+      report: (chunk, terminalChunk) => events.onToolOutput(call.id, chunk, terminalChunk),
     });
     events.onToolEnd(call.id, output, false);
     return { type: 'tool_result', id: call.id, content: output };

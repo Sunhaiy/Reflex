@@ -5,23 +5,15 @@ import { REASONING_EFFORTS, type ReasoningEffort } from '../../shared/agent';
 import { EFFORT_NAME } from './modes';
 
 const STOPS = REASONING_EFFORTS;
-const COLUMNS = 36;
-const ROWS = 3;
-/** Fixed rather than flexed, so a cell is a square at any panel width. */
-const CELL = 4;
+const TRACK_INSET = 6;
 
 /**
- * Effort as a slider, because the values are an ordered scale and a list hides that:
- * where the thumb sits says which way is cheaper without reading a word.
+ * Effort as a compact discrete slider. The thin rail shows direction while one dot per
+ * supported value makes it clear that the provider accepts six exact settings rather
+ * than an arbitrary point on a continuum.
  *
- * The track is a matrix of small squares rather than a solid bar, and the filled part
- * brightens toward the thumb. Both are doing the same job — a solid bar reads as a
- * continuum, and there are six discrete settings — while the gradient gives the eye
- * somewhere to land.
- *
- * The leftmost stop keeps a neutral colour. It is not the lowest effort; it means send no
- * field at all, and every other position adds one a strict gateway may reject. That is a
- * different kind of choice and should not look like the bottom of the scale.
+ * The leftmost stop stays neutral because it sends no effort field at all; every other
+ * position adds a field that strict compatible gateways may reject.
  */
 export function EffortSlider({ value, onChange }: {
   value: ReasoningEffort;
@@ -34,12 +26,14 @@ export function EffortSlider({ value, onChange }: {
   const index = Math.max(0, STOPS.indexOf(value));
   const ratio = index / (STOPS.length - 1);
   const neutral = value === 'auto';
+  const thumbLeft = `calc(${TRACK_INSET}px + ${ratio * 100}% - ${ratio * TRACK_INSET * 2}px)`;
 
   const setFromPointer = (clientX: number) => {
     const track = trackRef.current;
     if (!track) return;
     const bounds = track.getBoundingClientRect();
-    const position = (clientX - bounds.left) / bounds.width;
+    const usableWidth = Math.max(1, bounds.width - TRACK_INSET * 2);
+    const position = (clientX - bounds.left - TRACK_INSET) / usableWidth;
     const stop = Math.round(position * (STOPS.length - 1));
     onChange(STOPS[Math.min(STOPS.length - 1, Math.max(0, stop))]);
   };
@@ -58,10 +52,16 @@ export function EffortSlider({ value, onChange }: {
   };
 
   return (
-    <div className="w-[248px] px-2.5 py-2">
+    <div className="w-[220px] px-2.5 py-2">
       <div className="flex items-baseline gap-2">
         <span className="text-[11.5px] text-muted-foreground">{t('settings.agent.effort')}</span>
-        <span className={cn('text-[11.5px] font-medium', neutral ? 'text-muted-foreground' : 'text-primary')}>
+        <span
+          key={value}
+          className={cn(
+            'text-[11.5px] font-medium animate-in fade-in-0 slide-in-from-bottom-1 duration-200',
+            neutral ? 'text-muted-foreground' : 'text-primary',
+          )}
+        >
           {EFFORT_NAME[value]}
         </span>
       </div>
@@ -91,60 +91,49 @@ export function EffortSlider({ value, onChange }: {
             onChange(STOPS[Math.min(STOPS.length - 1, index + 1)]);
           }
         }}
-        className="relative mt-1.5 h-[26px] cursor-pointer select-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="relative mt-1 h-5 cursor-pointer select-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
-        <div className="absolute inset-0 flex items-center justify-between overflow-hidden rounded-md">
-          {Array.from({ length: COLUMNS }, (_, column) => {
-            const at = column / (COLUMNS - 1);
-            const filled = at <= ratio;
-            // Brightest where the thumb is, fading back towards the cheap end.
-            const intensity = ratio > 0 ? 0.16 + 0.66 * (at / ratio) : 0;
-            // Each column answers a beat after its neighbour, and the delay is measured
-            // from the thumb — so the ripple runs outward from wherever it landed rather
-            // than always sweeping left to right.
-            const delay = Math.abs(at - ratio) * 300;
+        <div className="absolute inset-x-[6px] top-1/2 h-px -translate-y-1/2 rounded-full bg-foreground/[0.1]">
+          <span
+            style={{ width: `${ratio * 100}%` }}
+            className={cn(
+              'absolute inset-y-0 left-0 rounded-full',
+              neutral ? 'bg-muted-foreground/35' : 'bg-primary/75',
+              dragging
+                ? 'transition-[width] duration-75 ease-linear'
+                : 'transition-[width,background-color] [transition-duration:280ms] ease-out',
+            )}
+          />
 
-            return (
-              <span key={column} className="flex flex-col" style={{ gap: CELL - 1 }}>
-                {Array.from({ length: ROWS }, (_, row) => (
-                  <span
-                    key={row}
-                    style={{
-                      width: CELL,
-                      height: CELL,
-                      background: filled && !neutral
-                        ? `hsl(var(--primary) / ${intensity.toFixed(3)})`
-                        : undefined,
-                      transitionDelay: dragging ? '0ms' : `${delay.toFixed(0)}ms`,
-                    }}
-                    className={cn(
-                      'transition-colors duration-300 ease-out',
-                      filled && neutral && 'bg-muted-foreground/30',
-                      !filled && 'bg-foreground/[0.07]',
-                    )}
-                  />
-                ))}
-              </span>
-            );
-          })}
+          {STOPS.map((stop, stopIndex) => (
+            <span
+              key={stop}
+              style={{ left: `${(stopIndex / (STOPS.length - 1)) * 100}%` }}
+              className={cn(
+                'absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-background',
+                'transition-colors duration-200',
+                stopIndex <= index
+                  ? (neutral ? 'bg-muted-foreground/55' : 'bg-primary/80')
+                  : 'bg-muted-foreground/35',
+              )}
+            />
+          ))}
         </div>
 
         <span
-          style={{ left: `calc(${ratio * 100}% )` }}
+          style={{ left: thumbLeft }}
           className={cn(
-            'pointer-events-none absolute top-1/2 h-[24px] w-[20px] -translate-x-1/2 -translate-y-1/2 rounded-[7px] shadow-md',
-            // Overshoots very slightly and settles, which is what reads as weight. While
-            // dragging it drops to a near-instant linear move so it tracks the cursor
-            // instead of swimming after it.
+            'pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full',
+            'ring-[3px] ring-background shadow-[0_2px_8px_hsl(var(--foreground)/0.2)]',
             dragging
-              ? 'transition-[left] duration-75 ease-linear'
-              : 'transition-[left,background-color] duration-[320ms] [transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
-            neutral ? 'bg-muted-foreground/70' : 'bg-primary-foreground',
+              ? 'scale-110 transition-[left,transform] duration-75 ease-linear'
+              : 'transition-[left,transform,background-color,box-shadow] [transition-duration:300ms] [transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
+            neutral ? 'bg-muted-foreground' : 'bg-primary',
           )}
         />
       </div>
 
-      <p className="mt-2.5 text-[10px] leading-4 text-muted-foreground">
+      <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
         {neutral ? t('agent.effortAutoHint') : t('agent.effortHintOther')}
       </p>
     </div>

@@ -49,24 +49,29 @@ declare global {
       getPathForFile: (file: File) => string;
       agentConfigGet: () => Promise<AgentConfigView>;
       agentConfigSet: (patch: Partial<AgentConfig> & { apiKey?: string }) => Promise<AgentConfigView>;
+      agentProviderSelect: (providerId: string) => Promise<AgentConfigView>;
       agentTest: () => Promise<{ ok: true } | { ok: false; error: string }>;
       agentModels: () => Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
+      onAgentConfigChanged: (callback: (config: AgentConfigView) => void) => () => void;
       agentSend: (payload: {
         sessionId: string;
+        connectionId: string;
+        conversationId: string;
         serverLabel: string;
         message: string;
         localRoot: string | null;
       }) => Promise<{ ok: true } | { ok: false; error: string }>;
       agentAnswer: (payload: {
-        sessionId: string;
+        conversationId: string;
         callId: string;
         answer: ApprovalAnswer;
       }) => Promise<boolean>;
-      agentCancel: (sessionId: string) => void;
-      agentReset: (sessionId: string) => Promise<void>;
+      agentCancel: (conversationId: string) => void;
       agentPickFolder: () => Promise<string | null>;
+      agentConversationsGet: (connectionId: string) => Promise<unknown>;
+      agentConversationsSet: (connectionId: string, value: unknown) => Promise<void>;
       onAgentEvent: (
-        callback: (payload: { sessionId: string; event: AgentEvent }) => void,
+        callback: (payload: { sessionId: string; conversationId: string; event: AgentEvent }) => void,
       ) => () => void;
       openDialog: () => Promise<string | undefined>;
       saveDialog: (defaultName: string) => Promise<string | undefined>;

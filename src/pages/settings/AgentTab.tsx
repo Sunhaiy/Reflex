@@ -8,6 +8,11 @@ import { cn } from '../../lib/utils';
 import { errorMessage } from '../../lib/errors';
 import { useTranslation } from '../../hooks/useTranslation';
 import { AGENT_MODES, EFFORT_NAME, MODE_HINT, MODE_LABEL } from '../../components/agent/modes';
+import {
+  ProviderMark,
+  providerMarkFromModel,
+  type ProviderMarkId,
+} from '../../components/agent/ProviderMark';
 import { PROVIDER_PRESETS, REASONING_EFFORTS, type AgentConfigView, type ReasoningEffort } from '../../shared/agent';
 import { FieldLabel, SettingsCard } from './controls';
 
@@ -27,9 +32,7 @@ export function AgentTab() {
 
   if (!config) return null;
 
-  const preset = PROVIDER_PRESETS.find(
-    (item) => item.kind === config.kind && item.baseUrl === config.baseUrl,
-  );
+  const preset = PROVIDER_PRESETS.find((item) => item.id === config.providerId);
 
   const patch = (next: Partial<AgentConfigView>) => {
     setConfig({ ...config, ...next });
@@ -41,21 +44,49 @@ export function AgentTab() {
   // no match for a hand-edited address and falls back to showing its placeholder, which
   // reads as "nothing is configured" when in fact something is.
   const presetOptions = [
-    ...PROVIDER_PRESETS.map((item) => ({ label: item.label, value: item.id })),
-    { label: t('settings.agent.custom'), value: 'custom' },
+    ...PROVIDER_PRESETS.map((item) => ({
+      label: item.label,
+      value: item.id,
+      icon: <ProviderMark provider={item.id as ProviderMarkId} />,
+    })),
+    {
+      label: t('settings.agent.custom'),
+      value: 'custom',
+      icon: <ProviderMark provider="custom" />,
+    },
   ];
 
-  const applyPreset = (id: string) => {
-    const chosen = PROVIDER_PRESETS.find((item) => item.id === id);
-    if (!chosen) return;
-    // The model comes with the preset but stays editable; Ark names one per deployment,
-    // so it ships blank rather than with a guess that would fail on the first request.
-    patch({ kind: chosen.kind, baseUrl: chosen.baseUrl, model: chosen.model });
+  const applyPreset = async (id: string) => {
+    if (id === config.providerId) return;
+    try {
+      // Persist the current draft into its own profile before switching. Keys stay in
+      // the main process and are restored only as hasKey/keyHint metadata.
+      await window.electron.agentConfigSet({
+        providerId: config.providerId,
+        kind: config.kind,
+        wireApi: config.wireApi,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        models: config.models,
+        mode: config.mode,
+        effort: config.effort,
+        contextBudget: config.contextBudget,
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+      });
+      setConfig(await window.electron.agentProviderSelect(id));
+      setApiKey('');
+      setSaved(false);
+      setTest({ state: 'idle' });
+    } catch (error) {
+      setTest({ state: 'failed', error: errorMessage(error, 'Failed') });
+    }
   };
 
   const save = async () => {
     const updated = await window.electron.agentConfigSet({
+      providerId: config.providerId,
       kind: config.kind,
+      wireApi: config.wireApi,
       baseUrl: config.baseUrl,
       model: config.model,
       mode: config.mode,
@@ -69,6 +100,22 @@ export function AgentTab() {
     setSaved(true);
     setTest({ state: 'idle' });
   };
+
+  const modelOptions = [
+    ...(!config.models.includes(config.model) && config.model
+      ? [{ label: config.model, value: config.model }]
+      : []),
+    ...config.models.map((model) => ({
+      label: model,
+      value: model,
+      icon: (
+        <ProviderMark
+          provider={providerMarkFromModel(model, config.baseUrl)}
+          className="h-5 w-5 rounded-md"
+        />
+      ),
+    })),
+  ];
 
   /**
    * Saves first, then asks. The endpoint being listed is whatever is in the form, and it
@@ -102,32 +149,51 @@ export function AgentTab() {
         <div className="grid grid-cols-[1fr_220px] items-center gap-6">
           <FieldLabel title={t('settings.agent.provider')} />
           <Select
-            value={preset?.id ?? 'custom'}
-            onChange={applyPreset}
+            value={config.providerId}
+            onChange={(id) => void applyPreset(id)}
             options={presetOptions}
           />
         </div>
 
         <div className="grid grid-cols-[1fr_320px] items-center gap-6 border-t border-border/45 pt-4">
           <FieldLabel title={t('settings.agent.baseUrl')} />
-          <Input
-            value={config.baseUrl}
-            onChange={(event) => patch({ baseUrl: event.target.value })}
-            spellCheck={false}
-            className="font-mono text-xs"
-          />
+          <div className="space-y-2">
+            <Input
+              value={config.baseUrl}
+              onChange={(event) => patch({ baseUrl: event.target.value })}
+              spellCheck={false}
+              className="font-mono text-xs"
+            />
+            {preset?.id === 'sub2api' && (
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                {t('settings.agent.sub2apiBaseUrlHint')}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-[1fr_320px] items-start gap-6 border-t border-border/45 pt-4">
           <FieldLabel title={t('settings.agent.model')} />
           <div className="space-y-2">
             <div className="flex gap-2">
-              <Input
-                value={config.model}
-                onChange={(event) => patch({ model: event.target.value })}
-                spellCheck={false}
-                className="font-mono text-xs"
-              />
+              {config.models.length > 0 ? (
+                <Select
+                  value={config.model}
+                  onChange={(model) => patch({ model })}
+                  options={modelOptions}
+                  searchable
+                  searchPlaceholder={t('settings.agent.modelFilter')}
+                  emptyText={t('settings.agent.modelsNone')}
+                  className="min-w-0 flex-1 font-mono"
+                />
+              ) : (
+                <Input
+                  value={config.model}
+                  onChange={(event) => patch({ model: event.target.value })}
+                  spellCheck={false}
+                  className="min-w-0 flex-1 font-mono text-xs"
+                />
+              )}
               <Button
                 variant="outline"
                 className="shrink-0 gap-1.5 px-2.5"
@@ -196,7 +262,7 @@ export function AgentTab() {
                 {t('settings.agent.apiKeyStored', { hint: config.keyHint })}
               </p>
             )}
-            {preset && (
+            {preset?.console && (
               <button
                 type="button"
                 onClick={() => void window.electron.openExternal(preset.console)}

@@ -23,7 +23,7 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
     ];
 
     return (
-        <div className="flex h-full flex-col bg-transparent text-foreground">
+        <div className="flex h-full flex-col bg-transparent text-foreground motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
             <div className="shrink-0 border-b border-border/50 p-2">
                 <div className="grid grid-cols-3 gap-1 rounded-xl bg-foreground/[0.035] p-1">
                     {tabs.map((item) => (

@@ -9,7 +9,7 @@
  * vendor.
  */
 
-import type { ProviderKind, ReasoningEffort } from '../../../src/shared/agent';
+import type { ProviderKind, ProviderWireApi, ReasoningEffort } from '../../../src/shared/agent';
 
 export type { ProviderKind };
 
@@ -100,6 +100,7 @@ export interface Provider {
 
 export interface ProviderConfig {
   kind: ProviderKind;
+  wireApi: ProviderWireApi;
   /** Full origin plus version path, e.g. https://api.openai.com/v1 */
   baseUrl: string;
   apiKey: string;

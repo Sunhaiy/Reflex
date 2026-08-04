@@ -38,15 +38,22 @@ contextBridge.exposeInMainWorld('electron', {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   agentConfigGet: () => ipcRenderer.invoke('agent-config-get'),
   agentConfigSet: (patch: unknown) => ipcRenderer.invoke('agent-config-set', patch),
+  agentProviderSelect: (providerId: string) => ipcRenderer.invoke('agent-provider-select', providerId),
   agentTest: () => ipcRenderer.invoke('agent-test'),
   agentModels: () => ipcRenderer.invoke('agent-models'),
+  onAgentConfigChanged: (callback: (config: unknown) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, config: unknown) => callback(config);
+    ipcRenderer.on('agent-config-changed', subscription);
+    return () => ipcRenderer.removeListener('agent-config-changed', subscription);
+  },
   agentSend: (payload: unknown) => ipcRenderer.invoke('agent-send', payload),
   agentAnswer: (payload: unknown) => ipcRenderer.invoke('agent-answer', payload),
-  agentCancel: (sessionId: string) => ipcRenderer.send('agent-cancel', sessionId),
-  agentReset: (sessionId: string) => ipcRenderer.invoke('agent-reset', sessionId),
+  agentCancel: (conversationId: string) => ipcRenderer.send('agent-cancel', conversationId),
   agentPickFolder: () => ipcRenderer.invoke('agent-pick-folder'),
-  onAgentEvent: (callback: (payload: { sessionId: string; event: unknown }) => void) => {
-    const subscription = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; event: unknown }) => callback(payload);
+  agentConversationsGet: (connectionId: string) => ipcRenderer.invoke('agent-conversations-get', connectionId),
+  agentConversationsSet: (connectionId: string, value: unknown) => ipcRenderer.invoke('agent-conversations-set', { connectionId, value }),
+  onAgentEvent: (callback: (payload: { sessionId: string; conversationId: string; event: unknown }) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; conversationId: string; event: unknown }) => callback(payload);
     ipcRenderer.on('agent-event', subscription);
     return () => ipcRenderer.removeListener('agent-event', subscription);
   },

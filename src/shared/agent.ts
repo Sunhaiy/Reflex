@@ -7,6 +7,9 @@
 
 export type ProviderKind = 'anthropic' | 'openai';
 
+/** The wire format used by the selected endpoint. */
+export type ProviderWireApi = 'messages' | 'chat_completions' | 'responses';
+
 /**
  * How much the agent may do on its own.
  *
@@ -31,16 +34,15 @@ export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
 
 export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-/** Where the panel lives: under the terminal, or as a tab in the right column. */
-export type AgentDockPosition = 'bottom' | 'right';
-
 export interface AgentConfig {
+  /** Preset/profile currently active. `custom` is a real saved profile too. */
+  providerId: string;
   kind: ProviderKind;
+  wireApi: ProviderWireApi;
   baseUrl: string;
   model: string;
   mode: AgentMode;
   effort: ReasoningEffort;
-  dock: AgentDockPosition;
   /**
    * How many tokens of history to carry before old tool output starts being dropped.
    *
@@ -82,7 +84,14 @@ export type AgentStopReason = 'done' | 'max_turns' | 'aborted';
 export type AgentEvent =
   | { type: 'text'; delta: string }
   | { type: 'tool_start'; callId: string; tool: string; input: Record<string, unknown> }
-  | { type: 'tool_output'; callId: string; chunk: string }
+  | {
+    type: 'tool_output';
+    callId: string;
+    /** Plain text for the process panel and model-facing logs. */
+    chunk: string;
+    /** ANSI-preserving copy used only by xterm. */
+    terminalChunk?: string;
+  }
   | { type: 'tool_end'; callId: string; output: string; isError: boolean }
   | { type: 'approval'; question: ApprovalQuestion }
   | { type: 'usage'; inputTokens: number; outputTokens: number }
@@ -109,6 +118,7 @@ export interface ProviderPreset {
   id: string;
   label: string;
   kind: ProviderKind;
+  wireApi: ProviderWireApi;
   baseUrl: string;
   /** Empty when the endpoint has no sensible default — Ark names models per deployment. */
   model: string;
@@ -125,6 +135,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'anthropic',
     label: 'Claude',
     kind: 'anthropic',
+    wireApi: 'messages',
     baseUrl: 'https://api.anthropic.com',
     model: 'claude-opus-5',
     console: 'https://console.anthropic.com/settings/keys',
@@ -133,6 +144,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'openai',
     label: 'OpenAI',
     kind: 'openai',
+    wireApi: 'chat_completions',
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-5.1',
     console: 'https://platform.openai.com/api-keys',
@@ -141,6 +153,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'openrouter',
     label: 'OpenRouter',
     kind: 'openai',
+    wireApi: 'chat_completions',
     baseUrl: 'https://openrouter.ai/api/v1',
     model: 'anthropic/claude-opus-4.5',
     console: 'https://openrouter.ai/keys',
@@ -149,6 +162,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'dashscope',
     label: '通义千问',
     kind: 'openai',
+    wireApi: 'chat_completions',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen-max',
     console: 'https://bailian.console.aliyun.com/',
@@ -157,6 +171,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'ark',
     label: '火山引擎',
     kind: 'openai',
+    wireApi: 'chat_completions',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     model: '',
     console: 'https://console.volcengine.com/ark',
@@ -165,8 +180,21 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'deepseek',
     label: 'DeepSeek',
     kind: 'openai',
+    wireApi: 'chat_completions',
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-chat',
     console: 'https://platform.deepseek.com/api_keys',
+  },
+  {
+    id: 'sub2api',
+    label: 'Sub2API',
+    kind: 'openai',
+    wireApi: 'responses',
+    // A self-hosted default that stays editable. Remote deployments only need their
+    // own origin in place of 127.0.0.1; keeping /v1 selects the standard route.
+    baseUrl: 'http://127.0.0.1:8080/v1',
+    model: 'gpt-5.5',
+    // Keys are issued by each user's own deployment, so there is no universal console.
+    console: '',
   },
 ];

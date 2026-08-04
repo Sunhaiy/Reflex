@@ -9,8 +9,8 @@ export interface ToolContext {
   files: AgentFiles;
   /** The one local folder the agent may read. Null until the user grants one. */
   localRoot: string | null;
-  /** Streams a tool's own output while it is still running. */
-  report(chunk: string): void;
+  /** Streams plain output and, when available, its ANSI-preserving terminal copy. */
+  report(chunk: string, terminalChunk?: string): void;
   signal: AbortSignal;
 }
 
@@ -64,7 +64,7 @@ export const TOOLS: AgentTool[] = [
         cwd: typeof input.cwd === 'string' ? input.cwd : undefined,
         timeoutMs: timeout ? timeout * 1000 : undefined,
         // Routed to whichever call is running, so a long build is watchable as it goes.
-        onOutput: (chunk) => context.report(chunk),
+        onOutput: (chunk, _stream, plainChunk) => context.report(plainChunk, chunk),
       });
 
       const parts: string[] = [];

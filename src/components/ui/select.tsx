@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 export interface SelectOption {
     label: string
     value: string
+    icon?: React.ReactNode
 }
 
 interface SelectProps {
@@ -17,11 +18,25 @@ interface SelectProps {
     placeholder?: string
     className?: string
     disabled?: boolean
+    searchable?: boolean
+    searchPlaceholder?: string
+    emptyText?: string
 }
 
-export function Select({ value, onChange, options, placeholder = "Select...", className, disabled }: SelectProps) {
+export function Select({
+    value,
+    onChange,
+    options,
+    placeholder = "Select...",
+    className,
+    disabled,
+    searchable = false,
+    searchPlaceholder = "Search...",
+    emptyText = "No matches",
+}: SelectProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [highlightedIndex, setHighlightedIndex] = useState(-1)
+    const [query, setQuery] = useState("")
     const containerRef = useRef<HTMLDivElement>(null)
     const triggerRef = useRef<HTMLButtonElement>(null)
     const menuRef = useRef<HTMLDivElement>(null)
@@ -30,6 +45,9 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
     const [openAbove, setOpenAbove] = useState(false)
 
     const selectedOption = options.find(o => o.value === value)
+    const filteredOptions = searchable && query.trim()
+        ? options.filter(option => option.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+        : options
 
     // Close on outside click
     useEffect(() => {
@@ -84,10 +102,14 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
     // Reset highlight when opening
     useEffect(() => {
         if (isOpen) {
-            const idx = options.findIndex(o => o.value === value)
-            setHighlightedIndex(idx >= 0 ? idx : 0)
+            setQuery("")
+            const idx = filteredOptions.findIndex(o => o.value === value)
+            setHighlightedIndex(idx >= 0 ? idx : filteredOptions.length > 0 ? 0 : -1)
         }
-    }, [isOpen, options, value])
+    // Filtering updates highlightedIndex from the input handler; including the derived
+    // list here would reset the query every time a character is typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, value])
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (disabled) return
@@ -96,8 +118,8 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
             case "Enter":
             case " ":
                 e.preventDefault()
-                if (isOpen && highlightedIndex >= 0) {
-                    onChange(options[highlightedIndex].value)
+                if (isOpen && highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
+                    onChange(filteredOptions[highlightedIndex].value)
                     setIsOpen(false)
                 } else {
                     setIsOpen(true)
@@ -108,7 +130,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                 if (!isOpen) {
                     setIsOpen(true)
                 } else {
-                    setHighlightedIndex(i => Math.min(i + 1, options.length - 1))
+                    setHighlightedIndex(i => Math.min(i + 1, filteredOptions.length - 1))
                 }
                 break
             case "ArrowUp":
@@ -125,7 +147,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                 setIsOpen(false)
                 break
         }
-    }, [disabled, isOpen, highlightedIndex, options, onChange])
+    }, [disabled, isOpen, highlightedIndex, filteredOptions, onChange])
 
     return (
         <div ref={containerRef} className={cn("relative", className)}>
@@ -147,8 +169,11 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                     isOpen && "ring-1 ring-ring border-ring"
                 )}
             >
-                <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
-                    {selectedOption?.label || placeholder}
+                <span className="flex min-w-0 items-center gap-2.5">
+                    {selectedOption?.icon}
+                    <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
+                        {selectedOption?.label || placeholder}
+                    </span>
                 </span>
                 <HugeiconsIcon icon={ArrowDown01Icon} className={cn(
                                     "ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -161,7 +186,7 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                 <div
                     ref={menuRef}
                     className={cn(
-                        "glass-panel fixed z-[100] min-w-[8rem] overflow-hidden rounded-2xl border-border/80 bg-popover/95 backdrop-blur-2xl",
+                        "glass-panel fixed z-[100] flex min-w-[8rem] flex-col overflow-hidden rounded-2xl border-border/80 bg-popover/95 backdrop-blur-2xl",
                         "animate-in fade-in-0 zoom-in-95 duration-150 ease-out",
                         // Grow away from the trigger, so the menu reads as unfolding from it.
                         openAbove
@@ -170,8 +195,41 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                     )}
                     style={menuStyle}
                 >
-                    <div ref={listRef} role="listbox" className="max-h-[inherit] overflow-y-auto p-1">
-                        {options.map((option, index) => {
+                    {searchable && (
+                        <div className="shrink-0 border-b border-border/55 p-2">
+                            <input
+                                autoFocus
+                                value={query}
+                                onChange={(event) => {
+                                    setQuery(event.target.value)
+                                    setHighlightedIndex(0)
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Escape') {
+                                        event.preventDefault()
+                                        setIsOpen(false)
+                                    } else if (event.key === 'ArrowDown') {
+                                        event.preventDefault()
+                                        setHighlightedIndex(index => Math.min(index + 1, filteredOptions.length - 1))
+                                    } else if (event.key === 'ArrowUp') {
+                                        event.preventDefault()
+                                        setHighlightedIndex(index => Math.max(index - 1, 0))
+                                    } else if (event.key === 'Enter' && highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
+                                        event.preventDefault()
+                                        onChange(filteredOptions[highlightedIndex].value)
+                                        setIsOpen(false)
+                                    }
+                                }}
+                                placeholder={searchPlaceholder}
+                                className="h-8 w-full rounded-lg border border-input/70 bg-background/60 px-2.5 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+                            />
+                        </div>
+                    )}
+                    <div ref={listRef} role="listbox" className="min-h-0 flex-1 overflow-y-auto p-1">
+                        {filteredOptions.length === 0 && (
+                            <div className="px-3 py-4 text-center text-xs text-muted-foreground">{emptyText}</div>
+                        )}
+                        {filteredOptions.map((option, index) => {
                             const isSelected = option.value === value
                             const isHighlighted = index === highlightedIndex
 
@@ -193,7 +251,8 @@ export function Select({ value, onChange, options, placeholder = "Select...", cl
                                         !isHighlighted && !isSelected && "text-foreground"
                                     )}
                                 >
-                                    <span className="flex-1 truncate">{option.label}</span>
+                                    {option.icon}
+                                    <span className={cn("flex-1 truncate", option.icon && "ml-2.5")}>{option.label}</span>
                                     {isSelected && (
                                         <HugeiconsIcon icon={Tick01Icon} className="ml-2 h-3.5 w-3.5 shrink-0 text-primary" />
                                     )}

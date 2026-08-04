@@ -51,3 +51,29 @@ export function MonitorSkeleton() {
         </div>
     );
 }
+
+/** Placeholder cards shared by Docker container and image lists. */
+export function DockerCardsSkeleton({ rows = 3 }: { rows?: number }) {
+    return (
+        <div className="space-y-2" role="status" aria-busy="true">
+            {Array.from({ length: rows }, (_, index) => (
+                <div key={index} className="space-y-3 rounded-xl border border-border/55 bg-background/24 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <Skeleton className="h-2 w-2 shrink-0 rounded-full" />
+                            <Skeleton className="h-3" style={{ width: `${36 + index * 7}%` }} />
+                        </div>
+                        <Skeleton className="h-5 w-14 rounded-md" />
+                    </div>
+                    <Skeleton className="ml-4 h-2.5 w-2/5" />
+                    <div className="flex gap-2 border-t border-border/40 pt-2">
+                        <Skeleton className="h-7 w-14 rounded-lg" />
+                        <Skeleton className="h-7 w-20 rounded-lg" />
+                        <Skeleton className="ml-auto h-7 w-7 rounded-lg" />
+                        <Skeleton className="h-7 w-7 rounded-lg" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}

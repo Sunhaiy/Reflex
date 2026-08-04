@@ -17,8 +17,15 @@ export interface ShellResult {
   truncated: boolean;
 }
 
-/** Streamed live so a long build is watchable rather than a three-minute blank. */
-export type ShellOutputListener = (chunk: string, stream: 'stdout' | 'stderr') => void;
+/**
+ * Streamed live so a long build is watchable rather than a three-minute blank.
+ * `chunk` retains ANSI for xterm; `plainChunk` is safe for the model and React text.
+ */
+export type ShellOutputListener = (
+  chunk: string,
+  stream: 'stdout' | 'stderr',
+  plainChunk: string,
+) => void;
 
 export interface RunOptions {
   /** Runs in this directory without moving the persistent one. */
@@ -37,6 +44,34 @@ const STDERR_DRAIN_MS = 30;
 const HEAD_LINES = 100;
 const TAIL_LINES = 200;
 const MAX_CAPTURE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Initialises colour without sourcing a user's shell profile. Profiles can print text,
+ * start prompt helpers or run interactive commands, all of which would corrupt command
+ * framing. These probes only install aliases the remote utilities actually support.
+ */
+export function colourShellSetup(readyMarker: string): string {
+  return [
+    'export PS1= PS2= PS4= PROMPT_COMMAND=',
+    'if command -v dircolors >/dev/null 2>&1; then eval "$(dircolors -b 2>/dev/null)" || true; fi',
+    "if ls --color=auto -d . >/dev/null 2>&1; then alias ls='ls --color=auto'; alias ll='ls -alF'; alias la='ls -A'; fi",
+    "if grep --help 2>&1 | grep -q -- '--color'; then alias grep='grep --color=auto'; fi",
+    "if diff --help 2>&1 | grep -q -- '--color'; then alias diff='diff --color=auto'; fi",
+    `echo ${readyMarker}`,
+    '',
+  ].join('\n');
+}
+
+/** Removes terminal styling without flattening the actual command output. */
+export function stripTerminalFormatting(text: string): string {
+  return text
+    // OSC sequences include terminal titles and hyperlinks and end in BEL or ST.
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, '')
+    // CSI and the remaining two-byte escape sequences.
+    .replace(/\x1B(?:\[[0-?]*[ -/]*[@-~]|[@-_])/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '');
+}
 
 /**
  * Keeps the two ends of a long output and drops the middle.
@@ -124,8 +159,9 @@ interface PendingCommand {
  * the next call. A deployment is a sequence that builds on itself, so the shell is kept
  * open and each command is framed by a random sentinel that carries the exit code back.
  *
- * The channel is deliberately PTY-less: nothing echoes what we write and no control
- * sequences land in the output, so what the model reads is what the command printed.
+ * A quiet PTY makes programs use their normal terminal colours. Echo is disabled before
+ * the persistent shell starts, so framing commands never leak into the output. ANSI is
+ * retained for xterm and stripped from the separate model-facing capture.
  */
 export class AgentShell {
   private channel: ClientChannel | null = null;
@@ -149,29 +185,67 @@ export class AgentShell {
     if (!conn) return Promise.reject(new Error('Not connected'));
 
     return new Promise((resolve, reject) => {
-      conn.exec('/bin/sh', (error, channel) => {
-        if (error) return reject(error);
-        this.channel = channel;
-        let buffer = '';
+      const readyMarker = `__RFX_READY_${this.token}__`;
+      conn.exec(
+        'stty -echo 2>/dev/null || true; '
+          + 'export TERM=xterm-256color COLORTERM=truecolor CLICOLOR=1 CLICOLOR_FORCE=1 '
+          + 'FORCE_COLOR=1 SYSTEMD_COLORS=1; unset NO_COLOR; exec /bin/sh -i',
+        { pty: { term: 'xterm-256color', cols: 160, rows: 40 } },
+        (error, channel) => {
+          if (error) return reject(error);
+          let buffer = '';
+          let readyBuffer = '';
+          let ready = false;
 
-        channel.on('data', (data: Buffer) => {
-          buffer = this.consumeStdout(buffer + data.toString('utf-8'));
-        });
+          channel.on('data', (data: Buffer) => {
+            const text = data.toString('utf-8');
+            if (!ready) {
+              readyBuffer += text;
+              const marker = readyBuffer.indexOf(readyMarker);
+              if (marker === -1) return;
+              const lineEnd = readyBuffer.indexOf('\n', marker + readyMarker.length);
+              if (lineEnd === -1) return;
+              ready = true;
+              this.channel = channel;
+              const afterReady = readyBuffer.slice(lineEnd + 1);
+              readyBuffer = '';
+              resolve(channel);
+              if (afterReady) buffer = this.consumeStdout(afterReady);
+              return;
+            }
+            buffer = this.consumeStdout(buffer + text);
+          });
 
-        channel.stderr.on('data', (data: Buffer) => {
-          const text = data.toString('utf-8');
-          const pending = this.pending;
-          if (!pending) return;
-          pending.stderr += text;
-          // stderr is low-volume next to stdout, so it goes straight out unbatched.
-          pending.onOutput?.(text, 'stderr');
-        });
+          channel.stderr.on('data', (data: Buffer) => {
+            const text = data.toString('utf-8');
+            const plain = stripTerminalFormatting(text);
+            const pending = this.pending;
+            if (!pending) return;
+            pending.stderr += plain;
+            // stderr is low-volume next to stdout, so it goes straight out unbatched.
+            pending.onOutput?.(text, 'stderr', plain);
+          });
 
-        channel.on('close', () => this.handleChannelLoss(new Error('Shell channel closed')));
-        channel.on('error', (channelError: Error) => this.handleChannelLoss(channelError));
+          channel.on('close', () => {
+            const loss = new Error('Shell channel closed');
+            if (!ready) reject(loss);
+            else this.handleChannelLoss(loss);
+          });
+          channel.on('error', (channelError: Error) => {
+            if (!ready) reject(channelError);
+            else this.handleChannelLoss(channelError);
+          });
 
-        resolve(channel);
-      });
+          try {
+            // Defining aliases inside the persistent interactive shell makes them apply
+            // to later Agent commands. The setup itself is hidden by stty -echo and all
+            // pre-marker output is discarded by the readiness gate above.
+            channel.write(colourShellSetup(readyMarker));
+          } catch (writeError) {
+            reject(writeError instanceof Error ? writeError : new Error(String(writeError)));
+          }
+        },
+      );
     });
   }
 
@@ -182,7 +256,7 @@ export class AgentShell {
 
     const frame = consumeFrame(buffer, pending.sentinel);
     if (frame.visible) {
-      pending.stdout += frame.visible;
+      pending.stdout += stripTerminalFormatting(frame.visible);
       this.queue(pending, frame.visible);
     }
     if (frame.exitCode !== undefined) this.finish(pending, frame.exitCode, false);
@@ -205,7 +279,7 @@ export class AgentShell {
     if (!pending.queued) return;
     const chunk = pending.queued;
     pending.queued = '';
-    pending.onOutput?.(chunk, 'stdout');
+    pending.onOutput?.(chunk, 'stdout', stripTerminalFormatting(chunk));
   }
 
   private settle(pending: PendingCommand, exitCode: number | null, timedOut: boolean) {

@@ -10,7 +10,7 @@ import type {
   ToolCallPart,
   ToolDefinition,
 } from './types';
-import { ProviderError } from './types';
+import { normaliseOpenAIError, parseOpenAIArguments } from './openaiCommon';
 
 const MAX_OUTPUT_TOKENS = 16_000;
 
@@ -95,7 +95,7 @@ export class OpenAIProvider implements Provider {
           // Not every endpoint sends an id; the loop needs one to match the result to.
           id: slot.id || `call_${index}_${Date.now()}`,
           name: slot.name,
-          input: parseArguments(slot.args, slot.name),
+          input: parseOpenAIArguments(slot.args, slot.name),
         };
         toolCalls.push(call);
         events.onToolCall(call);
@@ -108,7 +108,7 @@ export class OpenAIProvider implements Provider {
         usage: usage ?? { inputTokens: 0, outputTokens: 0 },
       };
     } catch (error) {
-      throw normaliseError(error, request.signal);
+      throw normaliseOpenAIError(error, request.signal);
     }
   }
 
@@ -125,22 +125,6 @@ export class OpenAIProvider implements Provider {
  * some compatible endpoints send instead — and refuses anything else loudly rather than
  * handing the tool an empty input it would act on.
  */
-function parseArguments(raw: string, toolName: string): Record<string, unknown> {
-  const text = raw.trim();
-  if (!text) return {};
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    throw new Error('not an object');
-  } catch {
-    throw new ProviderError(
-      `Model sent malformed arguments for ${toolName}: ${text.slice(0, 200)}`,
-    );
-  }
-}
-
 function toOpenAITool(tool: ToolDefinition): OpenAI.Chat.Completions.ChatCompletionTool {
   return {
     type: 'function',
@@ -182,13 +166,4 @@ function toStopReason(finish: string | null, hasToolCalls: boolean): StopReason 
   if (finish === 'tool_calls' || hasToolCalls) return 'tool_use';
   if (finish === 'length') return 'max_tokens';
   return 'end';
-}
-
-function normaliseError(error: unknown, signal?: AbortSignal): Error {
-  if (signal?.aborted) return new ProviderError('Cancelled', undefined, false);
-  if (error instanceof OpenAI.APIError) {
-    const retryable = error.status === 429 || (error.status ?? 0) >= 500;
-    return new ProviderError(error.message, error.status, retryable);
-  }
-  return error instanceof Error ? error : new ProviderError(String(error));
 }

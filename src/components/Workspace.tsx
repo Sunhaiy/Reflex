@@ -3,7 +3,6 @@ import { TerminalConnecting } from './ConnectingOverlay';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ResizableLayout } from './ResizableLayout';
 import { RightColumn } from './RightColumn';
-import { AgentDock } from './agent/AgentDock';
 import { useAgent } from '../hooks/useAgent';
 import type { SessionStatus } from '../shared/types';
 
@@ -12,6 +11,8 @@ const TerminalView = lazy(() => import('./TerminalView').then((module) => ({ def
 
 interface WorkspaceProps {
   sessionId: string;
+  /** Stable across app restarts, unlike the live SSH session id. */
+  connectionId: string;
   /** What the connection is called, so the agent can name it back. */
   serverLabel: string;
   status: SessionStatus;
@@ -24,14 +25,11 @@ interface WorkspaceProps {
  * than unmounted: tearing these down on a tab switch dropped the terminal's scrollback and
  * the monitor's collected history, so switching back meant a reload.
  *
- * The agent's state is held here rather than inside its panel because the panel moves
- * between the bottom of the terminal and the right column. Owning it at the level above
- * both means changing where it sits re-parents a component instead of resetting a
- * conversation.
+ * The agent's state is held here rather than inside its panel so changing right-column
+ * tabs never resets its conversations.
  */
-export function Workspace({ sessionId, serverLabel, status, active }: WorkspaceProps) {
-  const agent = useAgent(sessionId, serverLabel);
-  const dockedRight = agent.config?.dock === 'right';
+export function Workspace({ sessionId, connectionId, serverLabel, status, active }: WorkspaceProps) {
+  const agent = useAgent(sessionId, connectionId, serverLabel);
 
   const terminal = (
     <ErrorBoundary name="Terminal">
@@ -57,11 +55,7 @@ export function Workspace({ sessionId, serverLabel, status, active }: WorkspaceP
           }
           middleContent={
             <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background/28">
-              {dockedRight ? (
-                <div className="relative min-h-0 flex-1 overflow-hidden">{terminal}</div>
-              ) : (
-                <AgentDock agent={agent}>{terminal}</AgentDock>
-              )}
+              <div className="relative min-h-0 flex-1 overflow-hidden">{terminal}</div>
               {status === 'connecting' && <TerminalConnecting connectionId={sessionId} />}
             </div>
           }
@@ -70,7 +64,6 @@ export function Workspace({ sessionId, serverLabel, status, active }: WorkspaceP
               sessionId={sessionId}
               active={active && status === 'connected'}
               agent={agent}
-              agentDocked={dockedRight}
             />
           }
         />

@@ -1,6 +1,7 @@
 import { SparklesIcon } from '@hugeicons/core-free-icons';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './ErrorBoundary';
+import { AgentHeaderActions } from './agent/AgentHeaderActions';
 import { AgentPanel } from './agent/AgentPanel';
 import { useTranslation } from '../hooks/useTranslation';
 import type { AgentController } from '../hooks/useAgent';
@@ -8,15 +9,13 @@ import type { AgentController } from '../hooks/useAgent';
 const RightPanel = lazy(() => import('./RightPanel').then((module) => ({ default: module.RightPanel })));
 
 /**
- * The right column. When the agent is docked here it joins the monitor and Docker on
- * their own bar rather than getting a second row above them: the three are alternatives
- * for the same space, and two stacked bars read as two unrelated kinds of thing.
+ * Agent, monitor and Docker share one right-column tab bar. Agent actions belong to that
+ * bar rather than the composer because they change the conversation, not the next prompt.
  */
-export function RightColumn({ sessionId, active, agent, agentDocked }: {
+export function RightColumn({ sessionId, active, agent }: {
   sessionId: string;
   active: boolean;
   agent: AgentController;
-  agentDocked: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -26,12 +25,13 @@ export function RightColumn({ sessionId, active, agent, agentDocked }: {
         <RightPanel
           connectionId={sessionId}
           active={active}
-          extraTab={agentDocked ? {
+          extraTab={{
             id: 'agent',
             label: t('agent.title'),
             icon: SparklesIcon,
             content: <AgentPanel agent={agent} />,
-          } : undefined}
+            actions: <AgentHeaderActions agent={agent} />,
+          }}
         />
       </Suspense>
     </ErrorBoundary>

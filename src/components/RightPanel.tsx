@@ -14,10 +14,15 @@ interface RightPanelProps {
   /** False while this session sits behind another tab; polling pauses, state stays. */
   active: boolean;
   /**
-   * An extra pane sharing this bar. The agent docks here rather than growing a second row
-   * of tabs above these — two bars for three destinations reads as two unrelated things.
+   * An extra pane sharing this bar, with optional actions shown only while it is active.
    */
-  extraTab?: { id: string; label: string; icon: IconSvgElement; content: React.ReactNode };
+  extraTab?: {
+    id: string;
+    label: string;
+    icon: IconSvgElement;
+    content: React.ReactNode;
+    actions?: React.ReactNode;
+  };
 }
 
 export function RightPanel({ connectionId, active, extraTab }: RightPanelProps) {
@@ -34,22 +39,27 @@ export function RightPanel({ connectionId, active, extraTab }: RightPanelProps) 
 
   return (
     <div className="flex h-full flex-col bg-transparent">
-      <div className={cn(workspaceBarClass, 'no-scrollbar gap-1 overflow-x-auto px-2')}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              workspaceTabClass,
-              'whitespace-nowrap',
-              showing === tab.id && 'bg-foreground/[0.09] text-foreground',
-            )}
-          >
-            <HugeiconsIcon icon={tab.icon} className="h-3.5 w-3.5" />
-            {tab.label}
-          </button>
-        ))}
+      <div className={cn(workspaceBarClass, 'gap-1 px-2')}>
+        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                workspaceTabClass,
+                'whitespace-nowrap',
+                showing === tab.id && 'bg-foreground/[0.09] text-foreground',
+              )}
+            >
+              <HugeiconsIcon icon={tab.icon} className="h-3.5 w-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {showing === extraTab?.id && extraTab.actions && (
+          <div className="flex shrink-0 items-center gap-0.5">{extraTab.actions}</div>
+        )}
       </div>
 
       {/* Hidden rather than unmounted: the monitor collects its history as it runs, and
