@@ -26,8 +26,8 @@ export function RightPanel({ connectionId, active, extraTab }: RightPanelProps) 
 
   const tabs = [
     { id: 'monitor', label: t('processList.title'), icon: ComputerIcon },
-    { id: 'docker', label: 'Docker', icon: ContainerIcon },
     ...(extraTab ? [{ id: extraTab.id, label: extraTab.label, icon: extraTab.icon }] : []),
+    { id: 'docker', label: 'Docker', icon: ContainerIcon },
   ];
   // A tab that disappears must not take the view with it.
   const showing = tabs.some((tab) => tab.id === activeTab) ? activeTab : 'monitor';

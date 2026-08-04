@@ -351,6 +351,8 @@ export const en = {
       noSelection: "No selection",
     },
     agent: {
+      effortFaster: "Faster",
+      effortSmarter: "Smarter",
       effortAuto: "Default effort",
       effortLow: "Low effort",
       effortMedium: "Medium effort",

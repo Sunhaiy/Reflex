@@ -20,10 +20,15 @@ export interface CompactMenuOption {
  * Rendered through a portal because the panes clip their overflow, which would otherwise
  * cut the list off at its first row.
  */
-export function CompactMenu({ value, options, onChange, tone = 'default', title, maxWidth }: {
+export function CompactMenu({ value, options, onChange, tone = 'default', title, maxWidth, label, panel }: {
   value: string;
-  options: CompactMenuOption[];
-  onChange: (value: string) => void;
+  /** Ignored when `panel` is given. */
+  options?: CompactMenuOption[];
+  onChange?: (value: string) => void;
+  /** Overrides the trigger text, for a control whose value is not its own label. */
+  label?: string;
+  /** Rendered instead of the option list, for a control a list cannot express. */
+  panel?: React.ReactNode;
   /**
    * `accent` is the theme colour, for the control the user reaches for most.
    * `alert` marks a setting whose consequences they should keep noticing.
@@ -37,7 +42,7 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const selected = options.find((option) => option.value === value);
+  const selected = options?.find((option) => option.value === value);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
@@ -86,7 +91,7 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
           tone === 'default' && 'bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.1]',
         )}
       >
-        <span className="truncate">{selected?.label ?? value}</span>
+        <span className="truncate">{label ?? selected?.label ?? value}</span>
         <HugeiconsIcon icon={ArrowDown01Icon} className="h-3 w-3 shrink-0 opacity-60" />
       </button>
 
@@ -101,12 +106,13 @@ export function CompactMenu({ value, options, onChange, tone = 'default', title,
           }}
           className="glass-panel fixed z-[9999] max-h-64 max-w-[340px] overflow-y-auto rounded-xl p-1"
         >
-          {options.map((option) => (
+          {panel}
+          {!panel && options?.map((option) => (
             <button
               key={option.value}
               type="button"
               onClick={() => {
-                onChange(option.value);
+                onChange?.(option.value);
                 setOpen(false);
               }}
               className={cn(

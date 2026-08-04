@@ -11,9 +11,11 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import type { AgentController } from '../../hooks/useAgent';
 import { useTranslation } from '../../hooks/useTranslation';
-import { REASONING_EFFORTS, type AgentMode, type ReasoningEffort } from '../../shared/agent';
+import type { AgentMode } from '../../shared/agent';
 import { AGENT_MODES, EFFORT_LABEL, MODE_HINT, MODE_LABEL } from './modes';
 import { CompactMenu } from './CompactMenu';
+import { ContextRing } from './ContextRing';
+import { EffortSlider } from './EffortSlider';
 import { ApprovalCard } from './ApprovalCard';
 import { ToolCard } from './ToolCard';
 
@@ -41,7 +43,6 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
   const dock = agent.config?.dock ?? 'bottom';
   const models = agent.config?.models ?? [];
   const budget = agent.config?.contextBudget ?? 60_000;
-  const contextShare = budget > 0 ? agent.contextTokens / budget : 0;
   const effort = agent.config?.effort ?? 'auto';
 
   const submit = () => {
@@ -194,32 +195,12 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
 
             <CompactMenu
               value={effort}
-              title={t(EFFORT_LABEL[effort])}
-              options={REASONING_EFFORTS.map((option) => ({
-                value: option,
-                label: t(EFFORT_LABEL[option]),
-                hint: option === 'auto' ? t('agent.effortAutoHint') : t('agent.effortHintOther'),
-              }))}
-              onChange={(next) => agent.setEffort(next as ReasoningEffort)}
+              label={t(EFFORT_LABEL[effort])}
+              title={t('settings.agent.effort')}
+              panel={<EffortSlider value={effort} onChange={agent.setEffort} />}
             />
 
-            {/* Measured, not estimated: the endpoint's own count for the last request.
-                Always shown, so the budget is something you can watch approach rather
-                than something you discover by output going missing. */}
-            {(
-              <span
-                title={t('agent.contextTitle', {
-                  used: agent.contextTokens.toLocaleString(),
-                  budget: budget.toLocaleString(),
-                })}
-                className={cn(
-                  'shrink-0 px-1 font-mono text-[10.5px] tabular-nums',
-                  contextShare >= 0.9 ? 'text-amber-500' : 'text-muted-foreground/70',
-                )}
-              >
-                {Math.round(agent.contextTokens / 1000)}k/{Math.round(budget / 1000)}k
-              </span>
-            )}
+            <ContextRing used={agent.contextTokens} budget={budget} />
 
             <div className="flex-1" />
 

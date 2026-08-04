@@ -348,6 +348,8 @@ export const zh: LocaleBundle = {
       noSelection: "未选择项目",
     },
     agent: {
+      effortFaster: "更快",
+      effortSmarter: "更强",
       effortAuto: "默认强度",
       effortLow: "低强度",
       effortMedium: "中强度",

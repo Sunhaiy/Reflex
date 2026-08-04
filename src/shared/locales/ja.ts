@@ -348,6 +348,8 @@ export const ja: LocaleBundle = {
       noSelection: "未選択",
     },
     agent: {
+      effortFaster: "速い",
+      effortSmarter: "賢い",
       effortAuto: "既定の強度",
       effortLow: "低",
       effortMedium: "中",

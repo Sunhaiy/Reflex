@@ -348,6 +348,8 @@ export const it: LocaleBundle = {
       noSelection: "Nessuna selezione",
     },
     agent: {
+      effortFaster: "Più veloce",
+      effortSmarter: "Più bravo",
       effortAuto: "Sforzo predefinito",
       effortLow: "Basso",
       effortMedium: "Medio",

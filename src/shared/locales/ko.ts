@@ -348,6 +348,8 @@ export const ko: LocaleBundle = {
       noSelection: "선택 없음",
     },
     agent: {
+      effortFaster: "빠르게",
+      effortSmarter: "똑똑하게",
       effortAuto: "기본 강도",
       effortLow: "낮음",
       effortMedium: "보통",
