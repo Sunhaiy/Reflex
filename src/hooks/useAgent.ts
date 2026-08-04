@@ -5,6 +5,7 @@ import { echoAgentCommand, echoAgentOutput, echoAgentResult } from '../lib/termi
 import type {
   AgentConfigView,
   AgentDockPosition,
+  AgentMode,
   AgentEvent,
   ApprovalAnswer,
   ApprovalQuestion,
@@ -122,6 +123,12 @@ export function useAgent(sessionId: string, serverLabel: string) {
     setBusy(false);
   }, [sessionId]);
 
+  // Written through and read back, so the panel and the settings page can never disagree
+  // about what is configured.
+  const setMode = useCallback((mode: AgentMode) => {
+    void window.electron.agentConfigSet({ mode }).then(setConfig);
+  }, []);
+
   const setModel = useCallback((model: string) => {
     void window.electron.agentConfigSet({ model }).then(setConfig);
   }, []);
@@ -152,6 +159,7 @@ export function useAgent(sessionId: string, serverLabel: string) {
     needsFolder,
     refreshConfig,
     setDock,
+    setMode,
     setModel,
     shareFolder,
     clearFolder: useCallback(() => setLocalRoot(null), []),

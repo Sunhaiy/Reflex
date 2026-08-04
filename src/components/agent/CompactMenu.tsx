@@ -4,25 +4,25 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 
-export interface HeaderMenuOption {
+export interface CompactMenuOption {
   value: string;
   label: string;
   hint?: string;
 }
 
 /**
- * A one-line dropdown for the panel header.
+ * A one-line dropdown for the composer toolbar.
  *
- * The header has to survive being 320 pixels wide when the panel is docked in the right
- * column, where a row of four buttons wraps onto two lines and stops looking like a
- * control. A trigger that shows only the current value fits either width.
+ * It has to survive being 320 pixels wide when the panel is docked in the right column,
+ * where a row of four buttons wraps onto two lines and stops looking like a control. A
+ * trigger showing only the current value fits either width.
  *
- * Rendered through a portal because the header sits inside a pane that clips its
- * overflow, which would otherwise cut the list off at the first row.
+ * Rendered through a portal because the panes clip their overflow, which would otherwise
+ * cut the list off at its first row.
  */
-export function HeaderMenu({ value, options, onChange, tone = 'default', title, maxWidth }: {
+export function CompactMenu({ value, options, onChange, tone = 'default', title, maxWidth }: {
   value: string;
-  options: HeaderMenuOption[];
+  options: CompactMenuOption[];
   onChange: (value: string) => void;
   /** `alert` marks a setting whose consequences the user should keep noticing. */
   tone?: 'default' | 'alert';
