@@ -1,27 +1,17 @@
-import { useSettingsStore } from '../store/settingsStore';
-import { translations } from '../shared/locales';
-import type { Language } from '../shared/locales';
-import { featureTranslations } from '../shared/featureLocales';
-import { uiTranslations } from '../shared/uiLocales';
 import { useCallback } from 'react';
+import { useSettingsStore } from '../store/settingsStore';
+import { locales, type Language, type LocaleBundle } from '../shared/locales';
 
-function resolveTranslation(bundle: any, key: string): string | null {
-    if (!bundle) return null;
-    const keys = key.split('.');
-    let current: any = bundle;
-
-    for (const k of keys) {
-        if (current && current[k] !== undefined) {
-            current = current[k];
-        } else {
-            return null;
-        }
+function resolve(bundle: LocaleBundle | undefined, key: string): string | null {
+    let current: unknown = bundle;
+    for (const part of key.split('.')) {
+        if (!current || typeof current !== 'object') return null;
+        current = (current as Record<string, unknown>)[part];
     }
-
     return typeof current === 'string' ? current : null;
 }
 
-/** Replaces `{name}` placeholders, so translated sentences can keep their own word order. */
+/** Replaces `{name}` placeholders, so translated sentences keep their own word order. */
 function interpolate(template: string, values?: Record<string, string | number>) {
     if (!values) return template;
     return template.replace(/\{(\w+)\}/g, (match, name) =>
@@ -32,22 +22,10 @@ export function useTranslation() {
     const { language } = useSettingsStore();
 
     const t = useCallback((key: string, values?: Record<string, string | number>): string => {
-        const bundles = [
-            translations[language],
-            featureTranslations[language as Language],
-            uiTranslations[language],
-            // English fallback for keys a translation has not covered yet.
-            translations.en,
-            featureTranslations.en,
-            uiTranslations.en,
-        ];
-
-        for (const bundle of bundles) {
-            const found = resolveTranslation(bundle, key);
-            if (found) return interpolate(found, values);
-        }
-
-        return key;
+        // Every language is type-checked against the English bundle, so a miss here means
+        // a key that does not exist at all rather than one language lagging behind.
+        const found = resolve(locales[language as Language], key) ?? resolve(locales.en, key);
+        return found === null ? key : interpolate(found, values);
     }, [language]);
 
     return { t, language };

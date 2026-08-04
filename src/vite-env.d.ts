@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 import type { StoreKey } from './shared/storeKeys';
 import type {
+  AgentConfig,
+  AgentConfigView,
+  AgentEvent,
+  ApprovalAnswer,
+} from './shared/agent';
+import type {
   ActivityLine,
   ActivityScope,
   DockerAction,
@@ -41,7 +47,32 @@ declare global {
       sftpReadFile: (id: string, path: string) => Promise<RemoteFilePayload>;
       sftpWriteFile: (id: string, path: string, content: string, encoding?: string) => Promise<void>;
       getPathForFile: (file: File) => string;
-      getPwd: (id: string) => Promise<string>;
+      agentConfigGet: () => Promise<AgentConfigView>;
+      agentConfigSet: (patch: Partial<AgentConfig> & { apiKey?: string }) => Promise<AgentConfigView>;
+      agentProviderSelect: (providerId: string) => Promise<AgentConfigView>;
+      agentTest: () => Promise<{ ok: true } | { ok: false; error: string }>;
+      agentModels: () => Promise<{ ok: true; models: string[] } | { ok: false; error: string }>;
+      onAgentConfigChanged: (callback: (config: AgentConfigView) => void) => () => void;
+      agentSend: (payload: {
+        sessionId: string;
+        connectionId: string;
+        conversationId: string;
+        serverLabel: string;
+        message: string;
+        localRoot: string | null;
+      }) => Promise<{ ok: true } | { ok: false; error: string }>;
+      agentAnswer: (payload: {
+        conversationId: string;
+        callId: string;
+        answer: ApprovalAnswer;
+      }) => Promise<boolean>;
+      agentCancel: (conversationId: string) => void;
+      agentPickFolder: () => Promise<string | null>;
+      agentConversationsGet: (connectionId: string) => Promise<unknown>;
+      agentConversationsSet: (connectionId: string, value: unknown) => Promise<void>;
+      onAgentEvent: (
+        callback: (payload: { sessionId: string; conversationId: string; event: AgentEvent }) => void,
+      ) => () => void;
       openDialog: () => Promise<string | undefined>;
       saveDialog: (defaultName: string) => Promise<string | undefined>;
       showItemInFolder: (filePath: string) => Promise<void>;

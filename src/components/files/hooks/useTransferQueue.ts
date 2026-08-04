@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 export type TransferDirection = 'upload' | 'download';
 export type TransferStatus = 'active' | 'done' | 'error';
@@ -73,5 +73,11 @@ export function useTransferQueue() {
 
     const activeCount = transfers.filter(t => t.status === 'active').length;
 
-    return { transfers, activeCount, addTransfer, updateProgress, markDone, markError, restart, clearHistory };
+    // Memoised because the callers wrap it in useCallback. A fresh object literal here
+    // changed identity on every render and invalidated all of them, which defeated the
+    // memoisation on everything the file browser hands those callbacks to.
+    return useMemo(
+        () => ({ transfers, activeCount, addTransfer, updateProgress, markDone, markError, restart, clearHistory }),
+        [activeCount, addTransfer, clearHistory, markDone, markError, restart, transfers, updateProgress],
+    );
 }

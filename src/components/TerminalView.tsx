@@ -5,6 +5,7 @@ import { useThemeStore } from '../store/themeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { queueUsage } from '../lib/usageTracker';
 import { log } from '../lib/logger';
+import { subscribeTerminalEcho } from '../lib/terminalEcho';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
@@ -153,6 +154,12 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       };
       window.addEventListener('terminal-refresh', handleTermRefresh);
 
+      // What the agent runs shows up here too. Display only — nothing written this way
+      // is sent to the server.
+      const unsubEcho = subscribeTerminalEcho(connectionId, (text) => {
+        if (!disposed) term.write(text);
+      });
+
       // ResizeObserver fires in bursts while panels are dragged. Coalescing to one fit
       // per frame, and only sending a window-change when the grid actually changed,
       // keeps redundant SSH packets off the connection the shell is typing on.
@@ -185,6 +192,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         unsubTheme();
         unsubSettings();
         window.removeEventListener('terminal-refresh', handleTermRefresh);
+        unsubEcho();
         if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
         try {
           cleanup();

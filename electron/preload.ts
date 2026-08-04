@@ -36,7 +36,27 @@ contextBridge.exposeInMainWorld('electron', {
   sftpReadFile: (id: string, path: string) => ipcRenderer.invoke('sftp-read-file', { id, path }),
   sftpWriteFile: (id: string, path: string, content: string, encoding = 'utf-8') => ipcRenderer.invoke('sftp-write-file', { id, path, content, encoding }),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  getPwd: (id: string) => ipcRenderer.invoke('get-pwd', id),
+  agentConfigGet: () => ipcRenderer.invoke('agent-config-get'),
+  agentConfigSet: (patch: unknown) => ipcRenderer.invoke('agent-config-set', patch),
+  agentProviderSelect: (providerId: string) => ipcRenderer.invoke('agent-provider-select', providerId),
+  agentTest: () => ipcRenderer.invoke('agent-test'),
+  agentModels: () => ipcRenderer.invoke('agent-models'),
+  onAgentConfigChanged: (callback: (config: unknown) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, config: unknown) => callback(config);
+    ipcRenderer.on('agent-config-changed', subscription);
+    return () => ipcRenderer.removeListener('agent-config-changed', subscription);
+  },
+  agentSend: (payload: unknown) => ipcRenderer.invoke('agent-send', payload),
+  agentAnswer: (payload: unknown) => ipcRenderer.invoke('agent-answer', payload),
+  agentCancel: (conversationId: string) => ipcRenderer.send('agent-cancel', conversationId),
+  agentPickFolder: () => ipcRenderer.invoke('agent-pick-folder'),
+  agentConversationsGet: (connectionId: string) => ipcRenderer.invoke('agent-conversations-get', connectionId),
+  agentConversationsSet: (connectionId: string, value: unknown) => ipcRenderer.invoke('agent-conversations-set', { connectionId, value }),
+  onAgentEvent: (callback: (payload: { sessionId: string; conversationId: string; event: unknown }) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; conversationId: string; event: unknown }) => callback(payload);
+    ipcRenderer.on('agent-event', subscription);
+    return () => ipcRenderer.removeListener('agent-event', subscription);
+  },
   openDialog: () => ipcRenderer.invoke('dialog-open'),
   saveDialog: (defaultName: string) => ipcRenderer.invoke('dialog-save', defaultName),
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('show-item-in-folder', filePath),

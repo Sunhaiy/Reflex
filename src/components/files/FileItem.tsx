@@ -8,6 +8,8 @@ import { cn } from '../../lib/utils';
 interface Props {
     file: FileEntry;
     isSelected: boolean;
+    /** Absolute placement from the virtualiser; the row is positioned, not stacked. */
+    style?: React.CSSProperties;
     onClick: (file: FileEntry) => void;
     onDoubleClick: (file: FileEntry) => void;
     onContextMenu: (e: React.MouseEvent, file: FileEntry) => void;
@@ -25,14 +27,17 @@ function getIcon(file: FileEntry) {
     }
 }
 
-export const FileItem = memo(function FileItem({ file, isSelected, onClick, onDoubleClick, onContextMenu }: Props) {
+export const FileItem = memo(function FileItem({ file, isSelected, style, onClick, onDoubleClick, onContextMenu }: Props) {
     return (
         <div
             role="button"
             tabIndex={0}
             aria-selected={isSelected}
+            style={style}
             className={cn(
-                'group mx-1 grid cursor-default select-none grid-cols-[24px_minmax(0,1fr)] items-center rounded-lg px-2 py-1.5 text-xs outline-none transition-colors',
+                // The explicit height is what the virtualiser's row pitch is measured
+                // against, so it must not be left to the padding to imply.
+                'group mx-1 grid h-7 cursor-default select-none grid-cols-[24px_minmax(0,1fr)] items-center rounded-lg px-2 text-xs outline-none transition-colors',
                 isSelected
                     ? 'bg-foreground/[0.09] text-foreground'
                     : 'hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.055]',

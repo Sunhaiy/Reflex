@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../hooks/useTranslation';
 import type { RemoteProcess } from '../shared/types';
+import { errorMessage } from '../lib/errors';
 
 interface ProcessListProps {
     connectionId: string;
@@ -25,8 +26,8 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
             // Backend returns top 50 sorted by cpu. We can re-sort if needed.
             const sorted = [...list].sort((a, b) => b[sortBy] - a[sortBy]).slice(0, 50);
             setProcesses(sorted);
-        } catch (err: any) {
-            setError(err.message || t('common.error'));
+        } catch (err) {
+            setError(errorMessage(err, t('common.error')));
         } finally {
             setLoading(false);
         }
@@ -62,8 +63,8 @@ export function ProcessList({ connectionId, onClose }: ProcessListProps) {
         try {
             await window.electron.killProcess(connectionId, pid);
             fetchProcesses(); // Refresh immediately
-        } catch (err: any) {
-            alert(`${t('common.error')}: ${err.message}`);
+        } catch (err) {
+            alert(`${t('common.error')}: ${errorMessage(err)}`);
         }
     };
 

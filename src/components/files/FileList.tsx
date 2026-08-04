@@ -1,11 +1,16 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, ArrowUp01Icon, Folder01Icon } from "@hugeicons/core-free-icons";
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { FileEntry } from '../../shared/types';
 import { FlowingBar } from '../ui/progress-bar';
 import { FileListSkeleton } from '../ui/skeleton';
 import { FileItem } from './FileItem';
 import { useTranslation } from '../../hooks/useTranslation';
+import { useVirtualRows } from '../../hooks/useVirtualRows';
+
+/** Matches FileItem's `h-7`, plus the 2px that used to come from the container's gap. */
+const ROW_HEIGHT = 28;
+const ROW_PITCH = ROW_HEIGHT + 2;
 
 type SortField = 'name' | 'size' | 'date';
 type SortOrder = 'asc' | 'desc';
@@ -80,8 +85,18 @@ export const FileList = memo(function FileList({
 }: Props) {
     const { t } = useTranslation();
     const busy = useDelayedBusy(loading || !hasLoaded);
-    const sorted = sortFiles(files, sortField, sortOrder, filterQuery);
+    const sorted = useMemo(
+        () => sortFiles(files, sortField, sortOrder, filterQuery),
+        [files, filterQuery, sortField, sortOrder],
+    );
+    const { scrollerRef, scroller, start, end, totalHeight } = useVirtualRows(sorted.length, ROW_PITCH);
     const hdrCls = 'flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors select-none';
+
+    // A new listing starts at the top. Without this, stepping into a folder from halfway
+    // down the parent would drop the user into the middle of it.
+    useEffect(() => {
+        if (scroller) scroller.scrollTop = 0;
+    }, [files, scroller]);
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden" aria-busy={loading || !hasLoaded}>
@@ -103,24 +118,29 @@ export const FileList = memo(function FileList({
                 <div className="absolute inset-x-0 top-0 z-10 h-[2px]">
                     {busy && <FlowingBar className="animate-in fade-in duration-150" />}
                 </div>
-                <div className="h-full space-y-0.5 overflow-y-auto overflow-x-hidden overscroll-contain pb-2 [scrollbar-gutter:stable]">
-                    {(sorted.length === 0 ? (
+                <div ref={scrollerRef} className="h-full overflow-y-auto overflow-x-hidden overscroll-contain pb-2 [scrollbar-gutter:stable]">
+                    {sorted.length === 0 ? (
                         <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground/50">
                             <HugeiconsIcon icon={Folder01Icon} className="h-10 w-10 opacity-30" />
                             <p className="text-xs">{filterQuery ? t('fileBrowser.noMatches') : t('fileBrowser.emptyFolder')}</p>
                         </div>
                     ) : (
-                        sorted.map((file) => (
-                            <FileItem
-                                key={file.name}
-                                file={file}
-                                isSelected={selectedName === file.name}
-                                onClick={onFileClick}
-                                onDoubleClick={onFileDoubleClick}
-                                onContextMenu={onContextMenu}
-                            />
-                        ))
-                    ))}
+                        // The sized box is what the scrollbar measures; the rows inside it
+                        // are placed rather than stacked, so only the visible ones exist.
+                        <div className="relative" style={{ height: totalHeight }}>
+                            {sorted.slice(start, end).map((file, index) => (
+                                <FileItem
+                                    key={file.name}
+                                    file={file}
+                                    isSelected={selectedName === file.name}
+                                    style={{ position: 'absolute', top: (start + index) * ROW_PITCH, left: 0, right: 0 }}
+                                    onClick={onFileClick}
+                                    onDoubleClick={onFileDoubleClick}
+                                    onContextMenu={onContextMenu}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
                 </>
                 )}

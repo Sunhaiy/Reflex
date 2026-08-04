@@ -13,6 +13,17 @@ export interface SSHConnection {
   os?: string;
 }
 
+export type SessionStatus = 'connecting' | 'connected' | 'disconnected';
+
+/** One open SSH session. A connection can legitimately be open more than once. */
+export interface Session {
+  /** Identifies the SSH channel, not the saved server. */
+  uniqueId: string;
+  connection: SSHConnection;
+  status: SessionStatus;
+  connectedAt?: number;
+}
+
 export type ActivityLevel = 'cmd' | 'info' | 'ok' | 'dim' | 'error';
 
 /** Which loading surface a progress line belongs to. */
@@ -35,8 +46,14 @@ export type TextFileEncoding =
   | 'utf-16le'
   | 'utf-16be';
 
+/**
+ * A file read for preview. Raw bytes rather than base64: the payload crosses IPC by
+ * structured clone, which carries a Uint8Array natively, so encoding it would inflate
+ * every preview by a third for nothing.
+ */
 export interface RemoteFilePayload {
-  base64: string;
+  /** Backed by a plain ArrayBuffer, so it can go straight into a Blob or a TextDecoder. */
+  bytes: Uint8Array<ArrayBuffer>;
   size: number;
 }
 

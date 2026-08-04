@@ -8,6 +8,7 @@ import { STORE_KEYS } from '../src/shared/storeKeys.js';
 import { mergeUsageDelta, normalizeUsageStats } from '../src/shared/usage.js';
 import { SSHManager } from './ssh/sshManager.js';
 import { getLogDirectory, getLogFilePath, readRecentLog, writeLog, type LogLevel } from './logger.js';
+import { registerAgentHandlers } from './agent/ipc.js';
 
 const store = new Store();
 
@@ -328,7 +329,14 @@ export function setupIpcHandlers() {
     }
   });
 
+  const agent = registerAgentHandlers(
+    { getConnection: (sessionId) => sshManager.getConnection(sessionId) },
+    store,
+  );
+
   ipcMain.handle('ssh-disconnect', (_event, sessionId: string) => {
+    // The agent's channels ride the same connection, so they go with it.
+    agent.dispose(sessionId);
     sshManager.disconnect(sessionId);
   });
 
@@ -345,7 +353,6 @@ export function setupIpcHandlers() {
   ipcMain.handle('sftp-rename', (event, { id, oldPath, newPath }) => trackServerOperation(event.sender, () => sshManager.renameFile(id, oldPath, newPath)));
   ipcMain.handle('sftp-read-file', (_event, { id, path: remotePath }) => sshManager.readFile(id, remotePath));
   ipcMain.handle('sftp-write-file', (event, { id, path: remotePath, content, encoding }) => trackServerOperation(event.sender, () => sshManager.writeFile(id, remotePath, content, encoding), 5));
-  ipcMain.handle('get-pwd', (_event, id: string) => sshManager.getPwd(id));
 
   ipcMain.handle('dialog-open', async () => {
     const result = await dialog.showOpenDialog({ properties: ['openFile'] });

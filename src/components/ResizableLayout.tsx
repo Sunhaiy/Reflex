@@ -8,6 +8,9 @@ interface ResizableLayoutProps {
     defaultRightWidth?: number;
 }
 
+/** Wide enough for mode, model, effort, and context controls to remain on one row. */
+const MIN_RIGHT_WIDTH = 420;
+
 export function ResizableLayout({
     leftContent,
     middleContent,
@@ -16,7 +19,7 @@ export function ResizableLayout({
     defaultRightWidth = 320
 }: ResizableLayoutProps) {
     const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
-    const [rightWidth, setRightWidth] = useState(defaultRightWidth);
+    const [rightWidth, setRightWidth] = useState(Math.max(defaultRightWidth, MIN_RIGHT_WIDTH));
 
     const layoutRef = useRef<HTMLDivElement>(null);
     const isResizingLeft = useRef(false);
@@ -36,7 +39,7 @@ export function ResizableLayout({
 
             if (isResizingRight.current) {
                 const newWidth = bounds.right - e.clientX;
-                if (newWidth > 200 && newWidth < 600) {
+                if (newWidth >= MIN_RIGHT_WIDTH && newWidth < 600) {
                     setRightWidth(newWidth);
                 }
             }
@@ -98,7 +101,10 @@ export function ResizableLayout({
                 <div className="absolute inset-y-3 left-[3px] w-0.5 rounded-full transition-colors group-hover:bg-primary/35" />
             </div>
 
-            <div style={{ width: rightWidth }} className="glass-panel flex min-w-0 flex-shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div
+                style={{ width: rightWidth, minWidth: MIN_RIGHT_WIDTH }}
+                className="glass-panel flex flex-shrink-0 flex-col overflow-hidden rounded-2xl"
+            >
                 {rightContent}
             </div>
         </div>

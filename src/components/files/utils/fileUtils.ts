@@ -66,13 +66,6 @@ export const TEXT_ENCODING_OPTIONS: Array<{ value: TextFileEncoding; label: stri
     { value: 'utf-16be', label: 'UTF-16 BE' },
 ];
 
-export function base64ToBytes(base64: string): Uint8Array {
-    const binary = window.atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return bytes;
-}
-
 export function detectImageMime(name: string, bytes: Uint8Array): string | null {
     if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
     if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';

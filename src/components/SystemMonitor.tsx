@@ -80,6 +80,68 @@ function NetworkChart({ data, label }: { data: NetworkPoint[]; label: string }) 
   );
 }
 
+const CARD_REVEAL = [
+  'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1',
+  'motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)] fill-mode-backwards',
+].join(' ');
+
+function StorageUsage({ disks }: { disks: SystemStats['disks'] }) {
+  const [revealed, setRevealed] = useState(false);
+  const hasDisks = disks.length > 0;
+
+  useEffect(() => {
+    // Let the loaded rows paint once at their quiet starting position, then reveal them.
+    // The component stays mounted across polling updates, so this only runs when the
+    // delayed disk result changes between empty and available.
+    const frame = window.requestAnimationFrame(() => setRevealed(hasDisks));
+    return () => window.cancelAnimationFrame(frame);
+  }, [hasDisks]);
+
+  if (!hasDisks) {
+    return (
+      <div className="space-y-1.5" role="status" aria-busy="true">
+        <div className="flex justify-between gap-2">
+          <Skeleton className="h-2.5 w-24" />
+          <Skeleton className="h-2.5 w-16" />
+        </div>
+        <Skeleton className="h-1.5 w-full rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={clsx(
+        'space-y-2.5 transition-[opacity,transform] duration-300',
+        'ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+        revealed ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-1 scale-[0.985] opacity-0',
+      )}
+    >
+      {disks.map((disk, index) => (
+        <div key={`${disk.filesystem}:${disk.mount}`} className="space-y-1.5">
+          <div className="flex justify-between gap-2 font-mono text-[11px] text-muted-foreground">
+            <span className="min-w-0 truncate text-foreground/80">{disk.mount}</span>
+            <span className="shrink-0">{disk.used}G / {disk.size}G</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/60">
+            <div
+              className={clsx(
+                'h-full origin-left transition-[width] duration-500',
+                'ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+                disk.usePercent > 90 ? 'bg-destructive' : 'bg-amber-500',
+              )}
+              style={{
+                width: revealed ? `${clampPercent(disk.usePercent)}%` : '0%',
+                transitionDelay: revealed ? `${70 + index * 45}ms` : '0ms',
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
   const { t } = useTranslation();
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -148,7 +210,7 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
       {/* Distribution and uptime are separate facts, so they get separate tiles rather
           than sharing one row. The logo is the distro's own mark, picked from the
           reported name. */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className={clsx('grid grid-cols-2 gap-2', CARD_REVEAL, '[animation-delay:20ms]')}>
         <div className="flex min-w-0 items-center gap-2 rounded-xl border border-border/55 bg-card/35 px-3 py-2.5">
           <DistroLogo distro={stats.os.distro} className="h-4 w-4 shrink-0" />
           <span className="truncate text-xs font-semibold tracking-tight" title={stats.os.distro}>
@@ -165,7 +227,11 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-2">
-        <div className="space-y-2.5 rounded-xl border border-border/55 bg-card/35 p-3">
+        <div className={clsx(
+          'space-y-2.5 rounded-xl border border-border/55 bg-card/35 p-3',
+          CARD_REVEAL,
+          '[animation-delay:60ms]',
+        )}>
           <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
             <div className="flex items-center gap-1.5">
               <HugeiconsIcon icon={CpuIcon} className="h-3.5 w-3.5" />
@@ -197,7 +263,11 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
         </div>
 
         <div
-          className="group cursor-pointer space-y-2.5 rounded-xl border border-border/55 bg-card/35 p-3 transition-colors hover:bg-foreground/[0.035]"
+          className={clsx(
+            'group cursor-pointer space-y-2.5 rounded-xl border border-border/55 bg-card/35 p-3 transition-colors hover:bg-foreground/[0.035]',
+            CARD_REVEAL,
+            '[animation-delay:100ms]',
+          )}
           onClick={() => setShowProcesses(true)}
         >
           <div className="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wider text-violet-500">
@@ -226,7 +296,11 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
           </div>
         </div>
 
-        <div className="space-y-2 rounded-xl border border-border/55 bg-card/35 p-3">
+        <div className={clsx(
+          'space-y-2 rounded-xl border border-border/55 bg-card/35 p-3',
+          CARD_REVEAL,
+          '[animation-delay:140ms]',
+        )}>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-500">
             <HugeiconsIcon icon={AiNetworkIcon} className="h-3.5 w-3.5" />
             <span>{t('monitor.network')}</span>
@@ -241,7 +315,11 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
           </div>
         </div>
 
-        <div className="space-y-3 rounded-xl border border-border/55 bg-card/35 p-3">
+        <div className={clsx(
+          'space-y-3 rounded-xl border border-border/55 bg-card/35 p-3',
+          CARD_REVEAL,
+          '[animation-delay:180ms]',
+        )}>
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
             <HugeiconsIcon icon={HardDriveIcon} className="h-3.5 w-3.5" />
             <span>{t('monitor.storage')}</span>
@@ -250,37 +328,14 @@ export function SystemMonitor({ connectionId, active }: SystemMonitorProps) {
           <div className="space-y-2.5">
             {/* df runs a cycle behind the /proc reads, so this section fills in a moment
                 after the rest rather than holding the whole panel on a skeleton. */}
-            {stats.disks.length === 0 && (
-              <div className="space-y-1.5" role="status" aria-busy="true">
-                <div className="flex justify-between gap-2">
-                  <Skeleton className="h-2.5 w-24" />
-                  <Skeleton className="h-2.5 w-16" />
-                </div>
-                <Skeleton className="h-1.5 w-full rounded-full" />
-              </div>
-            )}
-            {stats.disks.map((disk) => (
-              <div key={`${disk.filesystem}:${disk.mount}`} className="space-y-1.5">
-                <div className="flex justify-between gap-2 font-mono text-[11px] text-muted-foreground">
-                  <span className="min-w-0 truncate text-foreground/80">{disk.mount}</span>
-                  <span className="shrink-0">{disk.used}G / {disk.size}G</span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/60">
-                  <div
-                    className={clsx(
-                      'h-full transition-all duration-300',
-                      disk.usePercent > 90 ? 'bg-destructive' : 'bg-amber-500',
-                    )}
-                    style={{ width: `${clampPercent(disk.usePercent)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+            <StorageUsage disks={stats.disks} />
           </div>
         </div>
       </div>
 
-      <ServerLocation timezone={stats.os.timezone} />
+      <div className={clsx(CARD_REVEAL, '[animation-delay:220ms]')}>
+        <ServerLocation timezone={stats.os.timezone} />
+      </div>
 
       {showProcesses && (
         <ProcessList connectionId={connectionId} onClose={() => setShowProcesses(false)} />
