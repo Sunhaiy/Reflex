@@ -173,6 +173,7 @@ class AgentConversation {
         context: {
           shell: this.shell,
           files: this.files,
+          mode: options.mode,
           localRoot: options.localRoot,
           report: () => { /* replaced per call by the loop */ },
           signal: controller.signal,

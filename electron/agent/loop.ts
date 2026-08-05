@@ -1,6 +1,6 @@
 import { decide, type AgentMode } from './approval';
 import { compactHistory, estimateTokens, foldOldest } from './context';
-import { findTool, TOOL_DEFINITIONS, type ToolContext } from './tools';
+import { findTool, toolDefinitionsForMode, type ToolContext } from './tools';
 import type { Message, MessagePart, Provider, ToolCallPart, ToolResultPart } from './providers/types';
 import type { ApprovalAnswer, ApprovalQuestion } from '../../src/shared/agent';
 
@@ -81,7 +81,7 @@ export async function runAgent(
     }
 
     const result = await provider.complete(
-      { system, messages: outgoing, tools: TOOL_DEFINITIONS, signal },
+      { system, messages: outgoing, tools: toolDefinitionsForMode(mode), signal },
       {
         onText: (delta) => events.onText(delta),
         onToolCall: (call) => events.onToolStart(call),

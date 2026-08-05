@@ -40,6 +40,7 @@ export function connectionTransportChanged(previous: SSHConnection, next: SSHCon
     'authType',
     'password',
     'privateKeyPath',
+    'privateKey',
     'passphrase',
   ];
   return transportFields.some((field) => previous[field] !== next[field]);

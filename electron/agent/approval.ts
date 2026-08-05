@@ -122,6 +122,12 @@ export interface ApprovalRequest {
 }
 
 export function decide({ tool, command, allowedGroups, mode }: ApprovalRequest): Decision {
+  // Local mutation and command execution are an explicit free-mode capability. Remote
+  // ask/auto policy must never accidentally grant the same authority on the user's PC.
+  if (tool === 'local_shell' && mode !== 'free') {
+    return { verdict: 'deny', reason: 'local commands require free mode' };
+  }
+
   if (READ_ONLY_TOOLS.has(tool)) return { verdict: 'allow' };
 
   // Free mode is checked before everything, including the always-confirm list. That is

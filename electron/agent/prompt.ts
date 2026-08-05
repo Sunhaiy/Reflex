@@ -2,7 +2,7 @@ import type { AgentMode } from './approval';
 
 export interface PromptContext {
   mode: AgentMode;
-  /** The folder the user shared, if any; the local tools are confined to it. */
+  /** The folder the user shared, if any; it is the base for relative local paths. */
   localRoot: string | null;
   /** What the connection is called in the UI, so the agent can name it back. */
   serverLabel: string;
@@ -22,6 +22,7 @@ const MODE_NOTES: Record<AgentMode, string> = {
   // only thing standing between a mistake and an unrecoverable server.
   free: 'You are in free mode. Nothing will ask the user to confirm anything, including '
     + 'commands that wipe a disk or stop the SSH daemon you are connected through. You '
+    + 'may also run local_shell on the computer hosting Reflex, with full local access. You '
     + 'are the only remaining check, so behave like it: prefer the narrower command, '
     + 'confirm a path exists before deleting through it, and back a config up before '
     + 'replacing it. Do not run something destructive to test a hypothesis — verify the '
@@ -44,11 +45,12 @@ Reply in whatever language the user writes to you in.
 
 ${MODE_NOTES[mode]}
 
-${localRoot
-      ? `The user has shared the folder ${localRoot}. list_local and read_local can only see
-inside it, and upload_project sends from inside it.`
-      : `No local folder has been shared. If the task needs one, ask the user to pick it — you
-cannot browse their machine otherwise.`}
+list_local and read_local may inspect any absolute path on the user's computer in every
+mode; no folder-picker step is required. Relative local paths start at
+${localRoot ?? 'the user home directory'}. upload_project may send a local file, including
+a zip archive, or a folder to the server. ${mode === 'free'
+      ? 'local_shell is available for complete local command execution and file mutation.'
+      : 'Do not call local_shell: outside free mode local access is read-only.'}
 
 # Find out what you are working with before you change anything
 

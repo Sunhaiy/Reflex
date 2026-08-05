@@ -54,7 +54,7 @@ const ALLOWED_STORE_KEYS: Set<string> = new Set(STORE_KEYS);
  * Values carry a prefix so a plaintext entry written by an older build is recognised
  * and passed through rather than mangled; the migration below converts those on start.
  */
-const SECRET_FIELDS = ['password', 'passphrase', 'jumpPassword'];
+const SECRET_FIELDS = ['password', 'privateKey', 'passphrase', 'jumpPassword'];
 const CIPHER_PREFIX = 'enc:v1:';
 
 function encryptSecret(value: unknown): unknown {

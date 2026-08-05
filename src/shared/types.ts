@@ -7,6 +7,8 @@ export interface SSHConnection {
   authType: 'password' | 'privateKey';
   password?: string;
   privateKeyPath?: string;
+  /** Inline private-key material pasted by the user instead of selected from a file. */
+  privateKey?: string;
   passphrase?: string;
   /** Optional IDC/cloud provider console link, stored as typed (the scheme is optional). */
   providerUrl?: string;

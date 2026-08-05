@@ -1,6 +1,12 @@
 import type { Client, SFTPWrapper } from 'ssh2';
 import { logger } from '../logger';
-import { planUpload, uploadFiles, type TransferPlan, type UploadProgress } from './transfer';
+import {
+  planUpload,
+  uploadFile,
+  uploadFiles,
+  type TransferPlan,
+  type UploadProgress,
+} from './transfer';
 
 /** The agent needs the authenticated connection and nothing else from the session layer. */
 export interface FilesHost {
@@ -181,6 +187,11 @@ export class AgentFiles {
     await this.withSftp((sftp) =>
       uploadFiles(sftp, localRoot, remoteRoot, plan.files, onProgress, options.signal));
     return plan;
+  }
+
+  /** Uploads one local file, including archives that are intentionally not read as text. */
+  async uploadFile(localPath: string, remotePath: string, signal?: AbortSignal): Promise<void> {
+    await this.withSftp((sftp) => uploadFile(sftp, localPath, remotePath, signal));
   }
 
   private async readWhole(path: string): Promise<string> {
