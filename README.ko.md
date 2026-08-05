@@ -5,7 +5,7 @@
 
   <h1>Reflex</h1>
 
-  <b>Agent 네이티브 워크플로를 갖춘 현대적인 SSH 운영 워크벤치입니다.</b>
+  <b>바람을 꺾고 달을 건너니, 삶에 무슨 기쁨이 있으랴.</b>
 
   <p>
     멀티 세션 터미널, SFTP, Docker, 모니터링, 배포 자동화, AI 지원 서버 작업을 하나의 데스크톱 앱에서 다룹니다.
@@ -28,7 +28,7 @@
     <a href="./LICENSE">
       <img alt="License" src="https://img.shields.io/badge/license-custom-111111?logo=opensourceinitiative" />
     </a>
-    <img alt="Electron" src="https://img.shields.io/badge/Electron-29-47848F?logo=electron&logoColor=white" />
+    <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white" />
     <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111111" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
     <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-0f766e" />
@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./b1405725-c357-41d1-ac57-43db4634bc16.png" />
-      <img alt="Reflex main workspace" src="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/startup-cover.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/startup-cover.png" />
+      <img alt="Reflex startup cover" src="./docs/screenshots/startup-cover.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -110,18 +110,29 @@
 
 ## 스크린샷
 
-### Agent 작업공간
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex appearance settings" src="./docs/screenshots/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex terminal settings" src="./docs/screenshots/terminal-settings.png" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>외관</b>: 테마, 강조 색상, 모서리, 글꼴.</td>
+    <td align="center"><b>터미널</b>: 렌더링, 커서, 타이포그래피, 스크롤백.</td>
+  </tr>
+</table>
 
 <p align="center">
-  <img alt="Reflex agent workspace" src="./8f7048de-4753-4ca9-b5be-72905c9f334d.png" width="100%" />
+  <img alt="Reflex application settings" src="./docs/screenshots/application-settings.png" width="100%" />
 </p>
 
 ## 빠른 시작
 
+Node.js `>=22.12.0`이 필요하며 Node.js 24를 권장합니다.
+
 ```bash
 git clone https://github.com/Sunhaiy/Reflex.git
 cd Reflex
-npm install
+npm ci
 npm run dev
 ```
 

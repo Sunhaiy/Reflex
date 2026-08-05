@@ -5,7 +5,7 @@
 
   <h1>Reflex</h1>
 
-  <b>Agent ネイティブなワークフローを備えたモダンな SSH 運用ワークベンチ。</b>
+  <b>風を折り、月を渡る。生に何の歓びがあろう。</b>
 
   <p>
     マルチセッション端末、SFTP、Docker、監視、デプロイ自動化、AI 支援のサーバー作業を 1 つのデスクトップアプリで扱えます。
@@ -28,7 +28,7 @@
     <a href="./LICENSE">
       <img alt="License" src="https://img.shields.io/badge/license-custom-111111?logo=opensourceinitiative" />
     </a>
-    <img alt="Electron" src="https://img.shields.io/badge/Electron-29-47848F?logo=electron&logoColor=white" />
+    <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white" />
     <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111111" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
     <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-0f766e" />
@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./b1405725-c357-41d1-ac57-43db4634bc16.png" />
-      <img alt="Reflex main workspace" src="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/startup-cover.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/startup-cover.png" />
+      <img alt="Reflex startup cover" src="./docs/screenshots/startup-cover.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -110,18 +110,29 @@
 
 ## スクリーンショット
 
-### Agent ワークスペース
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex appearance settings" src="./docs/screenshots/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex terminal settings" src="./docs/screenshots/terminal-settings.png" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>外観</b>：テーマ、アクセント、角丸、フォント。</td>
+    <td align="center"><b>端末</b>：描画、カーソル、文字組み、スクロールバック。</td>
+  </tr>
+</table>
 
 <p align="center">
-  <img alt="Reflex agent workspace" src="./8f7048de-4753-4ca9-b5be-72905c9f334d.png" width="100%" />
+  <img alt="Reflex application settings" src="./docs/screenshots/application-settings.png" width="100%" />
 </p>
 
 ## クイックスタート
 
+Node.js `>=22.12.0` が必要です。Node.js 24 を推奨します。
+
 ```bash
 git clone https://github.com/Sunhaiy/Reflex.git
 cd Reflex
-npm install
+npm ci
 npm run dev
 ```
 

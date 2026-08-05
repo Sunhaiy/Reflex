@@ -314,7 +314,7 @@ export const ja: LocaleBundle = {
       copied: "コピーしました",
     },
     boot: {
-      tagline: "軽量な SSH ワークスペース — ターミナル、ファイル、Docker、システム監視。",
+      tagline: "風を折り、月を渡る。生に何の歓びがあろう。",
       loading: "Reflex を起動しています",
     },
     form: {

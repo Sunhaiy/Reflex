@@ -314,7 +314,7 @@ export const it: LocaleBundle = {
       copied: "Copiato",
     },
     boot: {
-      tagline: "Un workspace SSH leggero — terminale, file, Docker e monitoraggio di sistema.",
+      tagline: "Piega il vento, attraversa la luna: quale gioia vi è nella vita?",
       loading: "Avvio di Reflex",
     },
     form: {
