@@ -314,7 +314,7 @@ export const ko: LocaleBundle = {
       copied: "복사됨",
     },
     boot: {
-      tagline: "가벼운 SSH 작업 공간 — 터미널, 파일, Docker, 시스템 모니터링.",
+      tagline: "바람을 꺾고 달을 건너니, 삶에 무슨 기쁨이 있으랴.",
       loading: "Reflex 시작 중",
     },
     form: {

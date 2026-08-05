@@ -317,7 +317,7 @@ export const en = {
       copied: "Copied",
     },
     boot: {
-      tagline: "A lightweight SSH workspace — terminal, files, Docker and system monitoring.",
+      tagline: "Bend the wind, cross the moon—what joy is there in life?",
       loading: "Starting Reflex",
     },
     form: {

@@ -314,7 +314,7 @@ export const zh: LocaleBundle = {
       copied: "已复制",
     },
     boot: {
-      tagline: "轻量的 SSH 工作台 —— 终端、文件、Docker 与系统监控。",
+      tagline: "折风渡月，生亦何欢。",
       loading: "正在启动 Reflex",
     },
     form: {

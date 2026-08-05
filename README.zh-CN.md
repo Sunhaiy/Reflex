@@ -5,7 +5,7 @@
 
   <h1>Reflex</h1>
 
-  <b>一个采用 Agent 原生工作流的现代 SSH 运维工作台。</b>
+  <b>折风渡月，生亦何欢。</b>
 
   <p>
     多会话终端、SFTP、Docker、监控、部署自动化和 AI 辅助服务器操作，都在一个桌面应用里完成。
@@ -28,7 +28,7 @@
     <a href="./LICENSE">
       <img alt="License" src="https://img.shields.io/badge/license-custom-111111?logo=opensourceinitiative" />
     </a>
-    <img alt="Electron" src="https://img.shields.io/badge/Electron-29-47848F?logo=electron&logoColor=white" />
+    <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white" />
     <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111111" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
     <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-0f766e" />
@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./b1405725-c357-41d1-ac57-43db4634bc16.png" />
-      <img alt="Reflex 主工作区" src="./9cb6011b-c5a7-47ff-8544-9d40f0baf3b5.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/startup-cover.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/startup-cover.png" />
+      <img alt="Reflex 启动封面" src="./docs/screenshots/startup-cover.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -110,18 +110,29 @@
 
 ## 截图
 
-### Agent 工作区
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex 外观设置" src="./docs/screenshots/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex 终端设置" src="./docs/screenshots/terminal-settings.png" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>外观</b>：主题、强调色、圆角与字体。</td>
+    <td align="center"><b>终端</b>：渲染、光标、排版与回滚缓冲。</td>
+  </tr>
+</table>
 
 <p align="center">
-  <img alt="Reflex Agent 工作区" src="./8f7048de-4753-4ca9-b5be-72905c9f334d.png" width="100%" />
+  <img alt="Reflex 应用信息" src="./docs/screenshots/application-settings.png" width="100%" />
 </p>
 
 ## 快速开始
 
+要求 Node.js `>=22.12.0`，推荐使用 Node.js 24。
+
 ```bash
 git clone https://github.com/Sunhaiy/Reflex.git
 cd Reflex
-npm install
+npm ci
 npm run dev
 ```
 

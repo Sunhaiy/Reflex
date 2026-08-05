@@ -51,7 +51,8 @@ export function AppTab() {
           <img src={`${import.meta.env.BASE_URL}tray-icon.png`} alt="Reflex" className="h-12 w-12 rounded-2xl border border-border/60 object-cover" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">Reflex {appVersion}</div>
-            <div className="mt-1 text-xs leading-5 text-muted-foreground">Electron · React · Shadcn tokens · Hugeicons</div>
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">{t('boot.tagline')}</div>
+            <div className="mt-1 font-mono text-[10px] text-muted-foreground/55">Electron · React · Shadcn tokens · Hugeicons</div>
           </div>
           <Button variant="outline" className="gap-2" onClick={() => window.electron.openExternal('https://github.com/Sunhaiy/Reflex')}>
             <HugeiconsIcon icon={GithubIcon} className="h-4 w-4" />
