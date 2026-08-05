@@ -25,6 +25,7 @@ const EMPTY_CONNECTION: Partial<SSHConnection> = {
     password: '',
     authType: 'password',
     privateKeyPath: '',
+    privateKey: '',
     passphrase: '',
     providerUrl: '',
 };
@@ -79,6 +80,10 @@ export function ConnectionForm({
 
     const [formData, setFormData] = useState<Partial<SSHConnection>>(initialFormData);
     const [showPassword, setShowPassword] = useState(false);
+    const [showPassphrase, setShowPassphrase] = useState(false);
+    const [keySource, setKeySource] = useState<'file' | 'paste'>(
+        initialFormData.privateKey?.trim() ? 'paste' : 'file',
+    );
     const [draftRecovered, setDraftRecovered] = useState(Boolean(restoredDraft));
     const [savingDraft, setSavingDraft] = useState(false);
     const [error, setError] = useState('');
@@ -96,7 +101,9 @@ export function ConnectionForm({
         if (!Number.isInteger(port) || port < 1 || port > 65535) return t('form.portInvalid');
         if (!formData.username?.trim()) return t('form.usernameRequired');
         if (formData.authType === 'password' && !formData.password) return t('form.passwordRequired');
-        if (formData.authType === 'privateKey' && !formData.privateKeyPath?.trim()) return t('form.keyRequired');
+        if (formData.authType === 'privateKey'
+            && !formData.privateKeyPath?.trim()
+            && !formData.privateKey?.trim()) return t('form.keyRequired');
         if (formData.providerUrl?.trim() && !providerLink) return t('form.providerInvalid');
         return '';
     };
@@ -117,6 +124,7 @@ export function ConnectionForm({
             host: formData.host!.trim(),
             username: formData.username!.trim(),
             privateKeyPath: formData.privateKeyPath?.trim(),
+            privateKey: formData.privateKey?.trim() || undefined,
             providerUrl: formData.providerUrl?.trim() || undefined,
         });
     };
@@ -134,13 +142,15 @@ export function ConnectionForm({
     const handleClearDraft = async () => {
         await onClearDraft();
         setFormData({ ...EMPTY_CONNECTION });
+        setKeySource('file');
+        setShowPassphrase(false);
         setDraftRecovered(false);
         setError('');
     };
 
     const pickFile = async () => {
         const path = await window.electron.openFileDialog({ title: t('connection.form.selectPrivateKey') });
-        if (path) set({ privateKeyPath: path });
+        if (path) set({ privateKeyPath: path, privateKey: '' });
     };
 
     const optionalText = t('common.optional');
@@ -290,34 +300,101 @@ export function ConnectionForm({
                         </div>
                     </div>
                 ) : (
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+                    <div className="space-y-3">
                         <div>
-                            <Label text={t('connection.form.privKeyFilePath')} required />
+                            <Label text={t('connection.form.privKeySource')} required />
+                            <div className="grid grid-cols-2 gap-1 rounded-xl bg-foreground/[0.04] p-1">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKeySource('file');
+                                        set({ privateKey: '' });
+                                    }}
+                                    className={cn(
+                                        'h-8 rounded-lg text-xs transition-colors',
+                                        keySource === 'file'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground',
+                                    )}
+                                >
+                                    {t('connection.form.privKeyFile')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKeySource('paste');
+                                        set({ privateKeyPath: '' });
+                                    }}
+                                    className={cn(
+                                        'h-8 rounded-lg text-xs transition-colors',
+                                        keySource === 'paste'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground',
+                                    )}
+                                >
+                                    {t('connection.form.privKeyPaste')}
+                                </button>
+                            </div>
+                        </div>
+
+                        {keySource === 'file' ? (
+                            <div>
+                                <Label text={t('connection.form.privKeyFilePath')} required />
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={formData.privateKeyPath ?? ''}
+                                        onChange={(event) => set({ privateKeyPath: event.target.value, privateKey: '' })}
+                                        placeholder="~/.ssh/id_ed25519"
+                                        className={cn(inputClass, 'flex-1')}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void pickFile()}
+                                        className={sideButtonClass}
+                                        title={t('connection.form.browse')}
+                                    >
+                                        <HugeiconsIcon icon={FolderOpenIcon} className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <Label text={t('connection.form.privKeyContent')} required />
+                                <textarea
+                                    value={formData.privateKey ?? ''}
+                                    onChange={(event) => set({ privateKey: event.target.value, privateKeyPath: '' })}
+                                    placeholder={t('connection.form.privKeyPlaceholder')}
+                                    rows={5}
+                                    spellCheck={false}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    className="min-h-[112px] w-full resize-y rounded-xl border border-input bg-background/55 px-3.5 py-2.5 font-mono text-[11px] leading-5 outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-primary"
+                                />
+                            </div>
+                        )}
+
+                        <div>
+                            <Label text={t('connection.form.passphrase')} />
                             <div className="flex gap-2">
                                 <Input
-                                    value={formData.privateKeyPath ?? ''}
-                                    onChange={(event) => set({ privateKeyPath: event.target.value })}
-                                    placeholder="~/.ssh/id_ed25519"
+                                    type={showPassphrase ? 'text' : 'password'}
+                                    value={formData.passphrase ?? ''}
+                                    onChange={(event) => set({ passphrase: event.target.value })}
+                                    placeholder={t('connection.form.passphraseDesc')}
+                                    autoComplete="off"
                                     className={cn(inputClass, 'flex-1')}
                                 />
                                 <button
                                     type="button"
-                                    onClick={() => void pickFile()}
+                                    onClick={() => setShowPassphrase((value) => !value)}
                                     className={sideButtonClass}
-                                    title={t('connection.form.browse')}
+                                    title={showPassphrase ? t('connection.form.hidePassword') : t('connection.form.showPassword')}
                                 >
-                                    <HugeiconsIcon icon={FolderOpenIcon} className="h-4 w-4" />
+                                    {showPassphrase
+                                        ? <HugeiconsIcon icon={ViewOffIcon} className="h-4 w-4" />
+                                        : <HugeiconsIcon icon={ViewIcon} className="h-4 w-4" />}
                                 </button>
                             </div>
-                        </div>
-                        <div>
-                            <Label text={t('connection.form.passphrase')} />
-                            <Input
-                                type="password"
-                                value={formData.passphrase ?? ''}
-                                onChange={(event) => set({ passphrase: event.target.value })}
-                                className={inputClass}
-                            />
                         </div>
                     </div>
                 )}

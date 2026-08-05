@@ -185,6 +185,25 @@ function putFile(sftp: SFTPWrapper, local: string, remote: string): Promise<void
   });
 }
 
+/** Uploads one local file to an exact remote path. */
+export async function uploadFile(
+  sftp: SFTPWrapper,
+  localPath: string,
+  remotePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) throw new Error('Upload cancelled');
+  await ensureDirectoryTree(sftp, path.posix.dirname(remotePath));
+  if (signal?.aborted) throw new Error('Upload cancelled');
+  await putFile(sftp, localPath, remotePath);
+}
+
+async function ensureDirectoryTree(sftp: SFTPWrapper, directory: string): Promise<void> {
+  if (!directory || directory === '.' || directory === '/') return;
+  await ensureDirectoryTree(sftp, path.posix.dirname(directory));
+  await ensureDirectory(sftp, directory);
+}
+
 function ensureDirectory(sftp: SFTPWrapper, directory: string): Promise<void> {
   return new Promise((resolve, reject) => {
     sftp.mkdir(directory, (error) => {

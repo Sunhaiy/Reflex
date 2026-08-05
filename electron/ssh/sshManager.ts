@@ -1,4 +1,4 @@
-import { Client, type ClientChannel, type ConnectConfig } from 'ssh2';
+import { Client, utils, type ClientChannel, type ConnectConfig } from 'ssh2';
 import { logger } from '../logger';
 
 import type { ActivityLevel, ActivityLine, ActivityScope, SSHConnection } from '../../src/shared/types';
@@ -150,9 +150,34 @@ export class SSHManager {
             // tearing a compressed session down, so offer only `none`.
             algorithms: { compress: ['none'] },
         };
-        if (connection.authType === 'privateKey' && connection.privateKeyPath) {
-            config.privateKey = readFileSync(connection.privateKeyPath);
-            if (connection.passphrase) config.passphrase = connection.passphrase;
+        if (connection.authType === 'privateKey') {
+            const pastedKey = connection.privateKey?.trim();
+            let privateKey: Buffer | string;
+            if (pastedKey) {
+                privateKey = pastedKey;
+            } else if (connection.privateKeyPath?.trim()) {
+                try {
+                    privateKey = readFileSync(connection.privateKeyPath.trim());
+                } catch (error) {
+                    const reason = error instanceof Error ? error.message : String(error);
+                    throw new Error(`Could not read private key file: ${reason}`, { cause: error });
+                }
+            } else {
+                throw new Error('Paste a private key or choose a private key file');
+            }
+
+            const passphrase = connection.passphrase || undefined;
+            const parsed = utils.parseKey(privateKey, passphrase);
+            if (parsed instanceof Error) {
+                throw new Error(`Private key or passphrase is invalid: ${parsed.message}`);
+            }
+            const parsedKey = Array.isArray(parsed) ? parsed[0] : parsed;
+            if (!parsedKey || parsedKey.getPrivatePEM() === null) {
+                throw new Error('The supplied key does not contain a private key');
+            }
+
+            config.privateKey = privateKey;
+            if (passphrase) config.passphrase = passphrase;
         } else {
             config.password = connection.password;
             config.tryKeyboard = true;

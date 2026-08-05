@@ -12,6 +12,7 @@ import styles from './AgentProcess.module.css';
 
 const TOOL_LABELS = {
   shell: 'agent.toolShell',
+  local_shell: 'agent.toolLocalShell',
   read_file: 'agent.toolReadFile',
   write_file: 'agent.toolWriteFile',
   edit_file: 'agent.toolEditFile',
