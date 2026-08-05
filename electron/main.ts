@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getStore, setupIpcHandlers } from './ipcHandlers';
 import { flushLogSync, logger } from './logger';
+import { setupAutoUpdater } from './updater';
 
 // Prevent third-party crashes from killing the whole Electron process.
 process.on('uncaughtException', (err) => {
@@ -177,7 +178,6 @@ async function openExternalUrl(url: string) {
 const createWindow = () => {
   const preloadPath = path.join(__dirname, 'preload.js');
   const appIconPath = getRuntimeAssetPath(process.platform === 'win32' ? 'icon.ico' : 'icon.png');
-  const supportsTransparency = process.platform === 'darwin';
 
   const windowState = readWindowState();
   // Opening straight at the work area means the renderer paints at its final size, so
@@ -195,10 +195,11 @@ const createWindow = () => {
     minHeight: MIN_WINDOW_SIZE.height,
     show: false,
     frame: false,
-    titleBarStyle: 'hidden',
-    transparent: supportsTransparency,
-    backgroundColor: supportsTransparency ? '#00000000' : '#080808',
-    vibrancy: supportsTransparency ? 'fullscreen-ui' : undefined,
+    // Keep the native window opaque on every platform. macOS previously combined a
+    // transparent BrowserWindow, fullscreen vibrancy and CSS backdrop filters, forcing
+    // the compositor to blur the whole desktop whenever terminal or monitor data moved.
+    transparent: false,
+    backgroundColor: '#080808',
     icon: appIconPath,
     webPreferences: {
       preload: preloadPath,
@@ -208,6 +209,11 @@ const createWindow = () => {
     },
   });
   mainWindow = window;
+
+  // Reflex owns the title bar on every platform. `frame: false` removes the frame, and
+  // this explicit macOS call also prevents traffic lights from reappearing after a
+  // fullscreen/restore transition. The React controls remain at the top right.
+  if (process.platform === 'darwin') window.setWindowButtonVisibility(false);
 
   const tracker = trackWindowState(window, windowState);
 
@@ -383,6 +389,10 @@ app.whenReady().then(() => {
   ipcMain.handle('open-external', async (_event, url: string) => openExternalUrl(url));
   createTray();
   createWindow();
+  setupAutoUpdater(
+    () => mainWindow,
+    () => { isQuitting = true; },
+  );
 
   app.on('activate', () => {
     showMainWindow();

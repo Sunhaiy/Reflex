@@ -1,9 +1,18 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { StoreKey } from '../src/shared/storeKeys';
 import type { ActivityLine, ActivityScope, SSHConnection, SystemStats, UsageDelta, UsageStats } from '../src/shared/types';
+import type { AppUpdateState } from '../src/shared/update';
 
 contextBridge.exposeInMainWorld('electron', {
   getVersion: () => ipcRenderer.invoke('get-version'),
+  updateGetState: (): Promise<AppUpdateState> => ipcRenderer.invoke('update-get-state'),
+  updateCheck: (): Promise<void> => ipcRenderer.invoke('update-check'),
+  updateApply: (): Promise<boolean> => ipcRenderer.invoke('update-apply'),
+  onUpdateState: (callback: (state: AppUpdateState) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, state: AppUpdateState) => callback(state);
+    ipcRenderer.on('update-state', subscription);
+    return () => ipcRenderer.removeListener('update-state', subscription);
+  },
   // Fired once the startup cover has painted and its fonts are in place, so the
   // window is only revealed with finished content on screen.
   signalFirstFrame: () => ipcRenderer.send('renderer-first-frame'),

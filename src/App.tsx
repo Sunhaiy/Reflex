@@ -5,6 +5,7 @@ import { ConnectionForm } from './components/ConnectionForm';
 import { ServerHome } from './components/ServerHome';
 import { Workspace } from './components/Workspace';
 import { StartupCover } from './components/StartupCover';
+import { AppUpdatePrompt } from './components/AppUpdatePrompt';
 import { ThemeBackground } from './components/ThemeBackground';
 import { TitleBar } from './components/TitleBar';
 import { Modal } from './components/ui/modal';
@@ -218,6 +219,7 @@ function App() {
       </Modal>
 
       <StartupCover />
+      <AppUpdatePrompt />
     </>
   );
 }

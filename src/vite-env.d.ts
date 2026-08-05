@@ -21,11 +21,16 @@ import type {
   UsageDelta,
   UsageStats,
 } from './shared/types';
+import type { AppUpdateState } from './shared/update';
 
 declare global {
   interface Window {
     electron: {
       getVersion: () => Promise<string>;
+      updateGetState: () => Promise<AppUpdateState>;
+      updateCheck: () => Promise<void>;
+      updateApply: () => Promise<boolean>;
+      onUpdateState: (callback: (state: AppUpdateState) => void) => () => void;
       probeHost: (target: { host: string; port?: number }) => Promise<{ ok: boolean; ms?: number }>;
       signalFirstFrame: () => void;
       openFileDialog: (opts?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;

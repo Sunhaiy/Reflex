@@ -51,4 +51,26 @@ This section guides you through submitting an enhancement suggestion for Reflex,
 4.  Push to the branch (`git push origin feature/my-new-feature`).
 5.  Open a Pull Request against the `main` branch.
 
+## Publishing a release
+
+1. Update the version in `package.json` and `package-lock.json`.
+2. Merge the release commit into `main`.
+3. Create and push the matching tag, for example `git tag v1.0.16 && git push origin v1.0.16`.
+
+The release workflow builds every operating system and publishes the installers together
+with `latest.yml`, `latest-mac.yml`, `latest-linux.yml`, blockmaps, and the macOS ZIP files
+used by the in-app updater. Do not rename or remove those generated metadata files.
+
+Windows NSIS and Linux AppImage builds update automatically. A macOS build must be signed
+with an Apple Developer ID certificate before macOS permits it to replace itself. Configure
+these GitHub Actions secrets to enable signed macOS updates:
+
+- `MAC_CERTIFICATE` — the Developer ID Application certificate accepted by electron-builder's `CSC_LINK`.
+- `MAC_CERTIFICATE_PASSWORD` — the certificate password.
+- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` — optional notarization credentials.
+
+Without the certificate, the workflow still publishes a usable DMG. Reflex detects the
+unsigned build and directs Intel users to the `mac-x64.dmg` asset and Apple silicon users
+to the `mac-arm64.dmg` asset instead of attempting an update macOS will reject.
+
 Thank you again for your interest in contributing!
