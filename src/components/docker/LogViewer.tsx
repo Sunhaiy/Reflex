@@ -2,7 +2,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { FileAttachmentIcon, Refresh01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../hooks/useTranslation';
-import { cn } from '../../lib/utils';
 
 export function LogViewer({ connectionId, containerId, containerName }: { connectionId: string; containerId: string; containerName: string }) {
     const { t } = useTranslation();

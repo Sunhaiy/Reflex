@@ -52,7 +52,7 @@ export function FileToolbar({
     onRenameSelected,
     onDeleteSelected,
 }: Props) {
-    const { t, language } = useTranslation();
+    const { t } = useTranslation();
     const { bookmarks, toggleBookmark } = useSettingsStore();
     const [showBookmarks, setShowBookmarks] = useState(false);
     const bookmarkButtonRef = useRef<HTMLButtonElement>(null);

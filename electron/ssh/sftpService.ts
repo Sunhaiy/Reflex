@@ -147,7 +147,7 @@ export class SftpService {
         if (statError) return reject(statError);
 
         const total = Number(remoteStats?.size) || 0;
-        let offset = 0;
+        let offset: number;
         try {
           offset = existsSync(localPath) ? statSync(localPath).size : 0;
         } catch (error) {

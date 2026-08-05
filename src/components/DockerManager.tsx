@@ -10,9 +10,10 @@ import type { DockerTabId } from './docker/types';
 
 interface DockerManagerProps {
     connectionId: string;
+    active: boolean;
 }
 
-export function DockerManager({ connectionId }: DockerManagerProps) {
+export function DockerManager({ connectionId, active }: DockerManagerProps) {
     const [tab, setTab] = useState<DockerTabId>('containers');
     const { t } = useTranslation();
 
@@ -44,9 +45,9 @@ export function DockerManager({ connectionId }: DockerManagerProps) {
             </div>
 
             <div className="flex-1 overflow-hidden">
-                {tab === 'containers' && <ContainersTab connectionId={connectionId} />}
-                {tab === 'images' && <ImagesTab connectionId={connectionId} />}
-                {tab === 'prune' && <PruneTab connectionId={connectionId} />}
+                {tab === 'containers' && <ContainersTab connectionId={connectionId} active={active} />}
+                {tab === 'images' && <ImagesTab connectionId={connectionId} active={active} />}
+                {tab === 'prune' && <PruneTab connectionId={connectionId} active={active} />}
             </div>
         </div>
     );

@@ -1,6 +1,5 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, CancelCircleIcon, CheckmarkCircle02Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
-import { useEffect, useRef } from 'react';
 import { Toast } from './hooks/useFileBrowser';
 import { cn } from '../../lib/utils';
 

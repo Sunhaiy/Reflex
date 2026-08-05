@@ -3,7 +3,6 @@ import { Select } from '../../components/ui/select';
 
 import { cn } from '../../lib/utils';
 import { TERMINAL_FONT_OPTIONS } from '../../shared/fontStacks';
-import type { Language } from '../../shared/locales';
 
 import { useSettingsStore } from '../../store/settingsStore';
 

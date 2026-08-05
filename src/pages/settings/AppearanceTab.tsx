@@ -1,7 +1,6 @@
 import { Slider } from '../../components/ui/slider';
 import { cn } from '../../lib/utils';
 import { TERMINAL_FONT_OPTIONS, UI_FONT_OPTIONS } from '../../shared/fontStacks';
-import type { Language } from '../../shared/locales';
 import { accentColors, type AccentColorId, type AppearanceMode } from '../../shared/themes';
 import { useSettingsStore } from '../../store/settingsStore';
 import { MAX_RADIUS_SCALE, MIN_RADIUS_SCALE, useThemeStore } from '../../store/themeStore';

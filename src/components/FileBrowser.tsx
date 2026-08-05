@@ -168,6 +168,7 @@ export function FileBrowser({ connectionId, isConnected = true }: Props) {
       {/* File list */}
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" onContextMenu={e => openContextMenu(e)}>
         <FileList
+          currentPath={fb.currentPath}
           files={fb.files}
           loading={fb.loading}
           hasLoaded={fb.hasLoaded}

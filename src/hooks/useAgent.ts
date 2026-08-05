@@ -79,6 +79,27 @@ function createConversation(): AgentConversation {
   };
 }
 
+function deleteConversationFromState(
+  state: ConversationState,
+  conversationId: string,
+): ConversationState {
+  const deletedIndex = state.items.findIndex((item) => item.id === conversationId);
+  if (deletedIndex < 0) return state;
+
+  const items = state.items.filter((item) => item.id !== conversationId);
+  if (items.length === 0) {
+    const created = createConversation();
+    return { activeId: created.id, items: [created] };
+  }
+
+  return {
+    activeId: state.activeId === conversationId
+      ? items[Math.min(deletedIndex, items.length - 1)].id
+      : state.activeId,
+    items,
+  };
+}
+
 function settleText(blocks: AgentBlock[]): AgentBlock[] {
   return blocks.map((block) => (
     block.kind === 'text' && block.streaming ? { ...block, streaming: false } : block
@@ -433,6 +454,24 @@ export function useAgent(sessionId: string, connectionId: string, serverLabel: s
     ));
   }, []);
 
+  const deleteConversation = useCallback((conversationId: string) => {
+    const current = conversationStateRef.current;
+    const next = deleteConversationFromState(current, conversationId);
+    if (next === current) return;
+
+    // Update the ref immediately so an event already queued for the removed conversation
+    // cannot be flushed back to disk while React is rendering the replacement state.
+    conversationStateRef.current = next;
+    setConversationState(next);
+    void window.electron.agentConversationDelete(
+      connectionId,
+      conversationId,
+      prepareConversationState(next),
+    ).then((deleted) => {
+      if (!deleted) log.error('[Agent] Main process refused to delete conversation history');
+    }).catch((error) => log.error('[Agent] Could not delete conversation history', error));
+  }, [connectionId]);
+
   /**
    * Applied locally first because two quick settings writes can otherwise land out of
    * order and silently revert the first control when the second reply arrives.
@@ -478,6 +517,7 @@ export function useAgent(sessionId: string, connectionId: string, serverLabel: s
     stop,
     newConversation,
     switchConversation,
+    deleteConversation,
     refreshConfig,
     setEffort,
     setMode,

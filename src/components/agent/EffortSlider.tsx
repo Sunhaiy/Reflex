@@ -2,15 +2,15 @@ import { useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../hooks/useTranslation';
 import { REASONING_EFFORTS, type ReasoningEffort } from '../../shared/agent';
+import { EffortPixelField } from './EffortPixelField';
 import { EFFORT_NAME } from './modes';
 
 const STOPS = REASONING_EFFORTS;
-const TRACK_INSET = 6;
+const TRACK_INSET = 8;
 
 /**
- * Effort as a compact discrete slider. The thin rail shows direction while one dot per
- * supported value makes it clear that the provider accepts six exact settings rather
- * than an arbitrary point on a continuum.
+ * Effort as a compact discrete slider. Dragging stays continuous, then snaps to the
+ * provider's six supported values; the top tier swaps the regular fill for a pixel field.
  *
  * The leftmost stop stays neutral because it sends no effort field at all; every other
  * position adds a field that strict compatible gateways may reject.
@@ -22,51 +22,78 @@ export function EffortSlider({ value, onChange }: {
   const { t } = useTranslation();
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [dragPosition, setDragPosition] = useState<number | null>(null);
 
   const index = Math.max(0, STOPS.indexOf(value));
   const ratio = index / (STOPS.length - 1);
+  const visualRatio = dragging && dragPosition !== null ? dragPosition : ratio;
   const neutral = value === 'auto';
-  const thumbLeft = `calc(${TRACK_INSET}px + ${ratio * 100}% - ${ratio * TRACK_INSET * 2}px)`;
+  const ultraActive = index === STOPS.length - 1 && (!dragging || visualRatio > 0.985);
+  const thumbLeft = `calc(${TRACK_INSET}px + ${visualRatio * 100}% - ${visualRatio * TRACK_INSET * 2}px)`;
+  const hint = neutral ? t('agent.effortAutoHint') : t('agent.effortHintOther');
 
   const setFromPointer = (clientX: number) => {
     const track = trackRef.current;
     if (!track) return;
     const bounds = track.getBoundingClientRect();
     const usableWidth = Math.max(1, bounds.width - TRACK_INSET * 2);
-    const position = (clientX - bounds.left - TRACK_INSET) / usableWidth;
+    const position = Math.min(1, Math.max(0, (clientX - bounds.left - TRACK_INSET) / usableWidth));
     const stop = Math.round(position * (STOPS.length - 1));
+    setDragPosition(position);
     onChange(STOPS[Math.min(STOPS.length - 1, Math.max(0, stop))]);
   };
 
   const beginDrag = (event: React.MouseEvent) => {
+    event.preventDefault();
     setFromPointer(event.clientX);
     setDragging(true);
     const move = (moveEvent: MouseEvent) => setFromPointer(moveEvent.clientX);
     const release = () => {
       setDragging(false);
+      setDragPosition(null);
       document.removeEventListener('mousemove', move);
       document.removeEventListener('mouseup', release);
+      window.removeEventListener('blur', release);
     };
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup', release);
+    window.addEventListener('blur', release);
   };
 
   return (
-    <div className="w-[220px] px-2.5 py-2">
-      <div className="flex items-baseline gap-2">
-        <span className="text-[11.5px] text-muted-foreground">{t('settings.agent.effort')}</span>
+    <div className="w-[300px] max-w-[calc(100vw-28px)] px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-baseline gap-1.5">
+          <span className="text-[12px] font-medium text-muted-foreground">
+            {t('settings.agent.effort')}
+          </span>
+          <span
+            key={value}
+            className={cn(
+              'truncate text-[12px] font-semibold animate-in fade-in-0 slide-in-from-bottom-1 duration-200',
+              neutral ? 'text-muted-foreground' : 'text-primary',
+            )}
+          >
+            {EFFORT_NAME[value]}
+          </span>
+        </div>
+
         <span
-          key={value}
+          tabIndex={0}
+          title={hint}
+          aria-label={hint}
           className={cn(
-            'text-[11.5px] font-medium animate-in fade-in-0 slide-in-from-bottom-1 duration-200',
-            neutral ? 'text-muted-foreground' : 'text-primary',
+            'flex h-[17px] w-[17px] shrink-0 cursor-help select-none items-center justify-center rounded-full',
+            'border border-muted-foreground/40 text-[10px] font-semibold leading-none text-muted-foreground',
+            'transition-colors duration-150 hover:border-foreground/45 hover:text-foreground',
+            'outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
           )}
         >
-          {EFFORT_NAME[value]}
+          ?
         </span>
       </div>
 
-      <div className="mt-2.5 flex justify-between text-[10.5px] text-muted-foreground">
+      <div className="mt-5 flex justify-between text-[11px] font-medium text-muted-foreground">
         <span>{t('agent.effortFaster')}</span>
         <span>{t('agent.effortSmarter')}</span>
       </div>
@@ -91,30 +118,52 @@ export function EffortSlider({ value, onChange }: {
             onChange(STOPS[Math.min(STOPS.length - 1, index + 1)]);
           }
         }}
-        className="relative mt-1 h-5 cursor-pointer select-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className={cn(
+          'relative mt-2.5 h-[30px] cursor-grab select-none overflow-hidden rounded-[9px] active:cursor-grabbing',
+          'bg-foreground/[0.07] shadow-[inset_0_1px_0_hsl(var(--foreground)/0.045),inset_0_0_0_1px_hsl(var(--foreground)/0.04)]',
+          'outline-none transition-shadow duration-200 focus-visible:ring-2 focus-visible:ring-ring/45',
+        )}
       >
-        <div className="absolute inset-x-[6px] top-1/2 h-px -translate-y-1/2 rounded-full bg-foreground/[0.1]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-[9px]"
+        >
           <span
-            style={{ width: `${ratio * 100}%` }}
+            style={{ width: thumbLeft }}
             className={cn(
-              'absolute inset-y-0 left-0 rounded-full',
-              neutral ? 'bg-muted-foreground/35' : 'bg-primary/75',
+              'absolute inset-y-px left-px rounded-l-[8px] bg-foreground/[0.1]',
               dragging
-                ? 'transition-[width] duration-75 ease-linear'
-                : 'transition-[width,background-color] [transition-duration:280ms] ease-out',
+                ? 'transition-[width,opacity] duration-75 ease-linear'
+                : 'transition-[width,opacity] duration-200 ease-out',
+              ultraActive && 'opacity-0',
             )}
           />
+          <span
+            className={cn(
+              'absolute inset-0 bg-[linear-gradient(90deg,hsl(var(--foreground)/0.055),hsl(var(--primary)/0.09)_30%,hsl(var(--primary)/0.24))]',
+              'transition-opacity duration-300 ease-in',
+              ultraActive ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <EffortPixelField active={ultraActive} />
+        </div>
 
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-2 top-1/2 z-[2] h-1 -translate-y-1/2"
+        >
           {STOPS.map((stop, stopIndex) => (
             <span
               key={stop}
               style={{ left: `${(stopIndex / (STOPS.length - 1)) * 100}%` }}
               className={cn(
-                'absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-background',
-                'transition-colors duration-200',
-                stopIndex <= index
-                  ? (neutral ? 'bg-muted-foreground/55' : 'bg-primary/80')
-                  : 'bg-muted-foreground/35',
+                'absolute top-0 h-1 w-1 -translate-x-1/2 rounded-full transition-[opacity,background-color] duration-200',
+                stopIndex === STOPS.length - 1
+                  ? 'bg-primary/85'
+                  : stopIndex <= index && !neutral
+                    ? 'bg-foreground/55'
+                    : 'bg-foreground/28',
+                ultraActive && 'opacity-0',
               )}
             />
           ))}
@@ -123,19 +172,17 @@ export function EffortSlider({ value, onChange }: {
         <span
           style={{ left: thumbLeft }}
           className={cn(
-            'pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full',
-            'ring-[3px] ring-background shadow-[0_2px_8px_hsl(var(--foreground)/0.2)]',
+            'pointer-events-none absolute top-1/2 z-[4] flex h-6 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[6px]',
+            'ring-1 ring-background/55 shadow-[0_2px_8px_hsl(var(--background)/0.5),0_0_10px_hsl(var(--primary)/0.12)]',
             dragging
-              ? 'scale-110 transition-[left,transform] duration-75 ease-linear'
-              : 'transition-[left,transform,background-color,box-shadow] [transition-duration:300ms] [transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
-            neutral ? 'bg-muted-foreground' : 'bg-primary',
+              ? 'scale-[1.06] shadow-[0_3px_10px_hsl(var(--background)/0.55),0_0_14px_hsl(var(--primary)/0.22)] transition-[left,transform,box-shadow] duration-75 ease-linear'
+              : 'transition-[left,transform,background-color,box-shadow] [transition-duration:260ms] [transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
+            neutral ? 'bg-muted-foreground' : 'bg-foreground',
           )}
-        />
+        >
+          <span className="h-2 w-px rounded-full bg-background/35 shadow-[1.5px_0_0_hsl(var(--background)/0.18)]" />
+        </span>
       </div>
-
-      <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
-        {neutral ? t('agent.effortAutoHint') : t('agent.effortHintOther')}
-      </p>
     </div>
   );
 }

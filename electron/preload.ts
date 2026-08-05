@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('electron', {
   agentPickFolder: () => ipcRenderer.invoke('agent-pick-folder'),
   agentConversationsGet: (connectionId: string) => ipcRenderer.invoke('agent-conversations-get', connectionId),
   agentConversationsSet: (connectionId: string, value: unknown) => ipcRenderer.invoke('agent-conversations-set', { connectionId, value }),
+  agentConversationDelete: (connectionId: string, conversationId: string, value: unknown) =>
+    ipcRenderer.invoke('agent-conversation-delete', { connectionId, conversationId, value }),
   onAgentEvent: (callback: (payload: { sessionId: string; conversationId: string; event: unknown }) => void) => {
     const subscription = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; conversationId: string; event: unknown }) => callback(payload);
     ipcRenderer.on('agent-event', subscription);

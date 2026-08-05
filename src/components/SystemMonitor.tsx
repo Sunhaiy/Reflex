@@ -82,7 +82,7 @@ function NetworkChart({ data, label }: { data: NetworkPoint[]; label: string }) 
 
 const CARD_REVEAL = [
   'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1',
-  'motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)] fill-mode-backwards',
+  'motion-safe:duration-300 motion-safe:[animation-timing-function:cubic-bezier(0.22,1,0.36,1)] fill-mode-backwards',
 ].join(' ');
 
 function StorageUsage({ disks }: { disks: SystemStats['disks'] }) {
@@ -113,7 +113,7 @@ function StorageUsage({ disks }: { disks: SystemStats['disks'] }) {
     <div
       className={clsx(
         'space-y-2.5 transition-[opacity,transform] duration-300',
-        'ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+        '[transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
         revealed ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-1 scale-[0.985] opacity-0',
       )}
     >
@@ -127,7 +127,7 @@ function StorageUsage({ disks }: { disks: SystemStats['disks'] }) {
             <div
               className={clsx(
                 'h-full origin-left transition-[width] duration-500',
-                'ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+                '[transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
                 disk.usePercent > 90 ? 'bg-destructive' : 'bg-amber-500',
               )}
               style={{

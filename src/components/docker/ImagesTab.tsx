@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { cn } from '../../lib/utils';
 import type { DockerImage } from '../../shared/types';
-import type { DockerTabProps } from './types';
 import { errorMessage } from '../../lib/errors';
 import { DockerCardsSkeleton } from '../ui/skeleton';
 
@@ -13,7 +12,7 @@ const CARD_REVEAL = [
     'motion-safe:duration-300 fill-mode-backwards',
 ].join(' ');
 
-export function ImagesTab({ connectionId }: { connectionId: string }) {
+export function ImagesTab({ connectionId, active }: { connectionId: string; active: boolean }) {
     const { t } = useTranslation();
     const [images, setImages] = useState<DockerImage[]>([]);
     const [loading, setLoading] = useState(false);
@@ -38,10 +37,8 @@ export function ImagesTab({ connectionId }: { connectionId: string }) {
     };
 
     useEffect(() => {
-        setImages([]);
-        setHasLoaded(false);
-        fetchImages();
-    }, [connectionId]);
+        if (active) void fetchImages();
+    }, [active, connectionId]);
 
     const handleDelete = async (imageId: string) => {
         setPendingDelete(null);
