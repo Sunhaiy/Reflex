@@ -35,7 +35,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
     // longer exists, which killed the session's whole render tree.
     let disposed = false;
 
-    const initTerminal = async () => {
+    const initTerminal = () => {
       // Use current values from store for initialization
       const settings = useSettingsStore.getState();
       const currentTerminalTheme = useThemeStore.getState().terminalTheme;
@@ -83,21 +83,19 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
 
       // Load WebGL if enabled
       if (rendererType === 'webgl') {
-        try {
-          const { WebglAddon } = await import('@xterm/addon-webgl');
-          if (disposed) {
-            term.dispose();
-            return () => { };
-          }
-          const webglAddon = new WebglAddon();
-          webglAddon.onContextLoss(() => {
-            webglAddon.dispose();
+        void import('@xterm/addon-webgl')
+          .then(({ WebglAddon }) => {
+            if (disposed) return;
+            const webglAddon = new WebglAddon();
+            webglAddon.onContextLoss(() => {
+              webglAddon.dispose();
+            });
+            term.loadAddon(webglAddon);
+            console.log('WebGL renderer enabled');
+          })
+          .catch((error) => {
+            if (!disposed) console.warn('Failed to load WebGL addon:', error);
           });
-          term.loadAddon(webglAddon);
-          console.log('WebGL renderer enabled');
-        } catch (e) {
-          console.warn('Failed to load WebGL addon:', e);
-        }
       }
 
       safeFit();
@@ -213,25 +211,25 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       };
     };
 
-    // We need to manage cleanup manually since initTerminal is async
-    let isMounted = true;
-
-    void initTerminal()
-      .then(fn => {
-        if (isMounted) {
-          cleanupFn = fn;
-        } else {
-          // If unmounted before init finished, run cleanup immediately
-          fn();
-        }
-      })
-      .catch((error) => {
+    // React StrictMode intentionally mounts and tears down every effect once in
+    // development. Opening xterm during that throwaway pass leaves an internal viewport
+    // callback queued after dispose(), which then reads a missing render service. Waiting
+    // one frame means the throwaway pass is cancelled before xterm is ever constructed.
+    let initFrame = window.requestAnimationFrame(() => {
+      initFrame = 0;
+      if (disposed) return;
+      try {
+        cleanupFn = initTerminal();
+      } catch (error) {
         console.error(`[Terminal] Failed to initialize session ${connectionId}:`, error);
-      });
+        try { termRef.current?.dispose(); } catch { /* partially initialized */ }
+        termRef.current = null;
+      }
+    });
 
     return () => {
-      isMounted = false;
       disposed = true;
+      if (initFrame) window.cancelAnimationFrame(initFrame);
       if (cleanupFn) cleanupFn();
     };
   }, [connectionId, rendererType]);

@@ -14,7 +14,7 @@ import type {
 
 export type { AgentEvent };
 
-export interface AgentHost extends ShellHost { }
+export type AgentHost = ShellHost;
 
 
 export type AgentEmitter = (sessionId: string, conversationId: string, event: AgentEvent) => void;
@@ -100,6 +100,25 @@ function saveModelHistory(
   store.set(MODEL_HISTORY_KEY, all);
 }
 
+function deleteModelHistory(
+  store: ConfigStore,
+  connectionId: string,
+  conversationId: string,
+) {
+  const current = store.get(MODEL_HISTORY_KEY);
+  if (!isRecord(current)) return;
+
+  const all: StoredModelHistories = { ...(current as StoredModelHistories) };
+  const existingServer = all[connectionId];
+  if (!isRecord(existingServer) || !(conversationId in existingServer)) return;
+
+  const server = { ...existingServer };
+  delete server[conversationId];
+  if (Object.keys(server).length > 0) all[connectionId] = server;
+  else delete all[connectionId];
+  store.set(MODEL_HISTORY_KEY, all);
+}
+
 /**
  * One Agent conversation, holding its own history and tool channels while using the SSH
  * connection it was created for. Several conversations may therefore stay alive on the
@@ -110,6 +129,7 @@ class AgentConversation {
   readonly shell: AgentShell;
   readonly files: AgentFiles;
   private abort: AbortController | null = null;
+  private disposed = false;
   private readonly waiting = new Map<string, (answer: ApprovalAnswer) => void>();
 
   constructor(
@@ -175,6 +195,9 @@ class AgentConversation {
         },
       });
 
+      // Deletion or SSH teardown may land just as the provider resolves. Do not let the
+      // completed microtask recreate history that the user has already removed.
+      if (this.disposed) return;
       this.history = outcome.messages;
       try {
         saveModelHistory(this.store, this.connectionId, this.conversationId, this.history);
@@ -185,6 +208,7 @@ class AgentConversation {
       }
       emit(this.sessionId, this.conversationId, { type: 'done', stopReason: outcome.stopReason, turns: outcome.turns });
     } catch (error) {
+      if (this.disposed) return;
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Run failed for ${this.sessionId}`, error);
       emit(this.sessionId, this.conversationId, { type: 'error', message });
@@ -221,6 +245,7 @@ class AgentConversation {
   }
 
   dispose() {
+    this.disposed = true;
     this.cancel();
     this.shell.dispose();
     this.files.dispose();
@@ -269,6 +294,15 @@ export class AgentService {
 
   cancel(conversationId: string) {
     this.conversations.get(conversationId)?.cancel();
+  }
+
+  /** Cancels a live run and removes the model-facing context saved for this server. */
+  delete(conversationId: string, connectionId: string): boolean {
+    const conversation = this.conversations.get(conversationId);
+    if (conversation && conversation.connectionId !== connectionId) return false;
+    this.dispose(conversationId);
+    deleteModelHistory(this.store, connectionId, conversationId);
+    return true;
   }
 
   isBusy(conversationId: string) {

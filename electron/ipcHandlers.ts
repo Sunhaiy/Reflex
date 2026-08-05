@@ -23,7 +23,6 @@ const MIGRATED_STORE_KEYS = [
   'connections',
   'connectionDraft',
   'appearance',
-  'lastConnection',
   'terminalFontFamily',
   'uiFontFamily',
   'language',

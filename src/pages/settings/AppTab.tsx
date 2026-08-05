@@ -8,7 +8,6 @@ import { Select } from '../../components/ui/select';
 import { LANGUAGE_NAMES, type Language } from '../../shared/locales';
 
 import { useSettingsStore } from '../../store/settingsStore';
-import { useThemeStore } from '../../store/themeStore';
 import { useTranslation } from '../../hooks/useTranslation';
 import { FieldLabel, SettingsCard, ToggleSwitch } from './controls';
 
@@ -19,7 +18,6 @@ const languageOptions = (Object.keys(LANGUAGE_NAMES) as Language[])
 
 export function AppTab() {
   const { t } = useTranslation();
-  const { appearance } = useThemeStore();
   const { language, setLanguage, autoReconnect, setAutoReconnect } = useSettingsStore();
   const [appVersion, setAppVersion] = useState('');
 

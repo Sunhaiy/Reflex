@@ -70,6 +70,11 @@ declare global {
       agentPickFolder: () => Promise<string | null>;
       agentConversationsGet: (connectionId: string) => Promise<unknown>;
       agentConversationsSet: (connectionId: string, value: unknown) => Promise<void>;
+      agentConversationDelete: (
+        connectionId: string,
+        conversationId: string,
+        value: unknown,
+      ) => Promise<boolean>;
       onAgentEvent: (
         callback: (payload: { sessionId: string; conversationId: string; event: AgentEvent }) => void,
       ) => () => void;

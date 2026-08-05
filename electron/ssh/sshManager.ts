@@ -13,17 +13,17 @@ export class SSHManager {
     private streams: Map<string, ClientChannel> = new Map();
     private readonly commands = new CommandService({
         execCommand: (id, command, maxOutputBytes) => this.execCommand(id, command, maxOutputBytes),
-        getConnection: (id) => this.connections.get(id),
+        getConnection: (id) => this.getReadyConnection(id),
     });
 
     private readonly monitor = new MonitorService({
-        getConnection: (id) => this.connections.get(id),
+        getConnection: (id) => this.getReadyConnection(id),
         emitActivity: (id, text, level, webContents, scope) =>
             this.emitActivity(id, text, level, webContents, scope),
     });
 
     private readonly sftp = new SftpService({
-        getConnection: (id) => this.connections.get(id),
+        getConnection: (id) => this.getReadyConnection(id),
     });
     private nextActivityId = 0;
 
@@ -36,7 +36,7 @@ export class SSHManager {
         command: string,
         maxOutputBytes = 4 * 1024 * 1024,
     ): Promise<{ stdout: string; stderr: string }> {
-        const conn = this.connections.get(id);
+        const conn = this.getReadyConnection(id);
         if (!conn) throw new Error('Not connected');
 
         return new Promise((resolve, reject) => {
@@ -213,6 +213,17 @@ export class SSHManager {
     private _connectDirect(connection: SSHConnection, webContents: WebContents, sessionId: string): Promise<void> {
         return new Promise((resolve, reject) => {
             const conn = new Client();
+            let settled = false;
+            const resolveOnce = () => {
+                if (settled) return;
+                settled = true;
+                resolve();
+            };
+            const rejectOnce = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                reject(error);
+            };
             const port = connection.port || 22;
             const username = connection.username || 'root';
             const authLabel = connection.authType === 'privateKey' ? 'publickey' : 'password';
@@ -238,11 +249,14 @@ export class SSHManager {
             });
             conn.on('ready', () => {
                 this.emitActivity(sessionId, `Authentication succeeded (${authLabel}).`, 'ok', webContents);
-                this._attachShell(conn, webContents, sessionId, resolve, reject);
+                this._attachShell(conn, webContents, sessionId, resolveOnce, rejectOnce);
             });
             conn.on('error', (err) => {
                 const currentConn = this.connections.get(sessionId);
-                if (currentConn && currentConn !== conn) return;
+                if (currentConn && currentConn !== conn) {
+                    rejectOnce(err);
+                    return;
+                }
                 this.emitActivity(
                     sessionId,
                     `Connection to ${connection.host}:${port} failed (auth=${authLabel}): ${err.message}`,
@@ -251,7 +265,7 @@ export class SSHManager {
                 );
                 this.cleanup(sessionId);
                 this.emitStatus(sessionId, 'disconnected', webContents);
-                reject(err);
+                rejectOnce(err);
             });
             conn.on('keyboard-interactive', (_name, _instructions, _instructionsLang, prompts, finish) => {
                 this.emitActivity(
@@ -267,15 +281,22 @@ export class SSHManager {
                     this.cleanup(sessionId);
                     this.emitStatus(sessionId, 'disconnected', webContents);
                 }
+                rejectOnce(new Error('Connection closed before the SSH session became ready'));
             });
             try { conn.connect(this._buildConfig(connection)); } catch (err) {
                 const reason = err instanceof Error ? err.message : String(err);
                 this.emitActivity(sessionId, `Could not start connection: ${reason}`, 'error', webContents);
                 this.cleanup(sessionId);
                 this.emitStatus(sessionId, 'disconnected', webContents);
-                reject(err);
+                rejectOnce(err instanceof Error ? err : new Error(reason));
             }
         });
+    }
+
+    /** Business channels are unavailable until the interactive shell marks the session ready. */
+    private getReadyConnection(id: string) {
+        if (!this.streams.has(id)) return undefined;
+        return this.connections.get(id);
     }
 
     cleanup(id: string) {
@@ -319,7 +340,7 @@ export class SSHManager {
      * and nothing else, because the methods here are shaped for the UI rather than for it.
      */
     getConnection(id: string) {
-        return this.connections.get(id);
+        return this.getReadyConnection(id);
     }
 
     write(id: string, data: string) {

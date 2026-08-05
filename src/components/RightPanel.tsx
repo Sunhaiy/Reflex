@@ -76,7 +76,7 @@ export function RightPanel({ connectionId, active, extraTab }: RightPanelProps) 
         <div className="absolute inset-0" style={{ display: showing === 'docker' ? 'block' : 'none' }}>
           <ErrorBoundary name="DockerManager">
             <Suspense fallback={null}>
-              <DockerManager connectionId={connectionId} />
+              <DockerManager connectionId={connectionId} active={active && showing === 'docker'} />
             </Suspense>
           </ErrorBoundary>
         </div>

@@ -1,5 +1,11 @@
 import { HugeiconsIcon } from '@hugeicons/react';
-import { MessageMultiple01Icon, PlusSignIcon, Tick02Icon } from '@hugeicons/core-free-icons';
+import {
+  Cancel01Icon,
+  Delete02Icon,
+  MessageMultiple01Icon,
+  PlusSignIcon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AgentController } from '../../hooks/useAgent';
@@ -19,6 +25,7 @@ interface MenuPosition {
 export function AgentHeaderActions({ agent }: { agent: AgentController }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [position, setPosition] = useState<MenuPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -46,10 +53,14 @@ export function AgentHeaderActions({ agent }: { agent: AgentController }) {
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
+        setPendingDeleteId(null);
       }
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        setOpen(false);
+        setPendingDeleteId(null);
+      }
     };
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', escape);
@@ -68,7 +79,10 @@ export function AgentHeaderActions({ agent }: { agent: AgentController }) {
         aria-label={t('agent.switchConversation')}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen((current) => {
+          if (current) setPendingDeleteId(null);
+          return !current;
+        })}
         className={cn(workspaceIconButtonClass, open && 'bg-foreground/[0.075] text-foreground')}
       >
         <HugeiconsIcon icon={MessageMultiple01Icon} className="h-4 w-4" />
@@ -99,32 +113,73 @@ export function AgentHeaderActions({ agent }: { agent: AgentController }) {
             const selected = conversation.id === agent.activeConversationId;
             const title = conversation.title || `${t('agent.newConversation')} ${agent.conversations.length - index}`;
             return (
-              <button
+              <div
                 key={conversation.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={selected}
-                onClick={() => {
-                  agent.switchConversation(conversation.id);
-                  setOpen(false);
-                }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors',
+                  'group flex w-full items-center rounded-lg transition-colors',
                   selected
                     ? 'bg-foreground/[0.09] text-foreground'
                     : 'text-muted-foreground hover:bg-foreground/[0.055] hover:text-foreground',
                 )}
               >
-                <span className={cn(
-                  'h-1.5 w-1.5 shrink-0 rounded-full',
-                  conversation.busy ? 'animate-pulse bg-primary' : 'bg-foreground/20',
-                )} />
-                <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium">{title}</span>
-                <HugeiconsIcon
-                  icon={Tick02Icon}
-                  className={cn('h-3.5 w-3.5 shrink-0', selected ? 'opacity-100' : 'opacity-0')}
-                />
-              </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    agent.switchConversation(conversation.id);
+                    setOpen(false);
+                    setPendingDeleteId(null);
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left"
+                >
+                  <span className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                    conversation.busy ? 'animate-pulse bg-primary' : 'bg-foreground/20',
+                  )} />
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium">{title}</span>
+                  <HugeiconsIcon
+                    icon={Tick02Icon}
+                    className={cn('h-3.5 w-3.5 shrink-0', selected ? 'opacity-100' : 'opacity-0')}
+                  />
+                </button>
+
+                {pendingDeleteId === conversation.id ? (
+                  <div className="mr-1 flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      title={t('common.cancel')}
+                      aria-label={t('common.cancel')}
+                      onClick={() => setPendingDeleteId(null)}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground"
+                    >
+                      <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title={t('common.confirm')}
+                      aria-label={t('common.confirm')}
+                      onClick={() => {
+                        agent.deleteConversation(conversation.id);
+                        setPendingDeleteId(null);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20"
+                    >
+                      <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    title={t('common.delete')}
+                    aria-label={`${t('common.delete')}: ${title}`}
+                    onClick={() => setPendingDeleteId(conversation.id)}
+                    className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/55 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>,

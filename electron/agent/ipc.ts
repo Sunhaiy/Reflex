@@ -16,6 +16,31 @@ export interface AgentIpcHost {
   getConnection(sessionId: string): Client | undefined;
 }
 
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+const MAX_CONVERSATION_VIEW_BYTES = 8 * 1024 * 1024;
+
+function isSafeId(value: unknown): value is string {
+  return typeof value === 'string' && SAFE_ID.test(value);
+}
+
+function isStorableConversationView(value: unknown): boolean {
+  try {
+    const serialised = JSON.stringify(value);
+    return typeof serialised === 'string'
+      && Buffer.byteLength(serialised, 'utf8') <= MAX_CONVERSATION_VIEW_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+function readConversationViews(store: ConfigStore, key: string): Record<string, unknown> {
+  const stored = store.get(key);
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    return Object.create(null) as Record<string, unknown>;
+  }
+  return Object.assign(Object.create(null), stored) as Record<string, unknown>;
+}
+
 /**
  * Wires the agent to the renderer.
  *
@@ -53,10 +78,8 @@ export function registerAgentHandlers(host: AgentIpcHost, store: ConfigStore) {
   // Conversation UI is stored behind a dedicated channel so it can be updated
   // atomically per server without exposing the main process's model history record.
   ipcMain.handle('agent-conversations-get', (_event, connectionId: string) => {
-    if (typeof connectionId !== 'string' || connectionId.length > 128) return null;
-    const stored = store.get(conversationViewsKey);
-    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return null;
-    return (stored as Record<string, unknown>)[connectionId] ?? null;
+    if (!isSafeId(connectionId)) return null;
+    return readConversationViews(store, conversationViewsKey)[connectionId] ?? null;
   });
 
   ipcMain.handle('agent-provider-select', (event, providerId: string) => {
@@ -70,13 +93,28 @@ export function registerAgentHandlers(host: AgentIpcHost, store: ConfigStore) {
     value?: unknown;
   }) => {
     const connectionId = payload?.connectionId;
-    if (typeof connectionId !== 'string' || !connectionId || connectionId.length > 128) return;
-    const stored = store.get(conversationViewsKey);
-    const views = stored && typeof stored === 'object' && !Array.isArray(stored)
-      ? { ...(stored as Record<string, unknown>) }
-      : {};
+    if (!isSafeId(connectionId) || !isStorableConversationView(payload?.value)) return;
+    const views = readConversationViews(store, conversationViewsKey);
     views[connectionId] = payload.value;
     store.set(conversationViewsKey, views);
+  });
+
+  ipcMain.handle('agent-conversation-delete', (_event, payload: {
+    connectionId?: unknown;
+    conversationId?: unknown;
+    value?: unknown;
+  }) => {
+    const connectionId = payload?.connectionId;
+    const conversationId = payload?.conversationId;
+    if (!isSafeId(connectionId) || !isSafeId(conversationId)) return false;
+    if (!isStorableConversationView(payload?.value)) return false;
+    if (!service.delete(conversationId, connectionId)) return false;
+
+    senders.delete(conversationId);
+    const views = readConversationViews(store, conversationViewsKey);
+    views[connectionId] = payload.value;
+    store.set(conversationViewsKey, views);
+    return true;
   });
 
   ipcMain.handle('agent-send', async (event, payload: {

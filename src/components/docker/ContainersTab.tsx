@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { cn } from '../../lib/utils';
 import type { DockerAction, DockerContainer } from '../../shared/types';
-import type { ContainerFilter, DockerTabProps } from './types';
+import type { ContainerFilter } from './types';
 import { LogViewer } from './LogViewer';
 import { errorMessage } from '../../lib/errors';
 import { DockerCardsSkeleton } from '../ui/skeleton';
@@ -14,7 +14,7 @@ const CARD_REVEAL = [
     'motion-safe:duration-300 fill-mode-backwards',
 ].join(' ');
 
-export function ContainersTab({ connectionId }: { connectionId: string }) {
+export function ContainersTab({ connectionId, active }: { connectionId: string; active: boolean }) {
     const { t } = useTranslation();
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [loading, setLoading] = useState(false);
@@ -55,12 +55,11 @@ export function ContainersTab({ connectionId }: { connectionId: string }) {
     };
 
     useEffect(() => {
-        setContainers([]);
-        setHasLoaded(false);
-        fetchContainers();
+        if (!active) return;
+        void fetchContainers();
         const interval = window.setInterval(fetchContainers, 8000);
         return () => window.clearInterval(interval);
-    }, [connectionId]);
+    }, [active, connectionId]);
 
     const handleAction = async (containerId: string, action: DockerAction) => {
         setActionLoading(containerId);

@@ -2,12 +2,10 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { Cancel01Icon, ContainerIcon, Delete02Icon, HardDriveIcon, PackageIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../hooks/useTranslation';
-import { cn } from '../../lib/utils';
 import type { DockerPruneType } from '../../shared/types';
-import type { DockerTabProps } from './types';
 import { errorMessage } from '../../lib/errors';
 
-export function PruneTab({ connectionId }: { connectionId: string }) {
+export function PruneTab({ connectionId, active }: { connectionId: string; active: boolean }) {
     const { t } = useTranslation();
     const [diskUsage, setDiskUsage] = useState('');
     const [loading, setLoading] = useState(false);
@@ -28,8 +26,8 @@ export function PruneTab({ connectionId }: { connectionId: string }) {
     };
 
     useEffect(() => {
-        fetchDiskUsage();
-    }, [connectionId]);
+        if (active) void fetchDiskUsage();
+    }, [active, connectionId]);
 
     const handlePrune = async (type: DockerPruneType) => {
         setPendingPrune(null);

@@ -16,6 +16,7 @@ type SortField = 'name' | 'size' | 'date';
 type SortOrder = 'asc' | 'desc';
 
 interface Props {
+    currentPath: string;
     files: FileEntry[];
     loading: boolean;
     hasLoaded: boolean;
@@ -80,7 +81,7 @@ function useDelayedBusy(active: boolean, delay = 160, minVisible = 300) {
 }
 
 export const FileList = memo(function FileList({
-    files, loading, hasLoaded, sortField, sortOrder, filterQuery, selectedName,
+    currentPath, files, loading, hasLoaded, sortField, sortOrder, filterQuery, selectedName,
     onToggleSort, onFileClick, onFileDoubleClick, onContextMenu,
 }: Props) {
     const { t } = useTranslation();
@@ -91,6 +92,33 @@ export const FileList = memo(function FileList({
     );
     const { scrollerRef, scroller, start, end, totalHeight } = useVirtualRows(sorted.length, ROW_PITCH);
     const hdrCls = 'flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors select-none';
+    const [showInitialSkeleton, setShowInitialSkeleton] = useState(!hasLoaded);
+    const [revealInitialRows, setRevealInitialRows] = useState(!hasLoaded);
+    const [settledPath, setSettledPath] = useState(currentPath);
+    const revealingPath = settledPath !== currentPath;
+
+    // Keep both layers alive briefly so the skeleton can fade away under the finished
+    // listing. Row reveals are disabled afterwards, otherwise virtualised rows would
+    // replay their entrance every time they scroll back into the DOM.
+    useEffect(() => {
+        if (!hasLoaded) {
+            setShowInitialSkeleton(true);
+            setRevealInitialRows(true);
+            return;
+        }
+        const skeletonTimer = window.setTimeout(() => setShowInitialSkeleton(false), 240);
+        const rowsTimer = window.setTimeout(() => setRevealInitialRows(false), 520);
+        return () => {
+            window.clearTimeout(skeletonTimer);
+            window.clearTimeout(rowsTimer);
+        };
+    }, [hasLoaded]);
+
+    useEffect(() => {
+        if (!revealingPath) return;
+        const timer = window.setTimeout(() => setSettledPath(currentPath), 520);
+        return () => window.clearTimeout(timer);
+    }, [currentPath, revealingPath]);
 
     // A new listing starts at the top. Without this, stepping into a folder from halfway
     // down the parent would drop the user into the middle of it.
@@ -110,39 +138,53 @@ export const FileList = memo(function FileList({
 
             {/* Body */}
             <div className="relative min-h-0 flex-1 overflow-hidden">
-                {/* First load has nothing to show yet, so the skeleton stands in for the list. */}
-                {!hasLoaded ? (
-                    <FileListSkeleton />
-                ) : (
-                <>
-                <div className="absolute inset-x-0 top-0 z-10 h-[2px]">
-                    {busy && <FlowingBar className="animate-in fade-in duration-150" />}
-                </div>
-                <div ref={scrollerRef} className="h-full overflow-y-auto overflow-x-hidden overscroll-contain pb-2 [scrollbar-gutter:stable]">
-                    {sorted.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground/50">
-                            <HugeiconsIcon icon={Folder01Icon} className="h-10 w-10 opacity-30" />
-                            <p className="text-xs">{filterQuery ? t('fileBrowser.noMatches') : t('fileBrowser.emptyFolder')}</p>
+                {showInitialSkeleton && (
+                    <div
+                        className={[
+                            'pointer-events-none absolute inset-0 z-20 transition-[opacity,transform] duration-200',
+                            '[transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+                            hasLoaded ? '-translate-y-0.5 opacity-0' : 'translate-y-0 opacity-100',
+                        ].join(' ')}
+                    >
+                        <FileListSkeleton />
+                    </div>
+                )}
+
+                {hasLoaded && (
+                    <div
+                        key={currentPath}
+                        className="absolute inset-0 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300 fill-mode-backwards"
+                        style={{ animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+                    >
+                        <div className="absolute inset-x-0 top-0 z-10 h-[2px]">
+                            {busy && <FlowingBar className="animate-in fade-in duration-150" />}
                         </div>
-                    ) : (
-                        // The sized box is what the scrollbar measures; the rows inside it
-                        // are placed rather than stacked, so only the visible ones exist.
-                        <div className="relative" style={{ height: totalHeight }}>
-                            {sorted.slice(start, end).map((file, index) => (
-                                <FileItem
-                                    key={file.name}
-                                    file={file}
-                                    isSelected={selectedName === file.name}
-                                    style={{ position: 'absolute', top: (start + index) * ROW_PITCH, left: 0, right: 0 }}
-                                    onClick={onFileClick}
-                                    onDoubleClick={onFileDoubleClick}
-                                    onContextMenu={onContextMenu}
-                                />
-                            ))}
+                        <div ref={scrollerRef} className="h-full overflow-y-auto overflow-x-hidden overscroll-contain pb-2 [scrollbar-gutter:stable]">
+                            {sorted.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground/50">
+                                    <HugeiconsIcon icon={Folder01Icon} className="h-10 w-10 opacity-30" />
+                                    <p className="text-xs">{filterQuery ? t('fileBrowser.noMatches') : t('fileBrowser.emptyFolder')}</p>
+                                </div>
+                            ) : (
+                                // The sized box is what the scrollbar measures; the rows inside it
+                                // are placed rather than stacked, so only the visible ones exist.
+                                <div className="relative" style={{ height: totalHeight }}>
+                                    {sorted.slice(start, end).map((file, index) => (
+                                        <FileItem
+                                            key={file.name}
+                                            file={file}
+                                            isSelected={selectedName === file.name}
+                                            revealIndex={revealInitialRows || revealingPath ? index : undefined}
+                                            style={{ position: 'absolute', top: (start + index) * ROW_PITCH, left: 0, right: 0 }}
+                                            onClick={onFileClick}
+                                            onDoubleClick={onFileDoubleClick}
+                                            onContextMenu={onContextMenu}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-                </>
+                    </div>
                 )}
             </div>
         </div>

@@ -10,6 +10,8 @@ interface Props {
     isSelected: boolean;
     /** Absolute placement from the virtualiser; the row is positioned, not stacked. */
     style?: React.CSSProperties;
+    /** Present only during the first skeleton-to-content reveal. */
+    revealIndex?: number;
     onClick: (file: FileEntry) => void;
     onDoubleClick: (file: FileEntry) => void;
     onContextMenu: (e: React.MouseEvent, file: FileEntry) => void;
@@ -27,17 +29,32 @@ function getIcon(file: FileEntry) {
     }
 }
 
-export const FileItem = memo(function FileItem({ file, isSelected, style, onClick, onDoubleClick, onContextMenu }: Props) {
+export const FileItem = memo(function FileItem({
+    file,
+    isSelected,
+    style,
+    revealIndex,
+    onClick,
+    onDoubleClick,
+    onContextMenu,
+}: Props) {
+    const revealStyle = revealIndex === undefined ? style : {
+        ...style,
+        animationDelay: `${Math.min(revealIndex, 7) * 22}ms`,
+        animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    };
     return (
         <div
             role="button"
             tabIndex={0}
             aria-selected={isSelected}
-            style={style}
+            style={revealStyle}
             className={cn(
                 // The explicit height is what the virtualiser's row pitch is measured
                 // against, so it must not be left to the padding to imply.
                 'group mx-1 grid h-7 cursor-default select-none grid-cols-[24px_minmax(0,1fr)] items-center rounded-lg px-2 text-xs outline-none transition-colors',
+                revealIndex !== undefined
+                    && 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200 fill-mode-backwards',
                 isSelected
                     ? 'bg-foreground/[0.09] text-foreground'
                     : 'hover:bg-foreground/[0.045] focus-visible:bg-foreground/[0.055]',
