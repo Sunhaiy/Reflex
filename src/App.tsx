@@ -218,7 +218,7 @@ function App() {
         />
       </Modal>
 
-      <StartupCover />
+      <StartupCover appearanceReady={appearanceRestored} />
       <AppUpdatePrompt />
     </>
   );

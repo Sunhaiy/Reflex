@@ -136,7 +136,7 @@
      two blurred accent blobs instead of a shader. The opaque canvas hides it elsewhere. */
   .cover-fallback {
     overflow: hidden;
-    background-color: hsl(var(--background));
+    background-color: #09090b;
   }
 
   .cover-fallback::before,
