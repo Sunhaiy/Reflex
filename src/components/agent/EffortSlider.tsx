@@ -177,10 +177,17 @@ export function EffortSlider({ value, onChange }: {
             dragging
               ? 'scale-[1.06] shadow-[0_3px_10px_hsl(var(--background)/0.55),0_0_14px_hsl(var(--primary)/0.22)] transition-[left,transform,box-shadow] duration-75 ease-linear'
               : 'transition-[left,transform,background-color,box-shadow] [transition-duration:260ms] [transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
-            neutral ? 'bg-muted-foreground' : 'bg-foreground',
+            neutral ? 'bg-muted-foreground' : 'bg-primary',
           )}
         >
-          <span className="h-2 w-px rounded-full bg-background/35 shadow-[1.5px_0_0_hsl(var(--background)/0.18)]" />
+          <span
+            className={cn(
+              'h-2 w-px rounded-full',
+              neutral
+                ? 'bg-background/35 shadow-[1.5px_0_0_hsl(var(--background)/0.18)]'
+                : 'bg-primary-foreground/45 shadow-[1.5px_0_0_hsl(var(--primary-foreground)/0.2)]',
+            )}
+          />
         </span>
       </div>
     </div>
