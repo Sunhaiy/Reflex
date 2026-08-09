@@ -156,8 +156,6 @@ export const it: LocaleBundle = {
         privKeyContent: "Contenuto della chiave privata",
         privKeyPlaceholder: "Incolla la chiave privata completa che inizia con -----BEGIN",
         or: "oppure",
-        passphrase: "Passphrase della chiave privata",
-        passphraseDesc: "Decritta una chiave privata cifrata",
         showPassword: "Mostra password",
         hidePassword: "Nascondi password",
         selectPrivateKey: "Seleziona chiave privata SSH",

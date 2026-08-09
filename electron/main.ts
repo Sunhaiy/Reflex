@@ -152,6 +152,7 @@ app.setName('Reflex');
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.reflex.app');
 }
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 export function getMainWindow() {
   return mainWindow;
@@ -287,7 +288,7 @@ const createWindow = () => {
   });
 
   window.on('close', (event) => {
-    if (isQuitting) return;
+    if (isQuitting || process.platform === 'linux') return;
     event.preventDefault();
     window.setSkipTaskbar(true);
     window.hide();
@@ -384,22 +385,31 @@ function createTray() {
   tray.on('click', () => showMainWindow());
 }
 
-app.whenReady().then(() => {
-  setupIpcHandlers();
-  ipcMain.handle('open-external', async (_event, url: string) => openExternalUrl(url));
-  createTray();
-  createWindow();
-  setupAutoUpdater(
-    () => mainWindow,
-    () => { isQuitting = true; },
-  );
-
-  app.on('activate', () => {
-    showMainWindow();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (app.isReady()) showMainWindow();
+    else void app.whenReady().then(() => showMainWindow());
   });
 
-  ipcMain.handle('get-version', () => app.getVersion());
-});
+  void app.whenReady().then(() => {
+    setupIpcHandlers();
+    ipcMain.handle('open-external', async (_event, url: string) => openExternalUrl(url));
+    if (process.platform !== 'linux') createTray();
+    createWindow();
+    setupAutoUpdater(
+      () => mainWindow,
+      () => { isQuitting = true; },
+    );
+
+    app.on('activate', () => {
+      showMainWindow();
+    });
+
+    ipcMain.handle('get-version', () => app.getVersion());
+  });
+}
 
 app.on('before-quit', () => {
   isQuitting = true;
@@ -407,5 +417,5 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // Keep the tray app alive when every window is hidden.
+  if (process.platform === 'linux') app.quit();
 });

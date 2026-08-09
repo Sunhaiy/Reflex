@@ -26,7 +26,7 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
     if (element && atBottomRef.current) element.scrollTop = element.scrollHeight;
   }, [agent.blocks, agent.pending]);
 
-  const mode = agent.config?.mode ?? 'ask';
+  const mode = agent.config?.mode ?? 'free';
   const models = agent.config?.models ?? [];
   const budget = agent.config?.contextBudget ?? 60_000;
   const effort = agent.config?.effort ?? 'auto';

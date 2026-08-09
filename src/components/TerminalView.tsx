@@ -6,10 +6,12 @@ import { useSettingsStore } from '../store/settingsStore';
 import { queueUsage } from '../lib/usageTracker';
 import { log } from '../lib/logger';
 import { subscribeTerminalEcho } from '../lib/terminalEcho';
+import { subscribeTerminalData } from '../lib/terminalData';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalViewProps {
   connectionId: string;
+  active: boolean;
 }
 
 // xterm parses theme colours itself and only understands hex and rgb()/rgba() forms —
@@ -18,11 +20,28 @@ interface TerminalViewProps {
 // WebGL renderer paints its own and turned every terminal black. Alpha-zero hex works
 // in both, and `allowTransparency` keeps the alpha channel intact.
 const TRANSPARENT_BACKGROUND = '#00000000';
+const MAX_INACTIVE_OUTPUT_CHARS = 2 * 1024 * 1024;
 
-export function TerminalView({ connectionId }: TerminalViewProps) {
+export function TerminalView({ connectionId, active }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const activeRef = useRef(active);
+  const bufferedOutputRef = useRef<string[]>([]);
+  const bufferedOutputCharsRef = useRef(0);
+  const refreshRef = useRef<(() => void) | null>(null);
   const rendererType = useSettingsStore((state) => state.rendererType);
+  activeRef.current = active;
+
+  useEffect(() => {
+    if (!active) return;
+    const term = termRef.current;
+    if (!term) return;
+    const buffered = bufferedOutputRef.current.join('');
+    bufferedOutputRef.current = [];
+    bufferedOutputCharsRef.current = 0;
+    if (buffered) term.write(buffered, () => refreshRef.current?.());
+    else refreshRef.current?.();
+  }, [active]);
 
   // Effect to handle initialization
   useEffect(() => {
@@ -78,6 +97,33 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         }
       };
 
+      const refresh = () => {
+        if (disposed || !activeRef.current) return;
+        requestAnimationFrame(() => {
+          if (disposed || !activeRef.current) return;
+          safeFit();
+          try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (error) { log.warn('[Terminal] Refresh failed', error); }
+          term.focus();
+        });
+      };
+      refreshRef.current = refresh;
+
+      const writeOutput = (text: string) => {
+        if (disposed) return;
+        if (activeRef.current) {
+          term.write(text);
+          return;
+        }
+        const chunk = text.length > MAX_INACTIVE_OUTPUT_CHARS
+          ? text.slice(-MAX_INACTIVE_OUTPUT_CHARS)
+          : text;
+        bufferedOutputRef.current.push(chunk);
+        bufferedOutputCharsRef.current += chunk.length;
+        while (bufferedOutputCharsRef.current > MAX_INACTIVE_OUTPUT_CHARS && bufferedOutputRef.current.length > 1) {
+          bufferedOutputCharsRef.current -= bufferedOutputRef.current.shift()!.length;
+        }
+      };
+
       // Open terminal
       term.open(containerRef.current!);
 
@@ -99,7 +145,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       }
 
       safeFit();
-      term.focus();
+      if (activeRef.current) term.focus();
 
       // --- Live theme/settings subscription (registered HERE because initTerminal
       // is async, so term doesn't exist yet when useEffect callbacks run) ---
@@ -132,22 +178,13 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         });
       });
 
-      const cleanup = window.electron.onTerminalData((_, { id, data }) => {
-        if (id === connectionId) {
-          term.write(data);
-        }
-      });
+      const cleanup = subscribeTerminalData(connectionId, writeOutput);
 
       // Force repaint when this session is switched back to (canvas goes blank on visibility toggle)
       const handleTermRefresh = (e: Event) => {
         const detail = (e as CustomEvent).detail;
         if (detail?.connectionId === connectionId) {
-          requestAnimationFrame(() => {
-            if (disposed) return;
-            safeFit();
-            try { if (term.rows > 0) term.refresh(0, term.rows - 1); } catch (error) { log.warn('[Terminal] Refresh failed', error); }
-            term.focus();
-          });
+          refresh();
         }
       };
       window.addEventListener('terminal-refresh', handleTermRefresh);
@@ -155,7 +192,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       // What the agent runs shows up here too. Display only — nothing written this way
       // is sent to the server.
       const unsubEcho = subscribeTerminalEcho(connectionId, (text) => {
-        if (!disposed) term.write(text);
+        writeOutput(text);
       });
 
       // ResizeObserver fires in bursts while panels are dragged. Coalescing to one fit
@@ -197,6 +234,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
         } catch (error) {
           log.warn('[Terminal] Data listener teardown failed', error);
         }
+        if (refreshRef.current === refresh) refreshRef.current = null;
         resizeObserver.disconnect();
         try {
           if (term && !term.element?.parentElement) {
@@ -242,7 +280,7 @@ export function TerminalView({ connectionId }: TerminalViewProps) {
       className="relative h-full w-full"
       onMouseDown={() => {
         // Ensure terminal gets focus when clicking anywhere in its container
-        termRef.current?.focus();
+        if (activeRef.current) termRef.current?.focus();
       }}
     >
       <div

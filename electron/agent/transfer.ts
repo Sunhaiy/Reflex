@@ -1,4 +1,4 @@
-import { createReadStream } from 'fs';
+import { createReadStream, type Dirent } from 'fs';
 import { readFile, readdir, stat } from 'fs/promises';
 import * as path from 'path';
 import ignore from 'ignore';
@@ -46,6 +46,46 @@ export interface TransferPlan {
   totalBytes: number;
   /** Excluded paths the agent should mention — a missing .env breaks a deploy silently. */
   notableSkips: string[];
+  /** Local entries the OS would not let Reflex inspect. */
+  unreadableSkips: string[];
+}
+
+const SKIPPABLE_LOCAL_CODES = new Set(['EACCES', 'EPERM', 'EBUSY', 'ENOENT', 'ENOTDIR', 'ELOOP']);
+const SCAN_CONCURRENCY = 16;
+
+function createLimiter(limit: number) {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+
+  return <T>(task: () => Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+    const run = () => {
+      active += 1;
+      void task().then(resolve, reject).finally(() => {
+        active -= 1;
+        waiting.shift()?.();
+      });
+    };
+    if (active < limit) run();
+    else waiting.push(run);
+  });
+}
+
+function localErrorCode(error: unknown): string | undefined {
+  return typeof (error as NodeJS.ErrnoException)?.code === 'string'
+    ? (error as NodeJS.ErrnoException).code
+    : undefined;
+}
+
+function localPermissionError(target: string, error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (process.platform === 'darwin' && ['EACCES', 'EPERM'].includes(localErrorCode(error) ?? '')) {
+    return new Error(
+      `macOS blocked access to ${target}. Allow Reflex in System Settings > Privacy & Security > `
+      + `Files and Folders (or Full Disk Access), then retry. ${detail}`,
+      { cause: error },
+    );
+  }
+  return error instanceof Error ? error : new Error(detail, { cause: error });
 }
 
 /**
@@ -72,32 +112,54 @@ export async function planUpload(localRoot: string): Promise<TransferPlan> {
 
   const files: PlannedFile[] = [];
   const notableSkips: string[] = [];
+  const unreadableSkips = new Set<string>();
+  const limitFs = createLimiter(SCAN_CONCURRENCY);
   let totalBytes = 0;
 
   const walk = async (directory: string) => {
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries) {
+    let entries: Dirent[];
+    try {
+      entries = await limitFs(() => readdir(directory, { withFileTypes: true }));
+    } catch (error) {
+      if (directory === localRoot || !SKIPPABLE_LOCAL_CODES.has(localErrorCode(error) ?? '')) {
+        throw localPermissionError(directory, error);
+      }
+      unreadableSkips.add(path.relative(localRoot, directory).split(path.sep).join('/'));
+      return;
+    }
+
+    await Promise.all(entries.map(async (entry) => {
       const absolute = path.join(directory, entry.name);
       const relative = path.relative(localRoot, absolute);
+      const portableRelative = relative.split(path.sep).join('/');
 
       if (isIgnored(relative, entry.isDirectory())) {
-        if (NOTABLE.test(entry.name)) notableSkips.push(relative.split(path.sep).join('/'));
-        continue;
+        if (NOTABLE.test(entry.name)) notableSkips.push(portableRelative);
+        return;
       }
 
       if (entry.isDirectory()) {
         await walk(absolute);
       } else if (entry.isFile()) {
-        const info = await stat(absolute);
-        files.push({ relativePath: relative.split(path.sep).join('/'), size: info.size });
+        let info;
+        try {
+          info = await limitFs(() => stat(absolute));
+        } catch (error) {
+          if (!SKIPPABLE_LOCAL_CODES.has(localErrorCode(error) ?? '')) throw error;
+          unreadableSkips.add(portableRelative);
+          return;
+        }
+        files.push({ relativePath: portableRelative, size: info.size });
         totalBytes += info.size;
       }
       // Symlinks are skipped: what they point at is meaningless on the other machine.
-    }
+    }));
   };
 
   await walk(localRoot);
-  return { files, totalBytes, notableSkips };
+  files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  notableSkips.sort();
+  return { files, totalBytes, notableSkips, unreadableSkips: [...unreadableSkips].sort() };
 }
 
 export interface UploadProgress {

@@ -34,7 +34,7 @@ export function Workspace({ sessionId, connectionId, serverLabel, status, active
   const terminal = (
     <ErrorBoundary name="Terminal">
       <Suspense fallback={null}>
-        <TerminalView connectionId={sessionId} />
+        <TerminalView connectionId={sessionId} active={active} />
       </Suspense>
     </ErrorBoundary>
   );

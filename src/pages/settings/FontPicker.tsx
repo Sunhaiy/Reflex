@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowDown01Icon, Tick01Icon } from '@hugeicons/core-free-icons';
 import { cn } from '../../lib/utils';
+import { loadAllFonts } from '../../lib/fontLoader';
 import type { FontCategory, FontOption } from '../../shared/fontStacks';
 
 const categoryLabels: Record<FontCategory, string> = {
@@ -75,7 +76,11 @@ export function FontPicker({ value, options, onChange }: {
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen((current) => {
+          const next = !current;
+          if (next) loadAllFonts();
+          return next;
+        })}
         className={cn(
           'flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background/55 px-3 text-left transition-colors',
           'hover:border-foreground/20 hover:bg-background/75 focus-visible:outline-none focus-visible:border-foreground/35',

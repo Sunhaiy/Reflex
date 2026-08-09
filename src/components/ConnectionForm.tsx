@@ -26,7 +26,6 @@ const EMPTY_CONNECTION: Partial<SSHConnection> = {
     authType: 'password',
     privateKeyPath: '',
     privateKey: '',
-    passphrase: '',
     providerUrl: '',
 };
 
@@ -80,9 +79,8 @@ export function ConnectionForm({
 
     const [formData, setFormData] = useState<Partial<SSHConnection>>(initialFormData);
     const [showPassword, setShowPassword] = useState(false);
-    const [showPassphrase, setShowPassphrase] = useState(false);
     const [keySource, setKeySource] = useState<'file' | 'paste'>(
-        initialFormData.privateKey?.trim() ? 'paste' : 'file',
+        initialFormData.privateKeyPath?.trim() ? 'file' : 'paste',
     );
     const [draftRecovered, setDraftRecovered] = useState(Boolean(restoredDraft));
     const [savingDraft, setSavingDraft] = useState(false);
@@ -142,8 +140,7 @@ export function ConnectionForm({
     const handleClearDraft = async () => {
         await onClearDraft();
         setFormData({ ...EMPTY_CONNECTION });
-        setKeySource('file');
-        setShowPassphrase(false);
+        setKeySource('paste');
         setDraftRecovered(false);
         setError('');
     };
@@ -307,21 +304,6 @@ export function ConnectionForm({
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        setKeySource('file');
-                                        set({ privateKey: '' });
-                                    }}
-                                    className={cn(
-                                        'h-8 rounded-lg text-xs transition-colors',
-                                        keySource === 'file'
-                                            ? 'bg-background text-foreground shadow-sm'
-                                            : 'text-muted-foreground hover:text-foreground',
-                                    )}
-                                >
-                                    {t('connection.form.privKeyFile')}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
                                         setKeySource('paste');
                                         set({ privateKeyPath: '' });
                                     }}
@@ -333,6 +315,21 @@ export function ConnectionForm({
                                     )}
                                 >
                                     {t('connection.form.privKeyPaste')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setKeySource('file');
+                                        set({ privateKey: '' });
+                                    }}
+                                    className={cn(
+                                        'h-8 rounded-lg text-xs transition-colors',
+                                        keySource === 'file'
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground',
+                                    )}
+                                >
+                                    {t('connection.form.privKeyFile')}
                                 </button>
                             </div>
                         </div>
@@ -373,29 +370,6 @@ export function ConnectionForm({
                             </div>
                         )}
 
-                        <div>
-                            <Label text={t('connection.form.passphrase')} />
-                            <div className="flex gap-2">
-                                <Input
-                                    type={showPassphrase ? 'text' : 'password'}
-                                    value={formData.passphrase ?? ''}
-                                    onChange={(event) => set({ passphrase: event.target.value })}
-                                    placeholder={t('connection.form.passphraseDesc')}
-                                    autoComplete="off"
-                                    className={cn(inputClass, 'flex-1')}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassphrase((value) => !value)}
-                                    className={sideButtonClass}
-                                    title={showPassphrase ? t('connection.form.hidePassword') : t('connection.form.showPassword')}
-                                >
-                                    {showPassphrase
-                                        ? <HugeiconsIcon icon={ViewOffIcon} className="h-4 w-4" />
-                                        : <HugeiconsIcon icon={ViewIcon} className="h-4 w-4" />}
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 )}
             </section>

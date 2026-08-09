@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, net, shell } from 'electron';
-import { spawnSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater';
 import type { AppUpdateState } from '../src/shared/update';
 import { logger } from './logger';
@@ -7,6 +8,7 @@ import { logger } from './logger';
 const RELEASE_API = 'https://api.github.com/repos/Sunhaiy/Reflex/releases/latest';
 const RELEASE_PAGE = 'https://github.com/Sunhaiy/Reflex/releases/latest';
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const execFileAsync = promisify(execFile);
 
 type WindowProvider = () => BrowserWindow | null;
 
@@ -34,18 +36,24 @@ function compareVersions(left: string, right: string) {
   return 0;
 }
 
-function macHasDeveloperSignature() {
+async function macHasDeveloperSignature() {
   if (process.platform !== 'darwin' || !app.isPackaged) return process.platform !== 'darwin';
-  const result = spawnSync('/usr/bin/codesign', ['-dv', '--verbose=4', process.execPath], {
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-  const details = `${result.stdout || ''}\n${result.stderr || ''}`;
-  return /^Authority=Developer ID Application:/m.test(details)
-    || /^Authority=Apple Distribution:/m.test(details);
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      '/usr/bin/codesign',
+      ['-dv', '--verbose=4', process.execPath],
+      { encoding: 'utf8', windowsHide: true },
+    );
+    const details = `${stdout || ''}\n${stderr || ''}`;
+    return /^Authority=Developer ID Application:/m.test(details)
+      || /^Authority=Apple Distribution:/m.test(details);
+  } catch (error) {
+    logger.warn(`[Updater] Unable to inspect macOS signature: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
 }
 
-function automaticUpdatesSupported() {
+async function automaticUpdatesSupported() {
   if (!app.isPackaged) return false;
   if (process.platform === 'win32') return true;
   if (process.platform === 'darwin') return macHasDeveloperSignature();
@@ -66,7 +74,7 @@ function preferredManualAsset(assets: GithubAsset[]) {
 }
 
 export function setupAutoUpdater(getWindow: WindowProvider, prepareToQuit: () => void) {
-  const automatic = automaticUpdatesSupported();
+  let automatic = false;
   let userInitiated = false;
   let installRequested = false;
   let state: AppUpdateState = {
@@ -113,6 +121,7 @@ export function setupAutoUpdater(getWindow: WindowProvider, prepareToQuit: () =>
   };
 
   const check = async (manual: boolean) => {
+    await initializationPromise;
     userInitiated = manual;
     publish({ phase: 'checking', error: undefined, progress: undefined });
     try {
@@ -123,7 +132,11 @@ export function setupAutoUpdater(getWindow: WindowProvider, prepareToQuit: () =>
     }
   };
 
-  if (automatic) {
+  const initialize = async () => {
+    automatic = await automaticUpdatesSupported();
+    state = { ...state, automatic };
+    if (!automatic) return;
+
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowPrerelease = false;
@@ -160,11 +173,17 @@ export function setupAutoUpdater(getWindow: WindowProvider, prepareToQuit: () =>
       }, 900);
     });
     autoUpdater.on('error', fail);
-  }
+  };
 
-  ipcMain.handle('update-get-state', () => state);
+  const initializationPromise = initialize();
+
+  ipcMain.handle('update-get-state', async () => {
+    await initializationPromise;
+    return state;
+  });
   ipcMain.handle('update-check', () => check(true));
   ipcMain.handle('update-apply', async () => {
+    await initializationPromise;
     if (state.phase !== 'available') return false;
     userInitiated = true;
     if (!automatic) {
@@ -183,7 +202,9 @@ export function setupAutoUpdater(getWindow: WindowProvider, prepareToQuit: () =>
   });
 
   if (app.isPackaged) {
-    setTimeout(() => void check(false), 7000);
-    setInterval(() => void check(false), CHECK_INTERVAL_MS).unref();
+    void initializationPromise.then(() => {
+      setTimeout(() => void check(false), 7000);
+      setInterval(() => void check(false), CHECK_INTERVAL_MS).unref();
+    });
   }
 }

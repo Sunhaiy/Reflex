@@ -156,8 +156,6 @@ export const ja: LocaleBundle = {
         privKeyContent: "秘密鍵の内容",
         privKeyPlaceholder: "-----BEGIN で始まる完全な秘密鍵を貼り付けてください",
         or: "または",
-        passphrase: "秘密鍵のパスフレーズ",
-        passphraseDesc: "暗号化された秘密鍵を復号します",
         showPassword: "パスワードを表示",
         hidePassword: "パスワードを隠す",
         selectPrivateKey: "SSH秘密鍵を選択",

@@ -46,7 +46,7 @@
 }
 
 .failed {
-  color: hsl(var(--destructive));
+  color: hsl(var(--muted-foreground));
 }
 
 .chevron {
@@ -137,7 +137,7 @@
 }
 
 .bulletError {
-  color: hsl(var(--destructive));
+  color: hsl(var(--muted-foreground) / 0.82);
 }
 
 .toolButton {
@@ -224,9 +224,9 @@
 }
 
 .errorOutput {
-  border-color: hsl(var(--destructive) / 0.22);
-  background: hsl(var(--destructive) / 0.035);
-  color: hsl(var(--destructive));
+  border-color: hsl(var(--border) / 0.52);
+  background: hsl(var(--foreground) / 0.025);
+  color: hsl(var(--muted-foreground));
 }
 
 .textStep {
@@ -243,7 +243,7 @@
 }
 
 .noteError {
-  color: hsl(var(--destructive));
+  color: hsl(var(--foreground) / 0.72);
 }
 
 @keyframes agent-process-shimmer {

@@ -16,6 +16,7 @@ export interface LocalShellOptions {
 }
 
 const MAX_CAPTURE_CHARS = 1024 * 1024;
+const FORCE_KILL_DELAY_MS = 2_000;
 
 /** Runs a non-interactive command on the computer hosting Reflex. */
 export function runLocalShell(
@@ -37,6 +38,7 @@ export function runLocalShell(
     const child = spawn(executable, args, {
       cwd: options.cwd,
       env: process.env,
+      detached: !windows,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -68,8 +70,34 @@ export function runLocalShell(
       stderr = append(stderr, chunk);
     });
 
+    let forceKillTimer: NodeJS.Timeout | undefined;
     const stop = () => {
-      if (!child.killed) child.kill();
+      if (windows) {
+        if (!child.killed) child.kill();
+        return;
+      }
+
+      const pid = child.pid;
+      if (!pid) return;
+      try {
+        process.kill(-pid, 'SIGTERM');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') return;
+        console.warn(`[LocalShell] Failed to terminate process group ${pid}:`, error);
+        if (!child.killed) child.kill('SIGTERM');
+      }
+      if (!forceKillTimer) {
+        forceKillTimer = setTimeout(() => {
+          try {
+            process.kill(-pid, 'SIGKILL');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+              console.warn(`[LocalShell] Failed to kill process group ${pid}:`, error);
+            }
+          }
+        }, FORCE_KILL_DELAY_MS);
+        forceKillTimer.unref();
+      }
     };
     const onAbort = () => stop();
     options.signal.addEventListener('abort', onAbort, { once: true });

@@ -44,7 +44,7 @@ const DEFAULT_CONFIG: AgentConfig = {
   wireApi: 'messages',
   baseUrl: 'https://api.anthropic.com',
   model: 'claude-opus-5',
-  mode: 'ask',
+  mode: 'free',
   effort: 'auto',
   contextBudget: 60_000,
   models: [],

@@ -124,12 +124,12 @@ export const TOOLS: AgentTool[] = [
       const seconds = typeof input.timeout_seconds === 'number'
         ? Math.min(3600, Math.max(1, input.timeout_seconds))
         : 120;
-      const result = await runLocalShell(command, {
+      const result = await withLocalAccess(cwd, () => runLocalShell(command, {
         cwd,
         timeoutMs: seconds * 1000,
         signal: context.signal,
         onOutput: (chunk) => context.report(chunk),
-      });
+      }));
 
       const parts: string[] = [
         result.timedOut ? `[timed out after ${seconds} seconds]` : `[exit ${result.exitCode ?? 'unknown'}]`,
@@ -252,7 +252,7 @@ export const TOOLS: AgentTool[] = [
     async run(input, context) {
       const source = await resolveLocal(context, requireString(input, 'local_path'));
       const destination = requireString(input, 'remote_path');
-      const sourceInfo = await stat(source);
+      const sourceInfo = await withLocalAccess(source, () => stat(source));
 
       if (sourceInfo.isFile()) {
         await context.files.uploadFile(source, destination, context.signal);
@@ -283,6 +283,15 @@ export const TOOLS: AgentTool[] = [
           + 'Create them on the server if the app needs them.',
         );
       }
+      if (plan.unreadableSkips.length > 0) {
+        const visible = plan.unreadableSkips.slice(0, 10);
+        const remaining = plan.unreadableSkips.length - visible.length;
+        lines.push(
+          `Skipped ${plan.unreadableSkips.length} unreadable local `
+          + `${plan.unreadableSkips.length === 1 ? 'path' : 'paths'}: ${visible.join(', ')}`
+          + `${remaining > 0 ? `, and ${remaining} more` : ''}.`,
+        );
+      }
       return lines.join('\n');
     },
   },
@@ -311,7 +320,10 @@ export const TOOLS: AgentTool[] = [
         context,
         typeof input.path === 'string' ? input.path : '.',
       );
-      const entries = await readdir(directory, { withFileTypes: true });
+      const entries = await withLocalAccess(
+        directory,
+        () => readdir(directory, { withFileTypes: true }),
+      );
       if (entries.length === 0) return '[empty]';
 
       const rows = await Promise.all(entries.map(async (entry) => {
@@ -346,13 +358,13 @@ export const TOOLS: AgentTool[] = [
     },
     async run(input, context) {
       const file = await resolveLocal(context, requireString(input, 'path'));
-      const info = await stat(file);
+      const info = await withLocalAccess(file, () => stat(file));
       if (info.isDirectory()) throw new Error(`${file} is a directory; use list_local instead`);
       if (!info.isFile()) throw new Error(`${file} is not a regular file`);
 
       const bytesToRead = Math.min(info.size, MAX_LOCAL_READ_BYTES);
       const buffer = Buffer.alloc(bytesToRead);
-      const handle = await open(file, 'r');
+      const handle = await withLocalAccess(file, () => open(file, 'r'));
       const { bytesRead } = await handle
         .read(buffer, 0, bytesToRead, 0)
         .finally(() => handle.close());
@@ -400,6 +412,30 @@ export async function resolveLocal(context: ToolContext, requested: string): Pro
     ? path.normalize(requested)
     : path.resolve(base, requested);
   return realpath(target).catch(() => target);
+}
+
+async function withLocalAccess<T>(target: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    const code = typeof (error as NodeJS.ErrnoException)?.code === 'string'
+      ? (error as NodeJS.ErrnoException).code
+      : '';
+    if (code !== 'EACCES' && code !== 'EPERM') throw error;
+
+    const detail = error instanceof Error ? error.message : String(error);
+    if (process.platform === 'darwin') {
+      throw new Error(
+        `macOS blocked access to ${target}. Allow Reflex in System Settings > Privacy & Security > `
+        + `Files and Folders (or Full Disk Access), then retry. ${detail}`,
+        { cause: error },
+      );
+    }
+    throw new Error(
+      `Access to ${target} was denied by the operating system. ${detail}`,
+      { cause: error },
+    );
+  }
 }
 
 function requireString(input: Record<string, unknown>, key: string): string {

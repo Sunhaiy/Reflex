@@ -156,8 +156,6 @@ export const zh: LocaleBundle = {
         privKeyContent: "私钥内容",
         privKeyPlaceholder: "粘贴以 -----BEGIN 开头的完整私钥",
         or: "或",
-        passphrase: "私钥口令",
-        passphraseDesc: "用于解密加密私钥",
         showPassword: "显示密码",
         hidePassword: "隐藏密码",
         selectPrivateKey: "选择 SSH 私钥",

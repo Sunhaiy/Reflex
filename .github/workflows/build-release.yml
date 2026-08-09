@@ -19,10 +19,20 @@ jobs:
         include:
           - os: windows-latest
             artifact: Reflex-Windows
+            platform: windows
+            build_args: --x64
           - os: macos-latest
             artifact: Reflex-macOS
+            platform: macos
+            build_args: ''
           - os: ubuntu-latest
-            artifact: Reflex-Linux
+            artifact: Reflex-Linux-x64
+            platform: linux
+            build_args: --x64
+          - os: ubuntu-24.04-arm
+            artifact: Reflex-Linux-arm64
+            platform: linux
+            build_args: --arm64
 
     steps:
       - name: Checkout code
@@ -38,11 +48,11 @@ jobs:
         run: npm ci
 
       - name: Build and package
-        if: matrix.os != 'macos-latest'
-        run: npm run dist -- --publish never
+        if: matrix.platform != 'macos'
+        run: npm run dist -- --publish never ${{ matrix.build_args }}
 
       - name: Build signed macOS package
-        if: matrix.os == 'macos-latest' && env.HAS_MAC_CERTIFICATE == 'true'
+        if: matrix.platform == 'macos' && env.HAS_MAC_CERTIFICATE == 'true'
         run: npm run dist -- --publish never
         env:
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
@@ -52,13 +62,13 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build unsigned macOS package
-        if: matrix.os == 'macos-latest' && env.HAS_MAC_CERTIFICATE != 'true'
+        if: matrix.platform == 'macos' && env.HAS_MAC_CERTIFICATE != 'true'
         run: npm run dist -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload Windows artifacts
-        if: matrix.os == 'windows-latest'
+        if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -71,7 +81,7 @@ jobs:
           retention-days: 7
 
       - name: Upload macOS artifacts
-        if: matrix.os == 'macos-latest'
+        if: matrix.platform == 'macos'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -84,14 +94,14 @@ jobs:
           retention-days: 7
 
       - name: Upload Linux artifacts
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             release-new/*.AppImage
             release-new/*.tar.gz
-            release-new/latest-linux.yml
+            release-new/latest-linux*.yml
           if-no-files-found: error
           retention-days: 7
 

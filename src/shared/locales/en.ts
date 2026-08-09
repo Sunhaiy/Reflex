@@ -159,8 +159,6 @@ export const en = {
         privKeyContent: "Private-key content",
         privKeyPlaceholder: "Paste the complete private key beginning with -----BEGIN",
         or: "or",
-        passphrase: "Private key passphrase",
-        passphraseDesc: "Decrypts an encrypted private key",
         showPassword: "Show password",
         hidePassword: "Hide password",
         selectPrivateKey: "Select SSH private key",

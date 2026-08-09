@@ -5,10 +5,9 @@ import {
   Settings01Icon,
   SparklesIcon,
 } from '@hugeicons/core-free-icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
-import { loadAllFonts } from '../lib/fontLoader';
 import { AppearanceTab } from './settings/AppearanceTab';
 import { AppTab } from './settings/AppTab';
 import { AgentTab } from './settings/AgentTab';
@@ -17,10 +16,6 @@ import { TerminalTab } from './settings/TerminalTab';
 type SettingsTab = 'app' | 'appearance' | 'terminal' | 'agent';
 
 export function Settings() {
-  // The picker previews each option in its own typeface, so this is the moment
-  // the families kept out of the startup path are actually needed.
-  useEffect(() => loadAllFonts(), []);
-
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const copy = {

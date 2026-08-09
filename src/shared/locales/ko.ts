@@ -156,8 +156,6 @@ export const ko: LocaleBundle = {
         privKeyContent: "개인 키 내용",
         privKeyPlaceholder: "-----BEGIN으로 시작하는 전체 개인 키를 붙여넣으세요",
         or: "또는",
-        passphrase: "개인 키 암호문",
-        passphraseDesc: "암호화된 개인 키를 복호화합니다",
         showPassword: "비밀번호 표시",
         hidePassword: "비밀번호 숨기기",
         selectPrivateKey: "SSH 개인 키 선택",

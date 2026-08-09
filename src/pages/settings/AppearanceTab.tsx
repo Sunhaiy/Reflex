@@ -1,6 +1,6 @@
 import { Slider } from '../../components/ui/slider';
 import { cn } from '../../lib/utils';
-import { TERMINAL_FONT_OPTIONS, UI_FONT_OPTIONS } from '../../shared/fontStacks';
+import { UI_FONT_OPTIONS } from '../../shared/fontStacks';
 import { accentColors, type AccentColorId, type AppearanceMode } from '../../shared/themes';
 import { useSettingsStore } from '../../store/settingsStore';
 import { MAX_RADIUS_SCALE, MIN_RADIUS_SCALE, useThemeStore } from '../../store/themeStore';
@@ -48,7 +48,7 @@ function ThemePreview({ mode }: { mode: AppearanceMode }) {
 export function AppearanceTab() {
   const { t } = useTranslation();
   const { appearance, accentColorId, radiusScale, setAppearance, setAccentColor, setRadiusScale } = useThemeStore();
-  const { uiFontFamily, setUiFontFamily, terminalFontFamily, setTerminalFontFamily } = useSettingsStore();
+  const { uiFontFamily, setUiFontFamily } = useSettingsStore();
 
   return (
 
@@ -115,16 +115,10 @@ export function AppearanceTab() {
             </span>
           </div>
         </div>
-        <div className="flex min-h-14 items-center justify-between gap-5 border-b border-border/60 px-4 py-3">
+        <div className="flex min-h-14 items-center justify-between gap-5 px-4 py-3">
           <FieldLabel title={t('settings.appearance.font')} />
           <div className="w-[260px] max-w-[58%]">
             <FontPicker value={uiFontFamily} options={UI_FONT_OPTIONS} onChange={setUiFontFamily} />
-          </div>
-        </div>
-        <div className="flex min-h-14 items-center justify-between gap-5 px-4 py-3">
-          <FieldLabel title={t('settings.terminal.fontFamily')} />
-          <div className="w-[260px] max-w-[58%]">
-            <FontPicker value={terminalFontFamily} options={TERMINAL_FONT_OPTIONS} onChange={setTerminalFontFamily} />
           </div>
         </div>
       </section>
