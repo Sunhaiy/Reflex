@@ -7,6 +7,7 @@ import type { Provider, ProviderConfig } from './providers/types';
 import {
   isChatModel,
   PROVIDER_PRESETS,
+  resolveReasoningEffort,
   type AgentConfig,
   type AgentConfigView,
   type ProviderKind,
@@ -145,7 +146,7 @@ export function getConfigView(store: ConfigStore): AgentConfigView {
     baseUrl: config.baseUrl,
     model: config.model,
     mode: config.mode,
-    effort: config.effort ?? 'auto',
+    effort: resolveReasoningEffort({ ...config, effort: config.effort ?? 'auto' }),
     contextBudget: config.contextBudget || 60_000,
     models: config.models ?? [],
     hasKey: key.length > 0,
@@ -169,6 +170,7 @@ export function saveConfig(store: ConfigStore, patch: Partial<AgentConfig> & { a
     apiKey: patch.apiKey === undefined ? current.apiKey : encrypt(patch.apiKey.trim()),
     profiles: current.profiles,
   };
+  next.effort = resolveReasoningEffort(next);
   next.profiles = {
     ...current.profiles,
     [next.providerId]: activeProfile(next),
@@ -216,7 +218,7 @@ export function createProvider(store: ConfigStore): Provider {
     baseUrl: config.baseUrl,
     apiKey,
     model: config.model,
-    effort: config.effort ?? 'auto',
+    effort: resolveReasoningEffort({ ...config, effort: config.effort ?? 'auto' }),
   };
   if (config.kind === 'anthropic') return new AnthropicProvider(resolved);
   return config.wireApi === 'responses'

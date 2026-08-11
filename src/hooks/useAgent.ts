@@ -40,6 +40,7 @@ export interface AgentConversationSummary {
 interface AgentConversation extends AgentConversationSummary {
   blocks: AgentBlock[];
   pending: ApprovalQuestion | null;
+  runStartedAt: number | null;
   contextTokens: number;
   spentTokens: number;
 }
@@ -72,6 +73,7 @@ function createConversation(): AgentConversation {
     blocks: [],
     busy: false,
     pending: null,
+    runStartedAt: null,
     contextTokens: 0,
     spentTokens: 0,
     createdAt: now,
@@ -151,6 +153,7 @@ function restoreConversation(value: unknown): AgentConversation | null {
     blocks: value.blocks.map(restoreBlock).filter((block): block is AgentBlock => block !== null),
     busy: false,
     pending: null,
+    runStartedAt: null,
     contextTokens: typeof value.contextTokens === 'number' ? value.contextTokens : 0,
     spentTokens: typeof value.spentTokens === 'number' ? value.spentTokens : 0,
     createdAt: typeof value.createdAt === 'number' ? value.createdAt : now,
@@ -181,6 +184,7 @@ export function prepareConversationState(state: ConversationState): Conversation
     ...conversation,
     busy: false,
     pending: null,
+    runStartedAt: null,
     blocks: settleText(conversation.blocks).map((block) => (
       block.kind === 'tool' && block.done && block.result !== undefined
         ? { ...block, output: '' }
@@ -256,6 +260,7 @@ function applyAgentEvent(conversation: AgentConversation, event: AgentEvent): Ag
           : blocks,
         busy: false,
         pending: null,
+        runStartedAt: null,
       };
     }
     case 'error':
@@ -264,6 +269,7 @@ function applyAgentEvent(conversation: AgentConversation, event: AgentEvent): Ag
         blocks: [...settleText(conversation.blocks), createNoteBlock(event.message, 'error')],
         busy: false,
         pending: null,
+        runStartedAt: null,
       };
   }
 }
@@ -395,12 +401,14 @@ export function useAgent(sessionId: string, connectionId: string, serverLabel: s
     if (!message || active.busy) return;
 
     const conversationId = active.id;
+    const startedAt = Date.now();
     updateConversation(conversationId, (conversation) => ({
       ...conversation,
       title: conversation.title || titleFromMessage(message),
       blocks: [...conversation.blocks, createUserBlock(message)],
       busy: true,
-      updatedAt: Date.now(),
+      runStartedAt: startedAt,
+      updatedAt: startedAt,
     }));
 
     const result = await window.electron.agentSend({
@@ -417,6 +425,7 @@ export function useAgent(sessionId: string, connectionId: string, serverLabel: s
         ...conversation,
         blocks: [...conversation.blocks, createNoteBlock(result.error, 'error')],
         busy: false,
+        runStartedAt: null,
         updatedAt: Date.now(),
       }));
     }
@@ -504,6 +513,7 @@ export function useAgent(sessionId: string, connectionId: string, serverLabel: s
   return {
     blocks: active.blocks,
     busy: active.busy,
+    runStartedAt: active.runStartedAt,
     pending: active.pending,
     contextTokens: active.contextTokens,
     spentTokens: active.spentTokens,

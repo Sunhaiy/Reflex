@@ -34,6 +34,28 @@ export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
 
 export const REASONING_EFFORTS: ReasoningEffort[] = ['auto', 'low', 'medium', 'high', 'xhigh', 'max'];
 
+const SUB2_CLAUDE_EFFORTS: readonly ReasoningEffort[] = ['auto', 'low', 'medium', 'high'];
+
+type ReasoningCapabilityConfig = Pick<
+  AgentConfig,
+  'providerId' | 'wireApi' | 'model' | 'effort'
+>;
+
+/** Sub2 maps Claude's Ultra/Max tiers to a 32k thinking budget. */
+export function supportedReasoningEfforts(
+  config: Pick<ReasoningCapabilityConfig, 'providerId' | 'wireApi' | 'model'>,
+): readonly ReasoningEffort[] {
+  const isSub2Claude = config.providerId === 'sub2api'
+    && config.wireApi === 'responses'
+    && /(^|[-_/])claude([-_/]|$)/i.test(config.model);
+  return isSub2Claude ? SUB2_CLAUDE_EFFORTS : REASONING_EFFORTS;
+}
+
+/** Unsupported saved values behave like Auto, which omits the effort field. */
+export function resolveReasoningEffort(config: ReasoningCapabilityConfig): ReasoningEffort {
+  return supportedReasoningEfforts(config).includes(config.effort) ? config.effort : 'auto';
+}
+
 export interface AgentConfig {
   /** Preset/profile currently active. `custom` is a real saved profile too. */
   providerId: string;

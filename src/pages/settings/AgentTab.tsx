@@ -13,7 +13,13 @@ import {
   providerMarkFromModel,
   type ProviderMarkId,
 } from '../../components/agent/ProviderMark';
-import { PROVIDER_PRESETS, REASONING_EFFORTS, type AgentConfigView, type ReasoningEffort } from '../../shared/agent';
+import {
+  PROVIDER_PRESETS,
+  resolveReasoningEffort,
+  supportedReasoningEfforts,
+  type AgentConfigView,
+  type ReasoningEffort,
+} from '../../shared/agent';
 import { FieldLabel, SettingsCard } from './controls';
 
 type TestState = { state: 'idle' } | { state: 'running' } | { state: 'ok' } | { state: 'failed'; error: string };
@@ -35,7 +41,9 @@ export function AgentTab() {
   const preset = PROVIDER_PRESETS.find((item) => item.id === config.providerId);
 
   const patch = (next: Partial<AgentConfigView>) => {
-    setConfig({ ...config, ...next });
+    const patched = { ...config, ...next };
+    patched.effort = resolveReasoningEffort(patched);
+    setConfig(patched);
     setTest({ state: 'idle' });
     setSaved(false);
   };
@@ -221,7 +229,10 @@ export function AgentTab() {
           <Select
             value={config.effort}
             onChange={(value) => patch({ effort: value as ReasoningEffort })}
-            options={REASONING_EFFORTS.map((option) => ({ label: EFFORT_NAME[option], value: option }))}
+            options={supportedReasoningEfforts(config).map((option) => ({
+              label: EFFORT_NAME[option],
+              value: option,
+            }))}
           />
         </div>
 

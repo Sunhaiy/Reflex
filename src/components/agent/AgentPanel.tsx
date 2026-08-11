@@ -7,12 +7,13 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import type { AgentController } from '../../hooks/useAgent';
 import { useTranslation } from '../../hooks/useTranslation';
-import type { AgentMode } from '../../shared/agent';
+import { supportedReasoningEfforts, type AgentMode } from '../../shared/agent';
 import { AGENT_MODES, EFFORT_NAME, MODE_HINT, MODE_LABEL } from './modes';
 import { CompactMenu } from './CompactMenu';
 import { ContextRing } from './ContextRing';
 import { EffortSlider } from './EffortSlider';
 import { AgentTurn, groupAgentTurns } from './AgentProcess';
+import { AgentRunStatus } from './AgentRunStatus';
 import { ProviderMark, providerMarkFromModel } from './ProviderMark';
 
 export function AgentPanel({ agent }: { agent: AgentController }) {
@@ -30,6 +31,9 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
   const models = agent.config?.models ?? [];
   const budget = agent.config?.contextBudget ?? 60_000;
   const effort = agent.config?.effort ?? 'auto';
+  const availableEfforts = agent.config
+    ? supportedReasoningEfforts(agent.config)
+    : undefined;
   const turns = groupAgentTurns(agent.blocks);
 
   const submit = () => {
@@ -80,7 +84,12 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             </button>
           </div>
         )}
+
       </div>
+
+      {agent.busy && agent.runStartedAt !== null && (
+        <AgentRunStatus startedAt={agent.runStartedAt} />
+      )}
 
       {agent.config && !agent.config.hasKey && (
         <p className="shrink-0 border-t border-border/45 bg-amber-500/[0.07] px-2.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400">
@@ -172,7 +181,13 @@ export function AgentPanel({ agent }: { agent: AgentController }) {
             width={82}
             label={EFFORT_NAME[effort]}
             title={t('settings.agent.effort')}
-            panel={<EffortSlider value={effort} onChange={agent.setEffort} />}
+            panel={(
+              <EffortSlider
+                value={effort}
+                availableValues={availableEfforts}
+                onChange={agent.setEffort}
+              />
+            )}
           />
 
           <ContextRing used={agent.contextTokens} budget={budget} spent={agent.spentTokens} />

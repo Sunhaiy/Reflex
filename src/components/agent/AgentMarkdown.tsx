@@ -13,6 +13,8 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from '../../hooks/useTranslation';
 import { cn } from '../../lib/utils';
+import { StreamingText } from '../assistant-ui/StreamingText';
+import { rehypeStreamingText } from '../assistant-ui/streamingTextPlugin';
 
 export function isSafeExternalLink(href: string | undefined): boolean {
   if (!href) return false;
@@ -174,10 +176,18 @@ export function AgentMarkdown({
   }), []);
 
   return (
-    <div className={cn('min-w-0 break-words text-[12px] leading-[1.65] text-foreground/90', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={components}>
+    <StreamingText
+      streaming={streaming}
+      className={cn('min-w-0 break-words text-[12px] leading-[1.65] text-foreground/90', className)}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={streaming ? [rehypeStreamingText] : []}
+        skipHtml
+        components={components}
+      >
         {renderedSource}
       </ReactMarkdown>
-    </div>
+    </StreamingText>
   );
 }

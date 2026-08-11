@@ -1,0 +1,53 @@
+.word {
+  animation: streaming-word-in 420ms ease-out both;
+}
+
+.fresh {
+  color: hsl(var(--foreground));
+  transition: color 700ms ease;
+}
+
+.root[data-streaming='true'] > :last-child:not(ul, ol)::after,
+.root[data-streaming='true'] > :last-child:is(ul, ol) > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 1.5px;
+  height: 1em;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  vertical-align: -0.12em;
+  animation: streaming-caret 1s step-end infinite;
+}
+
+@keyframes streaming-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(1px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes streaming-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word,
+  .root[data-streaming='true'] > :last-child:not(ul, ol)::after,
+  .root[data-streaming='true'] > :last-child:is(ul, ol) > li:last-child::after {
+    animation: none;
+  }
+}
