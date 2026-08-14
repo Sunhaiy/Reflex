@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/startup-cover.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/startup-cover.png" />
-      <img alt="Reflex 启动封面" src="./docs/screenshots/startup-cover.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/zh-CN/workspace.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/zh-CN/workspace.png" />
+      <img alt="Reflex SSH 工作区" src="./docs/screenshots/zh-CN/workspace.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -112,8 +112,8 @@
 
 <table>
   <tr>
-    <td width="50%"><img alt="Reflex 外观设置" src="./docs/screenshots/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex 终端设置" src="./docs/screenshots/terminal-settings.png" /></td>
+    <td width="50%"><img alt="Reflex 外观设置" src="./docs/screenshots/zh-CN/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex 终端设置" src="./docs/screenshots/zh-CN/terminal-settings.png" /></td>
   </tr>
   <tr>
     <td align="center"><b>外观</b>：主题、强调色、圆角与字体。</td>
@@ -122,7 +122,7 @@
 </table>
 
 <p align="center">
-  <img alt="Reflex 应用信息" src="./docs/screenshots/application-settings.png" width="100%" />
+  <img alt="Reflex 应用信息" src="./docs/screenshots/zh-CN/application-settings.png" width="100%" />
 </p>
 
 ## 快速开始

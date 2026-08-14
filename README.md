@@ -40,7 +40,7 @@
 ---
 
 <p align="center">
-  <img alt="Reflex startup cover" src="./docs/screenshots/startup-cover.png" width="100%" />
+  <img alt="Reflex SSH workspace" src="./docs/screenshots/en/workspace.png" width="100%" />
 </p>
 
 ## Overview
@@ -99,10 +99,10 @@ It combines a focused terminal workspace with practical infrastructure tools and
 <table>
   <tr>
     <td width="50%">
-      <img alt="Reflex appearance settings" src="./docs/screenshots/appearance-settings.png" />
+      <img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" />
     </td>
     <td width="50%">
-      <img alt="Reflex terminal settings" src="./docs/screenshots/terminal-settings.png" />
+      <img alt="Reflex terminal settings" src="./docs/screenshots/en/terminal-settings.png" />
     </td>
   </tr>
   <tr>
@@ -112,7 +112,7 @@ It combines a focused terminal workspace with practical infrastructure tools and
 </table>
 
 <p align="center">
-  <img alt="Reflex application settings" src="./docs/screenshots/application-settings.png" width="100%" />
+  <img alt="Reflex application settings" src="./docs/screenshots/en/application-settings.png" width="100%" />
 </p>
 
 ## Download

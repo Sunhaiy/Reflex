@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/startup-cover.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/startup-cover.png" />
-      <img alt="Reflex startup cover" src="./docs/screenshots/startup-cover.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/en/workspace.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/en/workspace.png" />
+      <img alt="Reflex SSH workspace" src="./docs/screenshots/en/workspace.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -112,8 +112,8 @@
 
 <table>
   <tr>
-    <td width="50%"><img alt="Reflex appearance settings" src="./docs/screenshots/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex terminal settings" src="./docs/screenshots/terminal-settings.png" /></td>
+    <td width="50%"><img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex terminal settings" src="./docs/screenshots/en/terminal-settings.png" /></td>
   </tr>
   <tr>
     <td align="center"><b>外観</b>：テーマ、アクセント、角丸、フォント。</td>
@@ -122,7 +122,7 @@
 </table>
 
 <p align="center">
-  <img alt="Reflex application settings" src="./docs/screenshots/application-settings.png" width="100%" />
+  <img alt="Reflex application settings" src="./docs/screenshots/en/application-settings.png" width="100%" />
 </p>
 
 ## クイックスタート
