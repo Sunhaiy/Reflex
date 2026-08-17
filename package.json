@@ -1,7 +1,7 @@
 {
   "name": "reflex",
   "private": true,
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "Reflex is a lightweight SSH workspace with terminal, files, Docker, and system monitoring.",
   "author": "SUNHIY",
   "engines": {
