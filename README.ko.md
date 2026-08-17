@@ -5,8 +5,6 @@
 
   <h1>Reflex</h1>
 
-  <b>바람을 꺾고 달을 건너니, 삶에 무슨 기쁨이 있으랴.</b>
-
   <p>
     멀티 세션 터미널, SFTP, Docker, 모니터링, 배포 자동화, AI 지원 서버 작업을 하나의 데스크톱 앱에서 다룹니다.
   </p>
@@ -46,9 +44,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/ko/workspace.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/ko/workspace.png" />
-      <img alt="Reflex SSH 워크스페이스" src="./docs/screenshots/ko/workspace.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/ko/workspace-real.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/ko/workspace-real.png" />
+      <img alt="Reflex SSH 워크스페이스" src="./docs/screenshots/ko/workspace-real.png" width="100%" />
     </picture>
   </a>
 </div>

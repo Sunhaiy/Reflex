@@ -5,8 +5,6 @@
 
   <h1>Reflex</h1>
 
-  <b>折风渡月，生亦何欢。</b>
-
   <p>
     多会话终端、SFTP、Docker、监控、部署自动化和 AI 辅助服务器操作，都在一个桌面应用里完成。
   </p>
@@ -46,9 +44,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/zh-CN/workspace.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/zh-CN/workspace.png" />
-      <img alt="Reflex SSH 工作区" src="./docs/screenshots/zh-CN/workspace.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/zh-CN/workspace-real.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/zh-CN/workspace-real.png" />
+      <img alt="Reflex SSH 工作区" src="./docs/screenshots/zh-CN/workspace-real.png" width="100%" />
     </picture>
   </a>
 </div>

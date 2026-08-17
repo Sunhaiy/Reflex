@@ -5,8 +5,6 @@
 
   <h1>Reflex</h1>
 
-  <b>Bend the wind, cross the moon—what joy is there in life?</b>
-
   <p>
     A modern SSH operations workspace with terminal sessions, SFTP, Docker,
     live monitoring, and an Agent-native workflow in one desktop app.
@@ -40,7 +38,7 @@
 ---
 
 <p align="center">
-  <img alt="Reflex SSH workspace" src="./docs/screenshots/en/workspace.png" width="100%" />
+  <img alt="Reflex SSH workspace" src="./docs/screenshots/en/workspace-real.png" width="100%" />
 </p>
 
 ## Overview

@@ -5,8 +5,6 @@
 
   <h1>Reflex</h1>
 
-  <b>風を折り、月を渡る。生に何の歓びがあろう。</b>
-
   <p>
     マルチセッション端末、SFTP、Docker、監視、デプロイ自動化、AI 支援のサーバー作業を 1 つのデスクトップアプリで扱えます。
   </p>
@@ -46,9 +44,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/ja/workspace.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/ja/workspace.png" />
-      <img alt="Reflex SSH ワークスペース" src="./docs/screenshots/ja/workspace.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/ja/workspace-real.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/ja/workspace-real.png" />
+      <img alt="Reflex SSH ワークスペース" src="./docs/screenshots/ja/workspace-real.png" width="100%" />
     </picture>
   </a>
 </div>
