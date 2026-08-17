@@ -98,6 +98,28 @@ It combines a focused terminal workspace with practical infrastructure tools and
 
 <table>
   <tr>
+    <td width="50%"><img alt="Reflex Agent workspace" src="./docs/screenshots/en/agent.png" /></td>
+    <td width="50%"><img alt="Reflex Docker workspace" src="./docs/screenshots/en/docker.png" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Agent</b><br />Visible tool steps, commands, results, and streaming responses.</td>
+    <td align="center"><b>Docker</b><br />Containers, images, ports, logs, and lifecycle actions.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex connection loading animation" src="./docs/media/en/connection.gif" /></td>
+    <td width="50%"><img alt="Reflex Agent interaction animation" src="./docs/media/en/agent.gif" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Connection flow</b><br />SSH connection, terminal, file tree, and monitoring load into a ready workspace.</td>
+    <td align="center"><b>Agent flow</b><br />Prompt, tool timeline, terminal output, and streamed answer in one continuous run.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
     <td width="50%">
       <img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" />
     </td>

@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/en/workspace.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/en/workspace.png" />
-      <img alt="Reflex SSH workspace" src="./docs/screenshots/en/workspace.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/ja/workspace.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/ja/workspace.png" />
+      <img alt="Reflex SSH ワークスペース" src="./docs/screenshots/ja/workspace.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -112,8 +112,30 @@
 
 <table>
   <tr>
-    <td width="50%"><img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex terminal settings" src="./docs/screenshots/en/terminal-settings.png" /></td>
+    <td width="50%"><img alt="Reflex Agent ワークスペース" src="./docs/screenshots/ja/agent.png" /></td>
+    <td width="50%"><img alt="Reflex Docker ワークスペース" src="./docs/screenshots/ja/docker.png" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Agent</b><br />ツール手順、コマンド、結果、ストリーミング回答を表示。</td>
+    <td align="center"><b>Docker</b><br />コンテナ、イメージ、ポート、ログ、ライフサイクル操作。</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex 接続ローディングアニメーション" src="./docs/media/ja/connection.gif" /></td>
+    <td width="50%"><img alt="Reflex Agent インタラクションアニメーション" src="./docs/media/ja/agent.gif" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>接続フロー</b><br />SSH 接続、端末、ファイルツリー、監視がワークスペースに読み込まれます。</td>
+    <td align="center"><b>Agent フロー</b><br />プロンプト、ツール履歴、端末出力、ストリーミング回答を連続表示。</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex 外観設定" src="./docs/screenshots/ja/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex 端末設定" src="./docs/screenshots/ja/terminal-settings.png" /></td>
   </tr>
   <tr>
     <td align="center"><b>外観</b>：テーマ、アクセント、角丸、フォント。</td>
@@ -122,7 +144,7 @@
 </table>
 
 <p align="center">
-  <img alt="Reflex application settings" src="./docs/screenshots/en/application-settings.png" width="100%" />
+  <img alt="Reflex アプリ設定" src="./docs/screenshots/ja/application-settings.png" width="100%" />
 </p>
 
 ## クイックスタート

@@ -46,9 +46,9 @@
 <div align="center">
   <a href="https://github.com/Sunhaiy/Reflex">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/en/workspace.png" />
-      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/en/workspace.png" />
-      <img alt="Reflex SSH workspace" src="./docs/screenshots/en/workspace.png" width="100%" />
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/ko/workspace.png" />
+      <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/ko/workspace.png" />
+      <img alt="Reflex SSH 워크스페이스" src="./docs/screenshots/ko/workspace.png" width="100%" />
     </picture>
   </a>
 </div>
@@ -112,8 +112,30 @@
 
 <table>
   <tr>
-    <td width="50%"><img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex terminal settings" src="./docs/screenshots/en/terminal-settings.png" /></td>
+    <td width="50%"><img alt="Reflex Agent 워크스페이스" src="./docs/screenshots/ko/agent.png" /></td>
+    <td width="50%"><img alt="Reflex Docker 워크스페이스" src="./docs/screenshots/ko/docker.png" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Agent</b><br />도구 단계, 명령, 결과, 스트리밍 응답을 모두 표시합니다.</td>
+    <td align="center"><b>Docker</b><br />컨테이너, 이미지, 포트, 로그, 수명 주기 작업을 관리합니다.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex 연결 로딩 애니메이션" src="./docs/media/ko/connection.gif" /></td>
+    <td width="50%"><img alt="Reflex Agent 상호작용 애니메이션" src="./docs/media/ko/agent.gif" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>연결 흐름</b><br />SSH 연결, 터미널, 파일 트리, 모니터링이 준비된 워크스페이스로 로드됩니다.</td>
+    <td align="center"><b>Agent 흐름</b><br />프롬프트, 도구 타임라인, 터미널 출력, 스트리밍 답변을 연속으로 보여줍니다.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Reflex 외관 설정" src="./docs/screenshots/ko/appearance-settings.png" /></td>
+    <td width="50%"><img alt="Reflex 터미널 설정" src="./docs/screenshots/ko/terminal-settings.png" /></td>
   </tr>
   <tr>
     <td align="center"><b>외관</b>: 테마, 강조 색상, 모서리, 글꼴.</td>
@@ -122,7 +144,7 @@
 </table>
 
 <p align="center">
-  <img alt="Reflex application settings" src="./docs/screenshots/en/application-settings.png" width="100%" />
+  <img alt="Reflex 앱 설정" src="./docs/screenshots/ko/application-settings.png" width="100%" />
 </p>
 
 ## 빠른 시작
