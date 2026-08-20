@@ -57,6 +57,54 @@
 
 它把精致的终端工作区、实用的基础设施工具和 Agent 模式结合在一起。Agent 可以规划服务器任务、执行命令、观察输出、在临时失败后重试，并把执行过程清晰地展示出来。
 
+## 产品导览
+
+<p align="center">
+  <img alt="Reflex Agent 工作区" src="./docs/screenshots/zh-CN/agent.png" width="100%" />
+</p>
+<p align="center">
+  <b>Agent</b><br />工具步骤、命令、结果和流式回答全部可见。
+</p>
+
+<p align="center">
+  <img alt="Reflex Docker 工作区" src="./docs/screenshots/zh-CN/docker.png" width="100%" />
+</p>
+<p align="center">
+  <b>Docker</b><br />容器、镜像、端口、日志和生命周期操作。
+</p>
+
+<p align="center">
+  <img alt="Reflex 连接加载动画" src="./docs/media/zh-CN/connection.gif" width="100%" />
+</p>
+<p align="center">
+  <b>连接流程</b><br />SSH 连接、终端、文件树和监控逐步加载到可用工作区。
+</p>
+
+<p align="center">
+  <img alt="Reflex Agent 交互动画" src="./docs/media/zh-CN/agent.gif" width="100%" />
+</p>
+<p align="center">
+  <b>Agent 流程</b><br />输入目标、工具时间线、终端输出和流式回答连续展示。
+</p>
+
+<p align="center">
+  <img alt="Reflex 外观设置" src="./docs/screenshots/zh-CN/appearance-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>外观</b>：主题、强调色、圆角与字体。
+</p>
+
+<p align="center">
+  <img alt="Reflex 终端设置" src="./docs/screenshots/zh-CN/terminal-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>终端</b>：渲染、光标、排版与回滚缓冲。
+</p>
+
+<p align="center">
+  <img alt="Reflex 应用信息" src="./docs/screenshots/zh-CN/application-settings.png" width="100%" />
+</p>
+
 ## 为什么选择 Reflex
 
 - **一个远程工作空间：** 终端、文件、Docker、监控和 AI 动作并排协作。
@@ -105,45 +153,6 @@
 - 支持多个 AI 服务商配置
 - 支持同一服务商端点下的多个模型
 - 本地化界面选项
-
-## 截图
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex Agent 工作区" src="./docs/screenshots/zh-CN/agent.png" /></td>
-    <td width="50%"><img alt="Reflex Docker 工作区" src="./docs/screenshots/zh-CN/docker.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Agent</b><br />工具步骤、命令、结果和流式回答全部可见。</td>
-    <td align="center"><b>Docker</b><br />容器、镜像、端口、日志和生命周期操作。</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex 连接加载动画" src="./docs/media/zh-CN/connection.gif" /></td>
-    <td width="50%"><img alt="Reflex Agent 交互动画" src="./docs/media/zh-CN/agent.gif" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>连接流程</b><br />SSH 连接、终端、文件树和监控逐步加载到可用工作区。</td>
-    <td align="center"><b>Agent 流程</b><br />输入目标、工具时间线、终端输出和流式回答连续展示。</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex 外观设置" src="./docs/screenshots/zh-CN/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex 终端设置" src="./docs/screenshots/zh-CN/terminal-settings.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>外观</b>：主题、强调色、圆角与字体。</td>
-    <td align="center"><b>终端</b>：渲染、光标、排版与回滚缓冲。</td>
-  </tr>
-</table>
-
-<p align="center">
-  <img alt="Reflex 应用信息" src="./docs/screenshots/zh-CN/application-settings.png" width="100%" />
-</p>
 
 ## 快速开始
 

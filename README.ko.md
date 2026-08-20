@@ -57,6 +57,54 @@
 
 정돈된 터미널 워크스페이스, 실용적인 인프라 도구, Agent 모드를 결합했습니다. Agent는 서버 작업을 계획하고, 명령을 실행하고, 출력을 확인하고, 일시적인 실패에는 재시도하며, 실행 과정을 눈에 보이게 남깁니다.
 
+## 제품 둘러보기
+
+<p align="center">
+  <img alt="Reflex Agent 워크스페이스" src="./docs/screenshots/ko/agent.png" width="100%" />
+</p>
+<p align="center">
+  <b>Agent</b><br />도구 단계, 명령, 결과, 스트리밍 응답을 모두 표시합니다.
+</p>
+
+<p align="center">
+  <img alt="Reflex Docker 워크스페이스" src="./docs/screenshots/ko/docker.png" width="100%" />
+</p>
+<p align="center">
+  <b>Docker</b><br />컨테이너, 이미지, 포트, 로그, 수명 주기 작업을 관리합니다.
+</p>
+
+<p align="center">
+  <img alt="Reflex 연결 로딩 애니메이션" src="./docs/media/ko/connection.gif" width="100%" />
+</p>
+<p align="center">
+  <b>연결 흐름</b><br />SSH 연결, 터미널, 파일 트리, 모니터링이 준비된 워크스페이스로 로드됩니다.
+</p>
+
+<p align="center">
+  <img alt="Reflex Agent 상호작용 애니메이션" src="./docs/media/ko/agent.gif" width="100%" />
+</p>
+<p align="center">
+  <b>Agent 흐름</b><br />프롬프트, 도구 타임라인, 터미널 출력, 스트리밍 답변을 연속으로 보여줍니다.
+</p>
+
+<p align="center">
+  <img alt="Reflex 외관 설정" src="./docs/screenshots/ko/appearance-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>외관</b>: 테마, 강조 색상, 모서리, 글꼴.
+</p>
+
+<p align="center">
+  <img alt="Reflex 터미널 설정" src="./docs/screenshots/ko/terminal-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>터미널</b>: 렌더링, 커서, 타이포그래피, 스크롤백.
+</p>
+
+<p align="center">
+  <img alt="Reflex 앱 설정" src="./docs/screenshots/ko/application-settings.png" width="100%" />
+</p>
+
 ## Reflex를 선택하는 이유
 
 - **원격 작업을 위한 하나의 공간:** 터미널, 파일, Docker, 모니터링, AI 액션을 나란히 사용할 수 있습니다.
@@ -105,45 +153,6 @@
 - 여러 AI 제공자 프로필
 - 하나의 제공자 엔드포인트에서 여러 모델 선택
 - 현지화된 인터페이스 옵션
-
-## 스크린샷
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex Agent 워크스페이스" src="./docs/screenshots/ko/agent.png" /></td>
-    <td width="50%"><img alt="Reflex Docker 워크스페이스" src="./docs/screenshots/ko/docker.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Agent</b><br />도구 단계, 명령, 결과, 스트리밍 응답을 모두 표시합니다.</td>
-    <td align="center"><b>Docker</b><br />컨테이너, 이미지, 포트, 로그, 수명 주기 작업을 관리합니다.</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex 연결 로딩 애니메이션" src="./docs/media/ko/connection.gif" /></td>
-    <td width="50%"><img alt="Reflex Agent 상호작용 애니메이션" src="./docs/media/ko/agent.gif" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>연결 흐름</b><br />SSH 연결, 터미널, 파일 트리, 모니터링이 준비된 워크스페이스로 로드됩니다.</td>
-    <td align="center"><b>Agent 흐름</b><br />프롬프트, 도구 타임라인, 터미널 출력, 스트리밍 답변을 연속으로 보여줍니다.</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex 외관 설정" src="./docs/screenshots/ko/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex 터미널 설정" src="./docs/screenshots/ko/terminal-settings.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>외관</b>: 테마, 강조 색상, 모서리, 글꼴.</td>
-    <td align="center"><b>터미널</b>: 렌더링, 커서, 타이포그래피, 스크롤백.</td>
-  </tr>
-</table>
-
-<p align="center">
-  <img alt="Reflex 앱 설정" src="./docs/screenshots/ko/application-settings.png" width="100%" />
-</p>
 
 ## 빠른 시작
 

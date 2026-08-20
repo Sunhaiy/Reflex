@@ -57,6 +57,54 @@
 
 洗練された端末ワークスペース、実用的なインフラツール、Agent モードを組み合わせています。Agent はサーバー側タスクを計画し、コマンドを実行し、出力を確認し、一時的な失敗ではリトライし、実行の流れを見える形で残します。
 
+## 製品ツアー
+
+<p align="center">
+  <img alt="Reflex Agent ワークスペース" src="./docs/screenshots/ja/agent.png" width="100%" />
+</p>
+<p align="center">
+  <b>Agent</b><br />ツール手順、コマンド、結果、ストリーミング回答を表示。
+</p>
+
+<p align="center">
+  <img alt="Reflex Docker ワークスペース" src="./docs/screenshots/ja/docker.png" width="100%" />
+</p>
+<p align="center">
+  <b>Docker</b><br />コンテナ、イメージ、ポート、ログ、ライフサイクル操作。
+</p>
+
+<p align="center">
+  <img alt="Reflex 接続ローディングアニメーション" src="./docs/media/ja/connection.gif" width="100%" />
+</p>
+<p align="center">
+  <b>接続フロー</b><br />SSH 接続、端末、ファイルツリー、監視がワークスペースに読み込まれます。
+</p>
+
+<p align="center">
+  <img alt="Reflex Agent インタラクションアニメーション" src="./docs/media/ja/agent.gif" width="100%" />
+</p>
+<p align="center">
+  <b>Agent フロー</b><br />プロンプト、ツール履歴、端末出力、ストリーミング回答を連続表示。
+</p>
+
+<p align="center">
+  <img alt="Reflex 外観設定" src="./docs/screenshots/ja/appearance-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>外観</b>：テーマ、アクセント、角丸、フォント。
+</p>
+
+<p align="center">
+  <img alt="Reflex 端末設定" src="./docs/screenshots/ja/terminal-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>端末</b>：描画、カーソル、文字組み、スクロールバック。
+</p>
+
+<p align="center">
+  <img alt="Reflex アプリ設定" src="./docs/screenshots/ja/application-settings.png" width="100%" />
+</p>
+
 ## Reflex を選ぶ理由
 
 - **リモート作業を 1 つの場所に集約:** 端末、ファイル、Docker、監視、AI アクションを並べて扱えます。
@@ -105,45 +153,6 @@
 - 複数の AI プロバイダープロファイル
 - 同一プロバイダーエンドポイントで複数モデルを選択可能
 - ローカライズされた UI オプション
-
-## スクリーンショット
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex Agent ワークスペース" src="./docs/screenshots/ja/agent.png" /></td>
-    <td width="50%"><img alt="Reflex Docker ワークスペース" src="./docs/screenshots/ja/docker.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Agent</b><br />ツール手順、コマンド、結果、ストリーミング回答を表示。</td>
-    <td align="center"><b>Docker</b><br />コンテナ、イメージ、ポート、ログ、ライフサイクル操作。</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex 接続ローディングアニメーション" src="./docs/media/ja/connection.gif" /></td>
-    <td width="50%"><img alt="Reflex Agent インタラクションアニメーション" src="./docs/media/ja/agent.gif" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>接続フロー</b><br />SSH 接続、端末、ファイルツリー、監視がワークスペースに読み込まれます。</td>
-    <td align="center"><b>Agent フロー</b><br />プロンプト、ツール履歴、端末出力、ストリーミング回答を連続表示。</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex 外観設定" src="./docs/screenshots/ja/appearance-settings.png" /></td>
-    <td width="50%"><img alt="Reflex 端末設定" src="./docs/screenshots/ja/terminal-settings.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>外観</b>：テーマ、アクセント、角丸、フォント。</td>
-    <td align="center"><b>端末</b>：描画、カーソル、文字組み、スクロールバック。</td>
-  </tr>
-</table>
-
-<p align="center">
-  <img alt="Reflex アプリ設定" src="./docs/screenshots/ja/application-settings.png" width="100%" />
-</p>
 
 ## クイックスタート
 

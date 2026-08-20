@@ -47,6 +47,54 @@
 
 It combines a focused terminal workspace with practical infrastructure tools and an Agent that can execute visible server operations without exposing hidden reasoning. Connection profiles, preferences, provider credentials, and Agent history remain local to the application.
 
+## Product tour
+
+<p align="center">
+  <img alt="Reflex Agent workspace" src="./docs/screenshots/en/agent.png" width="100%" />
+</p>
+<p align="center">
+  <b>Agent</b><br />Visible tool steps, commands, results, and streaming responses.
+</p>
+
+<p align="center">
+  <img alt="Reflex Docker workspace" src="./docs/screenshots/en/docker.png" width="100%" />
+</p>
+<p align="center">
+  <b>Docker</b><br />Containers, images, ports, logs, and lifecycle actions.
+</p>
+
+<p align="center">
+  <img alt="Reflex connection loading animation" src="./docs/media/en/connection.gif" width="100%" />
+</p>
+<p align="center">
+  <b>Connection flow</b><br />SSH connection, terminal, file tree, and monitoring load into a ready workspace.
+</p>
+
+<p align="center">
+  <img alt="Reflex Agent interaction animation" src="./docs/media/en/agent.gif" width="100%" />
+</p>
+<p align="center">
+  <b>Agent flow</b><br />Prompt, tool timeline, terminal output, and streamed answer in one continuous run.
+</p>
+
+<p align="center">
+  <img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>Appearance</b><br />Themes, accent color, radius, and fonts.
+</p>
+
+<p align="center">
+  <img alt="Reflex terminal settings" src="./docs/screenshots/en/terminal-settings.png" width="100%" />
+</p>
+<p align="center">
+  <b>Terminal</b><br />Rendering, cursor, typography, and scrollback.
+</p>
+
+<p align="center">
+  <img alt="Reflex application settings" src="./docs/screenshots/en/application-settings.png" width="100%" />
+</p>
+
 ## Why Reflex
 
 - **One remote workspace:** terminal, files, Docker, monitoring, and Agent actions stay side by side.
@@ -91,49 +139,6 @@ It combines a focused terminal workspace with practical infrastructure tools and
 - System, light, and dark appearances with configurable accent colors
 - Adjustable corner radius and interface/terminal font families
 - English, Simplified Chinese, Japanese, Korean, and Italian UI
-
-## Product tour
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex Agent workspace" src="./docs/screenshots/en/agent.png" /></td>
-    <td width="50%"><img alt="Reflex Docker workspace" src="./docs/screenshots/en/docker.png" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Agent</b><br />Visible tool steps, commands, results, and streaming responses.</td>
-    <td align="center"><b>Docker</b><br />Containers, images, ports, logs, and lifecycle actions.</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Reflex connection loading animation" src="./docs/media/en/connection.gif" /></td>
-    <td width="50%"><img alt="Reflex Agent interaction animation" src="./docs/media/en/agent.gif" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Connection flow</b><br />SSH connection, terminal, file tree, and monitoring load into a ready workspace.</td>
-    <td align="center"><b>Agent flow</b><br />Prompt, tool timeline, terminal output, and streamed answer in one continuous run.</td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%">
-      <img alt="Reflex appearance settings" src="./docs/screenshots/en/appearance-settings.png" />
-    </td>
-    <td width="50%">
-      <img alt="Reflex terminal settings" src="./docs/screenshots/en/terminal-settings.png" />
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><b>Appearance</b><br />Themes, accent color, radius, and fonts.</td>
-    <td align="center"><b>Terminal</b><br />Rendering, cursor, typography, and scrollback.</td>
-  </tr>
-</table>
-
-<p align="center">
-  <img alt="Reflex application settings" src="./docs/screenshots/en/application-settings.png" width="100%" />
-</p>
 
 ## Download
 
