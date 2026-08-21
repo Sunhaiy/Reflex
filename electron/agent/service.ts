@@ -159,6 +159,7 @@ class AgentConversation {
     const controller = new AbortController();
     this.abort = controller;
     this.history.push({ role: 'user', parts: [{ type: 'text', text: options.message }] });
+    this.checkpoint(this.history);
 
     try {
       const outcome = await runAgent(this.history, {
@@ -179,6 +180,11 @@ class AgentConversation {
           signal: controller.signal,
         },
         signal: controller.signal,
+        onCheckpoint: (messages) => {
+          if (this.disposed) return;
+          this.history = messages;
+          this.checkpoint(messages);
+        },
         events: {
           onText: (delta) => emit(this.sessionId, this.conversationId, { type: 'text', delta }),
           onToolStart: (call) => emit(this.sessionId, this.conversationId, {
@@ -200,16 +206,14 @@ class AgentConversation {
       // completed microtask recreate history that the user has already removed.
       if (this.disposed) return;
       this.history = outcome.messages;
-      try {
-        saveModelHistory(this.store, this.connectionId, this.conversationId, this.history);
-      } catch (error) {
-        // Saving history is useful but must never turn a successful server operation
-        // into a visible Agent failure.
-        logger.error('[Agent] Could not save model history', error);
-      }
+      this.checkpoint(this.history);
       emit(this.sessionId, this.conversationId, { type: 'done', stopReason: outcome.stopReason, turns: outcome.turns });
     } catch (error) {
       if (this.disposed) return;
+      if (controller.signal.aborted) {
+        emit(this.sessionId, this.conversationId, { type: 'done', stopReason: 'aborted', turns: 0 });
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[Agent] Run failed for ${this.sessionId}`, error);
       emit(this.sessionId, this.conversationId, { type: 'error', message });
@@ -217,6 +221,15 @@ class AgentConversation {
       this.abort = null;
       // A cancel that lands mid-question would otherwise leave the loop parked forever.
       this.releaseWaiting('deny');
+    }
+  }
+
+  private checkpoint(messages: Message[]) {
+    try {
+      saveModelHistory(this.store, this.connectionId, this.conversationId, messages);
+    } catch (error) {
+      // History recovery must not turn a successful server operation into a failure.
+      logger.error('[Agent] Could not save model history', error);
     }
   }
 
@@ -322,7 +335,13 @@ export class AgentService {
     const ids = [...this.conversations.entries()]
       .filter(([, conversation]) => conversation.sessionId === sessionId)
       .map(([conversationId]) => conversationId);
-    for (const conversationId of ids) this.dispose(conversationId);
+    for (const conversationId of ids) {
+      const conversation = this.conversations.get(conversationId);
+      if (conversation?.busy) {
+        this.emit(sessionId, conversationId, { type: 'done', stopReason: 'aborted', turns: 0 });
+      }
+      this.dispose(conversationId);
+    }
     return ids;
   }
 

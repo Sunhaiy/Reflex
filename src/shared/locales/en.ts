@@ -230,7 +230,7 @@ export const en = {
       confirmRemove: "Confirm",
       cancelRemove: "Cancel",
       noDocker: "Docker not found",
-      noDockerHint: "Docker Engine is not installed or not running on this server.",
+      noDockerHint: "Docker is not installed or running on this server. Other features are unaffected.",
       logs: "Logs",
       prune: "Clean Up",
       pruneContainers: "Remove stopped containers",
@@ -339,7 +339,7 @@ export const en = {
       copied: "Copied",
     },
     boot: {
-      tagline: "Bend the wind, cross the moon—what joy is there in life?",
+      tagline: "Great software is the sum of every thoughtfully designed detail.",
       loading: "Starting Reflex",
     },
     form: {

@@ -368,6 +368,7 @@ export function setupIpcHandlers() {
   ipcMain.handle('get-processes', (_event, id: string) => sshManager.getProcesses(id));
   ipcMain.handle('kill-process', (event, { id, pid }: { id: string; pid: number }) => trackServerOperation(event.sender, () => sshManager.killProcess(id, pid), 5));
 
+  ipcMain.handle('docker-available', (_event, id: string) => sshManager.isDockerAvailable(id));
   ipcMain.handle('docker-list', (_event, id: string) => sshManager.getDockerContainers(id));
   ipcMain.handle('docker-action', (event, { id, containerId, action }) => trackServerOperation(event.sender, () => sshManager.dockerAction(id, containerId, action), 5));
   ipcMain.handle('docker-logs', (_event, { id, containerId, lines }) => sshManager.dockerLogs(id, containerId, lines));

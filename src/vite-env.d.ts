@@ -91,6 +91,7 @@ declare global {
       onStatsUpdate: (callback: (event: unknown, payload: { id: string; stats: SystemStats }) => void) => () => void;
       getProcesses: (id: string) => Promise<RemoteProcess[]>;
       killProcess: (id: string, pid: number) => Promise<void>;
+      isDockerAvailable: (id: string) => Promise<boolean>;
       getDockerContainers: (id: string) => Promise<DockerContainer[]>;
       dockerAction: (id: string, containerId: string, action: DockerAction) => Promise<void>;
       dockerLogs: (id: string, containerId: string, lines?: number) => Promise<string>;

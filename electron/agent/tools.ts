@@ -70,6 +70,7 @@ export const TOOLS: AgentTool[] = [
       const result = await context.shell.run(command, {
         cwd: typeof input.cwd === 'string' ? input.cwd : undefined,
         timeoutMs: timeout ? timeout * 1000 : undefined,
+        signal: context.signal,
         // Routed to whichever call is running, so a long build is watchable as it goes.
         onOutput: (chunk, _stream, plainChunk) => context.report(plainChunk, chunk),
       });

@@ -21,6 +21,15 @@ function assertSafeIdentifier(value: string, label: string) {
 export class CommandService {
   constructor(private host: CommandHost) { }
 
+  async isDockerAvailable(id: string): Promise<boolean> {
+      const { stdout } = await this.host.execCommand(
+      id,
+      'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; '
+        + 'then printf available; else printf unavailable; fi',
+      );
+      return stdout.trim() === 'available';
+  }
+
   async getProcesses(id: string): Promise<RemoteProcess[]> {
       const { stdout } = await this.host.execCommand(
       id,

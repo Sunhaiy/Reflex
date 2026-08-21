@@ -28,6 +28,8 @@ export interface RunOptions {
   /** Tokens of history to carry before old tool output is dropped. */
   contextBudget?: number;
   signal: AbortSignal;
+  /** Persists a resumable boundary before another provider call can begin. */
+  onCheckpoint?(messages: Message[]): void;
 }
 
 export interface RunOutcome {
@@ -77,6 +79,7 @@ export async function runAgent(
         messages.splice(0, messages.length, ...folded);
         outgoing = compactHistory(messages, { maxTokens: options.contextBudget });
         events.onCompacted();
+        options.onCheckpoint?.(messages);
       }
     }
 
@@ -96,6 +99,7 @@ export async function runAgent(
     if (result.text) assistantParts.push({ type: 'text', text: result.text });
     assistantParts.push(...result.toolCalls);
     if (assistantParts.length > 0) messages.push({ role: 'assistant', parts: assistantParts });
+    options.onCheckpoint?.(messages);
 
     if (result.toolCalls.length === 0) return { stopReason: 'done', turns, usage, messages };
 
@@ -106,6 +110,7 @@ export async function runAgent(
     }
 
     messages.push({ role: 'tool', parts: results });
+    options.onCheckpoint?.(messages);
   }
 
   return { stopReason: 'max_turns', turns, usage, messages };

@@ -227,7 +227,7 @@ export const ko: LocaleBundle = {
       confirmRemove: "확인",
       cancelRemove: "취소",
       noDocker: "Docker를 찾을 수 없음",
-      noDockerHint: "이 서버에 Docker Engine이 설치되지 않았거나 실행 중이 아닙니다.",
+      noDockerHint: "이 서버에 Docker가 설치되지 않았거나 실행 중이 아닙니다. 다른 기능에는 영향이 없습니다.",
       logs: "로그",
       prune: "정리",
       pruneContainers: "중지된 컨테이너 삭제",
@@ -336,7 +336,7 @@ export const ko: LocaleBundle = {
       copied: "복사됨",
     },
     boot: {
-      tagline: "바람을 꺾고 달을 건너니, 삶에 무슨 기쁨이 있으랴.",
+      tagline: "훌륭한 소프트웨어는 세심하게 설계된 모든 디테일의 합입니다.",
       loading: "Reflex 시작 중",
     },
     form: {

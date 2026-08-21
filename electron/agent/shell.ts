@@ -32,6 +32,7 @@ export interface RunOptions {
   cwd?: string;
   timeoutMs?: number;
   onOutput?: ShellOutputListener;
+  signal?: AbortSignal;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -149,6 +150,7 @@ interface PendingCommand {
   settle: (result: ShellResult) => void;
   fail: (error: Error) => void;
   timer: NodeJS.Timeout;
+  removeAbortListener?: () => void;
 }
 
 /**
@@ -301,6 +303,7 @@ export class AgentShell {
     if (this.pending !== pending) return;
     this.pending = null;
     clearTimeout(pending.timer);
+    pending.removeAbortListener?.();
     // stderr is a separate stream and can land just after the stdout sentinel.
     setTimeout(() => this.settle(pending, exitCode, timedOut), STDERR_DRAIN_MS);
   }
@@ -311,6 +314,7 @@ export class AgentShell {
     if (!pending) return;
     this.pending = null;
     clearTimeout(pending.timer);
+    pending.removeAbortListener?.();
     if (pending.flushTimer) clearTimeout(pending.flushTimer);
     pending.fail(error);
   }
@@ -329,8 +333,13 @@ export class AgentShell {
 
   private async runExclusive(command: string, options: RunOptions): Promise<ShellResult> {
     if (this.disposed) throw new Error('Agent shell has been closed');
+    if (options.signal?.aborted) throw new Error('Cancelled');
 
     const channel = await this.openChannel();
+    if (options.signal?.aborted) {
+      this.resetChannel();
+      throw new Error('Cancelled');
+    }
     const sentinel = `__RFX_${this.token}_${++this.sequence}__`;
     const timeoutMs = Math.min(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
@@ -355,12 +364,22 @@ export class AgentShell {
           // process may outlive it — the result says so, and the agent can go kill it.
           logger.error(`[Agent] Command timed out after ${timeoutMs}ms: ${command.slice(0, 120)}`);
           this.pending = null;
+          pending.removeAbortListener?.();
           this.resetChannel();
           this.settle(pending, null, true);
         }, timeoutMs),
       };
 
       this.pending = pending;
+      if (options.signal) {
+        const abort = () => this.cancelPending(pending);
+        options.signal.addEventListener('abort', abort, { once: true });
+        pending.removeAbortListener = () => options.signal?.removeEventListener('abort', abort);
+        if (options.signal.aborted) {
+          abort();
+          return;
+        }
+      }
       try {
         channel.write(`${body}\n__rfx_ec=$?\necho "${sentinel}:$__rfx_ec"\n`);
       } catch (error) {
@@ -369,6 +388,20 @@ export class AgentShell {
         fail(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  private cancelPending(pending: PendingCommand) {
+    if (this.pending !== pending) return;
+    this.pending = null;
+    clearTimeout(pending.timer);
+    pending.removeAbortListener?.();
+    if (pending.flushTimer) clearTimeout(pending.flushTimer);
+    // Use both the SSH signal request and the PTY control character: server policies vary
+    // in which one they honour. Closing afterwards prevents an ignored SIGINT from hanging.
+    try { this.channel?.signal('INT'); } catch { /* unsupported by the server */ }
+    try { this.channel?.write('\x03'); } catch { /* channel already gone */ }
+    this.resetChannel();
+    pending.fail(new Error('Cancelled'));
   }
 
   private resetChannel() {
@@ -389,6 +422,7 @@ export class AgentShell {
     if (pending) {
       this.pending = null;
       clearTimeout(pending.timer);
+      pending.removeAbortListener?.();
       if (pending.flushTimer) clearTimeout(pending.flushTimer);
       pending.fail(new Error('Agent shell closed'));
     }

@@ -409,6 +409,7 @@ export class SSHManager {
     // --- Processes and Docker -----------------------------------------------
     getProcesses(id: string) { return this.commands.getProcesses(id); }
     killProcess(id: string, pid: number) { return this.commands.killProcess(id, pid); }
+    isDockerAvailable(id: string) { return this.commands.isDockerAvailable(id); }
     getDockerContainers(id: string) { return this.commands.getDockerContainers(id); }
     dockerAction(id: string, containerId: string, action: Parameters<CommandService['dockerAction']>[2]) {
         return this.commands.dockerAction(id, containerId, action);

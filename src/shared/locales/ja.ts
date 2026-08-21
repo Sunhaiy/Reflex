@@ -227,7 +227,7 @@ export const ja: LocaleBundle = {
       confirmRemove: "確認",
       cancelRemove: "キャンセル",
       noDocker: "Dockerが見つかりません",
-      noDockerHint: "このサーバーではDocker Engineがインストールまたは起動されていません。",
+      noDockerHint: "このサーバーでは Docker がインストールまたは起動されていません。他の機能には影響しません。",
       logs: "ログ",
       prune: "クリーンアップ",
       pruneContainers: "停止したコンテナを削除",
@@ -336,7 +336,7 @@ export const ja: LocaleBundle = {
       copied: "コピーしました",
     },
     boot: {
-      tagline: "風を折り、月を渡る。生に何の歓びがあろう。",
+      tagline: "優れたソフトウェアは、丁寧に設計された細部の積み重ねでできています。",
       loading: "Reflex を起動しています",
     },
     form: {

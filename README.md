@@ -47,6 +47,8 @@
 
 It combines a focused terminal workspace with practical infrastructure tools and an Agent that can execute visible server operations without exposing hidden reasoning. Connection profiles, preferences, provider credentials, and Agent history remain local to the application.
 
+<p align="center"><em>Great software is the sum of every thoughtfully designed detail.</em></p>
+
 ## Product tour
 
 <p align="center">

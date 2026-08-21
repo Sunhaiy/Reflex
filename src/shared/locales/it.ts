@@ -227,7 +227,7 @@ export const it: LocaleBundle = {
       confirmRemove: "Conferma",
       cancelRemove: "Annulla",
       noDocker: "Docker non trovato",
-      noDockerHint: "Il motore Docker non è installato o avviato su questo server.",
+      noDockerHint: "Docker non è installato o in esecuzione su questo server. Le altre funzioni non sono interessate.",
       logs: "Log",
       prune: "Pulisci",
       pruneContainers: "Rimuovi i container arrestati",
@@ -336,7 +336,7 @@ export const it: LocaleBundle = {
       copied: "Copiato",
     },
     boot: {
-      tagline: "Piega il vento, attraversa la luna: quale gioia vi è nella vita?",
+      tagline: "Un grande software nasce dall'insieme di ogni dettaglio progettato con cura.",
       loading: "Avvio di Reflex",
     },
     form: {

@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('electron', {
   getProcesses: (id: string) => ipcRenderer.invoke('get-processes', id),
   killProcess: (id: string, pid: number) => ipcRenderer.invoke('kill-process', { id, pid }),
 
+  isDockerAvailable: (id: string) => ipcRenderer.invoke('docker-available', id),
   getDockerContainers: (id: string) => ipcRenderer.invoke('docker-list', id),
   dockerAction: (id: string, containerId: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove') => ipcRenderer.invoke('docker-action', { id, containerId, action }),
   dockerLogs: (id: string, containerId: string, lines = 200) => ipcRenderer.invoke('docker-logs', { id, containerId, lines }),

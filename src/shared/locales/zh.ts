@@ -227,7 +227,7 @@ export const zh: LocaleBundle = {
       confirmRemove: "确认",
       cancelRemove: "取消",
       noDocker: "未找到 Docker",
-      noDockerHint: "此服务器未安装或未运行 Docker Engine。",
+      noDockerHint: "此服务器未安装或未运行 Docker，其他功能不受影响。",
       logs: "日志",
       prune: "清理",
       pruneContainers: "删除已停止的容器",
@@ -336,7 +336,7 @@ export const zh: LocaleBundle = {
       copied: "已复制",
     },
     boot: {
-      tagline: "折风渡月，生亦何欢。",
+      tagline: "优秀的软件是由其所有静心设计的细节共同构成的",
       loading: "正在启动 Reflex",
     },
     form: {
