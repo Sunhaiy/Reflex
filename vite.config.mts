@@ -16,4 +16,12 @@ export default defineConfig({
     port: 3002,
     strictPort: true,
   },
+  build: {
+    rollupOptions: {
+      input: {
+        app: fileURLToPath(new URL('./index.html', import.meta.url)),
+        website: fileURLToPath(new URL('./website.html', import.meta.url)),
+      },
+    },
+  },
 })

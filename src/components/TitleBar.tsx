@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../hooks/useTranslation';
 import type { Session, SessionStatus } from '../shared/types';
 
-const logoUrl = `${import.meta.env.BASE_URL}tray-icon.png`;
+import { ReflexLogo } from './ReflexLogo';
 
 interface TitleBarProps {
   page: 'connections' | 'workspace' | 'settings';
@@ -47,8 +47,8 @@ export function TitleBar({
       className="relative z-30 flex h-12 shrink-0 select-none items-center border-b border-border/45 bg-background/48 px-2 backdrop-blur-2xl"
       style={dragStyle}
     >
-      <div className="flex w-[116px] shrink-0 items-center gap-2.5 px-2">
-        <img src={logoUrl} alt="Reflex" className="h-7 w-7 rounded-xl border border-border/55 object-cover" />
+      <div className="flex w-[116px] shrink-0 items-center gap-2.5 px-3">
+        <ReflexLogo className="h-[22px] w-[22px]" />
         <span className="text-[13px] font-semibold tracking-[-0.02em]">Reflex</span>
       </div>
 

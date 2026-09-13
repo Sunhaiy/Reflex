@@ -160,9 +160,9 @@ export function getMainWindow() {
 
 function getRuntimeAssetPath(fileName: string) {
   const appRoot = path.join(__dirname, '../..');
+  const assetDirectories = app.isPackaged ? ['dist', 'public'] : ['public', 'dist'];
   const candidates = [
-    path.join(appRoot, 'dist', fileName),
-    path.join(appRoot, 'public', fileName),
+    ...assetDirectories.map((directory) => path.join(appRoot, directory, fileName)),
     path.join(appRoot, fileName),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];

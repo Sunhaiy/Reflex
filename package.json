@@ -1,7 +1,7 @@
 {
   "name": "reflex",
   "private": true,
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "Reflex is a lightweight SSH workspace with terminal, files, Docker, and system monitoring.",
   "author": "SUNHIY",
   "engines": {
@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
     "dev:renderer": "vite",
+    "dev:website": "vite --open /website.html --port 3003 --strictPort",
     "dev:main": "tsc -p electron/tsconfig.json && electron .",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
@@ -20,7 +21,8 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:website": "vite preview --open /website.html --port 4174 --strictPort"
   },
   "build": {
     "asar": true,

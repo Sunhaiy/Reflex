@@ -2,6 +2,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowUpRight01Icon, Download01Icon, FolderOpenIcon, GithubIcon, Loading02Icon, Refresh01Icon, Tick02Icon } from '@hugeicons/core-free-icons';
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/button';
+import { ReflexLogo } from '../../components/ReflexLogo';
 
 import { Select } from '../../components/ui/select';
 
@@ -111,7 +112,9 @@ export function AppTab() {
         description={t('settings.about.title')}
       >
         <div className="flex items-center gap-4 rounded-2xl border border-border/55 bg-background/38 p-4">
-          <img src={`${import.meta.env.BASE_URL}tray-icon.png`} alt="Reflex" className="h-12 w-12 rounded-2xl border border-border/60 object-cover" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center">
+            <ReflexLogo className="h-8 w-8" />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">Reflex {appVersion}</div>
             <div className="mt-1 text-xs leading-5 text-muted-foreground">{t('boot.tagline')}</div>

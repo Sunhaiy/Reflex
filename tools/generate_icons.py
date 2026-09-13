@@ -3,16 +3,55 @@ from __future__ import annotations
 from pathlib import Path
 
 from PIL import Image
+from PyQt6.QtCore import QRectF
+from PyQt6.QtGui import QColor, QImage, QPainter, QPen
+from PyQt6.QtSvg import QSvgRenderer
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_LOGO = ROOT / "logo.png"
 PUBLIC_DIR = ROOT / "public"
+SOURCE_LOGO = PUBLIC_DIR / "suxins-life-icon.svg"
+README_LOGO_PATH = ROOT / "logo.png"
+LOGO_COPY_PATHS = [PUBLIC_DIR / "logo.png", ROOT / "src" / "assets" / "logo.png"]
 
 APP_ICON_PATH = PUBLIC_DIR / "icon.png"
 TRAY_ICON_PATH = PUBLIC_DIR / "tray-icon.png"
 ICO_PATH = PUBLIC_DIR / "icon.ico"
 ICNS_PATH = PUBLIC_DIR / "icon.icns"
+
+
+def render_source_logo(canvas_size: int = 1254) -> Image.Image:
+    renderer = QSvgRenderer(str(SOURCE_LOGO))
+    if not renderer.isValid():
+        raise ValueError(f"Could not load SVG logo: {SOURCE_LOGO}")
+
+    image = QImage(canvas_size, canvas_size, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor(0, 0, 0, 0))
+
+    painter = QPainter(image)
+    painter.setRenderHints(
+        QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform,
+    )
+    painter.setPen(QPen(QColor(0, 0, 0, 0)))
+    painter.setBrush(QColor(255, 255, 255))
+    corner_radius = canvas_size * 0.16
+    painter.drawRoundedRect(QRectF(0, 0, canvas_size, canvas_size), corner_radius, corner_radius)
+
+    logo_padding = canvas_size * 0.19
+    renderer.render(
+        painter,
+        QRectF(
+            logo_padding,
+            logo_padding,
+            canvas_size - (logo_padding * 2),
+            canvas_size - (logo_padding * 2),
+        ),
+    )
+    painter.end()
+
+    if not image.save(str(README_LOGO_PATH), "PNG"):
+        raise OSError(f"Could not write rendered logo: {README_LOGO_PATH}")
+    return Image.open(README_LOGO_PATH).convert("RGBA")
 
 
 def create_padded_icon(source: Image.Image, canvas_size: int, scale: float) -> Image.Image:
@@ -27,7 +66,10 @@ def create_padded_icon(source: Image.Image, canvas_size: int, scale: float) -> I
 def main() -> None:
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
 
-    source = Image.open(SOURCE_LOGO).convert("RGBA")
+    source = render_source_logo()
+    for path in LOGO_COPY_PATHS:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        source.save(path)
 
     # Keep only a slim transparent edge so the rounded white card stays readable
     # in Windows taskbar, desktop, and tray contexts without making the core mark
@@ -49,6 +91,9 @@ def main() -> None:
         print(f"Warning: could not update ICNS: {exc}")
 
     print("Generated:")
+    print(f" - {README_LOGO_PATH}")
+    for path in LOGO_COPY_PATHS:
+        print(f" - {path}")
     print(f" - {APP_ICON_PATH}")
     print(f" - {TRAY_ICON_PATH}")
     print(f" - {ICO_PATH}")

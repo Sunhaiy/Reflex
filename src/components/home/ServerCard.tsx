@@ -247,21 +247,24 @@ export function ServerCard({
           />
         </div>
 
-        {providerLink && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              void window.electron.openExternal(providerLink.url);
-            }}
-            className="mt-2.5 flex w-fit max-w-full items-center gap-1.5 rounded-full border border-border/50 px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
-            title={providerLink.url}
-          >
-            <HugeiconsIcon icon={Globe02Icon} className="h-3 w-3 shrink-0" />
-            <span className="truncate">{providerLink.label}</span>
-            <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-2.5 w-2.5 shrink-0" />
-          </button>
-        )}
+        {/* Reserve the provider row so cards align even without a link. */}
+        <div className="mt-2.5 flex min-h-[25px] items-start">
+          {providerLink && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void window.electron.openExternal(providerLink.url);
+              }}
+              className="flex w-fit max-w-full items-center gap-1.5 rounded-full border border-border/50 px-2.5 py-1 text-[10px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              title={providerLink.url}
+            >
+              <HugeiconsIcon icon={Globe02Icon} className="h-3 w-3 shrink-0" />
+              <span className="truncate">{providerLink.label}</span>
+              <HugeiconsIcon icon={ArrowUpRight01Icon} className="h-2.5 w-2.5 shrink-0" />
+            </button>
+          )}
+        </div>
 
         {deleting && (
           <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-rose-500/[0.07] px-3 py-2">
