@@ -348,7 +348,7 @@ export function ReflexWebsite() {
 
       <footer className="website-footer">
         <span>Terminal · Files · Docker · Agent</span>
-        <span>Local-first / v1.0.23</span>
+        <span>Local-first / v1.0.24</span>
       </footer>
     </div>
   );
