@@ -32,6 +32,9 @@
     </a>
     <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white" />
     <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-0f766e" />
+    <a href="https://linux.do/">
+      <img alt="Linux.do Community" src="https://img.shields.io/badge/Linux.do-Community-f0b450" />
+    </a>
   </p>
 </div>
 

@@ -30,6 +30,9 @@
     <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=111111" />
     <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
     <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-supported-0f766e" />
+    <a href="https://linux.do/">
+      <img alt="Linux.do Community" src="https://img.shields.io/badge/Linux.do-Community-f0b450" />
+    </a>
   </p>
 
   <p>
