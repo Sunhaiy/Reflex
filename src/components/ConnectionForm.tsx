@@ -7,11 +7,16 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { useTranslation } from '../hooks/useTranslation';
 import { cn } from '../lib/utils';
+import { ManagementFields, type CreateCategory } from './home/ManagementFields';
+import { useManagementText } from '../hooks/useManagementText';
+import type { ServerCatalog } from '../shared/serverManagement';
 
 interface ConnectionFormProps {
     initialData?: Partial<SSHConnection>;
     draft?: ConnectionDraft | null;
-    onSave: (data: SSHConnection) => void;
+    onSave: (data: SSHConnection) => Promise<void>;
+    catalog: ServerCatalog;
+    onCreateCategory: CreateCategory;
     onSaveDraft: (data: Partial<SSHConnection>) => Promise<void>;
     onClearDraft: () => Promise<void>;
     onCancel: () => void;
@@ -62,6 +67,8 @@ function autoName(data: Partial<SSHConnection>) {
 }
 
 export function ConnectionForm({
+    catalog,
+    onCreateCategory,
     initialData,
     draft,
     onSave,
@@ -70,6 +77,8 @@ export function ConnectionForm({
     onCancel,
 }: ConnectionFormProps) {
     const { t } = useTranslation();
+    const mt = useManagementText();
+    const [saving, setSaving] = useState(false);
     const isEditing = Boolean(initialData?.id);
     const restoredDraft = !isEditing ? draft : null;
     const initialFormData = useMemo(
@@ -106,8 +115,9 @@ export function ConnectionForm({
         return '';
     };
 
-    const handleSubmit = (event: React.FormEvent) => {
+    const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
+        if (saving) return;
         const validationError = validate();
         if (validationError) {
             setError(validationError);
@@ -115,7 +125,8 @@ export function ConnectionForm({
         }
 
         const trimmedName = formData.name?.trim();
-        onSave({
+        setSaving(true);
+        try { await onSave({
             ...(formData as SSHConnection),
             id: formData.id || crypto.randomUUID(),
             name: trimmedName || autoName(formData),
@@ -124,7 +135,8 @@ export function ConnectionForm({
             privateKeyPath: formData.privateKeyPath?.trim(),
             privateKey: formData.privateKey?.trim() || undefined,
             providerUrl: formData.providerUrl?.trim() || undefined,
-        });
+            domain: formData.domain?.trim() || undefined,
+        }); } catch { setError(mt('error')); } finally { setSaving(false); }
     };
 
     const handleSaveDraft = async () => {
@@ -208,6 +220,16 @@ export function ConnectionForm({
                         <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{t('connection.form.providerUrlDesc')}</p>
                     </div>
                 </div>
+
+                <label className="block">
+                    <Label text={mt('domain')} />
+                    <Input
+                        value={formData.domain ?? ''}
+                        onChange={(event) => set({ domain: event.target.value })}
+                        placeholder="example.com"
+                        className={inputClass}
+                    />
+                </label>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3 border-t border-border/45 pt-3.5">
                     <label className="block">
@@ -374,6 +396,9 @@ export function ConnectionForm({
                 )}
             </section>
 
+            <div className="border-t border-border/50 pt-3">
+                <ManagementFields value={formData} catalog={catalog} onChange={set} onCreateCategory={onCreateCategory} />
+            </div>
             {error && (
                 <div className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>
             )}
@@ -396,6 +421,7 @@ export function ConnectionForm({
                     )}
                     <Button
                         type="submit"
+                        disabled={saving}
                         variant="outline"
                         className="gap-2 rounded-xl border-0 bg-foreground px-4 text-background hover:bg-foreground/90 hover:text-background"
                     >

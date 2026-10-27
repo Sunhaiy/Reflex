@@ -4,6 +4,7 @@ import type { ActivityLine, ActivityScope, SSHConnection, SystemStats, UsageDelt
 import type { AppUpdateState } from '../src/shared/update';
 
 contextBridge.exposeInMainWorld('electron', {
+  saveServerManagement: (value: { connections: SSHConnection[]; catalog: import('../src/shared/serverManagement').ServerCatalog }) => ipcRenderer.invoke('server-management-save', value),
   getVersion: () => ipcRenderer.invoke('get-version'),
   updateGetState: (): Promise<AppUpdateState> => ipcRenderer.invoke('update-get-state'),
   updateCheck: (): Promise<void> => ipcRenderer.invoke('update-check'),

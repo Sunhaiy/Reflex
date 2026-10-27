@@ -69,22 +69,11 @@ function readWindowState(): WindowState {
 
   const probe = workAreaFor(x, y, savedWidth || MIN_WINDOW_SIZE.width, savedHeight || MIN_WINDOW_SIZE.height);
   const medium = mediumSize(probe);
-  let width = Math.max(MIN_WINDOW_SIZE.width, Math.round(savedWidth || medium.width));
-  let height = Math.max(MIN_WINDOW_SIZE.height, Math.round(savedHeight || medium.height));
+  const width = Math.max(MIN_WINDOW_SIZE.width, Math.round(savedWidth || medium.width));
+  const height = Math.max(MIN_WINDOW_SIZE.height, Math.round(savedHeight || medium.height));
 
-  const area = workAreaFor(x, y, width, height);
-
-  // A restored size that fills the work area carries no information — covering the
-  // screen is precisely what "maximized" already records. Earlier builds wrote the
-  // synthetic startup geometry into this field, which left the restore button handing
-  // back a near-fullscreen window, so anything that large is discarded.
-  if (width >= area.width * 0.97 && height >= area.height * 0.97) {
-    const fallback = mediumSize(area);
-    width = fallback.width;
-    height = fallback.height;
-    x = undefined;
-    y = undefined;
-  }
+  // Keep even deliberately near-fullscreen normal bounds exactly as the user left them.
+  // Startup geometry is excluded by trackWindowState rather than by guessing from size.
 
   if (x !== undefined && y !== undefined && !isPositionOnScreen(x, y, width, height)) {
     x = undefined;
@@ -106,12 +95,14 @@ function trackWindowState(window: BrowserWindow, initial: WindowState) {
   let saveTimer: NodeJS.Timeout | undefined;
   let normal = { width: initial.width, height: initial.height, x: initial.x, y: initial.y };
   let tracking = false;
+  let maximized = initial.maximized;
 
   const save = () => {
     if (window.isDestroyed()) return;
+    if (!window.isMinimized()) maximized = window.isMaximized();
     getStore().set(WINDOW_STATE_KEY, {
       ...normal,
-      maximized: window.isMaximized(),
+      maximized,
     } satisfies WindowState);
   };
 
@@ -257,9 +248,10 @@ const createWindow = () => {
       // Electron treats whatever we opened at — the work area — as the restored size,
       // so hand back the saved one the first time the window is un-maximised. Centred
       // when no position was stored, rather than skipped as it was before.
+      const restoredBounds = tracker.normalBounds();
       window.once('unmaximize', () => {
         if (window.isDestroyed()) return;
-        const target = tracker.normalBounds();
+        const target = restoredBounds;
         const area = workAreaFor(target.x, target.y, target.width, target.height);
         window.setBounds({
           width: target.width,

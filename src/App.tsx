@@ -36,8 +36,10 @@ function App() {
 
   const {
     connections,
+    catalog,
+    updateManagement,
+    createCategory,
     draft,
-    lastConnectedAt,
     restored: connectionsRestored,
     upsert,
     remove,
@@ -121,9 +123,8 @@ function App() {
   };
 
   const handleDeleteConnection = async (connection: SSHConnection) => {
-    const session = sessions.find((item) => item.connection.id === connection.id);
-    if (session) await closeSession(session.uniqueId);
     await remove(connection.id);
+    for (const session of sessions.filter(item => item.connection.id === connection.id)) await closeSession(session.uniqueId);
   };
 
   return (
@@ -161,12 +162,14 @@ function App() {
             {page === 'connections' && (
               <ServerHome
                 connections={connections}
+                catalog={catalog}
+                updateManagement={updateManagement}
+                onCreateCategory={createCategory}
                 sessions={sessions}
                 onConnect={openConnection}
-                lastConnectedAt={lastConnectedAt}
                 onNew={() => setEditingConnection({})}
                 onEdit={(connection) => setEditingConnection(connection)}
-                onDelete={(connection) => void handleDeleteConnection(connection)}
+                onDelete={handleDeleteConnection}
               />
             )}
 
@@ -209,6 +212,8 @@ function App() {
         size="lg"
       >
         <ConnectionForm
+          catalog={catalog}
+          onCreateCategory={createCategory}
           initialData={editingConnection || {}}
           draft={editingConnection?.id ? null : draft}
           onSave={handleSaveConnection}

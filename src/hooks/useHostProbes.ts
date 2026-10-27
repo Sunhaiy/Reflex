@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SSHConnection } from '../shared/types';
 
 export interface Probe {
@@ -26,33 +26,48 @@ const BATCH_SIZE = 5;
  */
 export function useHostProbes(connections: SSHConnection[]) {
   const [probes, setProbes] = useState<Record<string, Probe>>({});
+  const tail = useRef<Promise<void>>(Promise.resolve());
+  const targetKey = JSON.stringify(connections.map((c) => ({ id: c.id, host: c.host, port: c.port })));
 
   useEffect(() => {
+    const connections = JSON.parse(targetKey) as SSHConnection[];
     if (connections.length === 0) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const sweep = async () => {
       const targets = [...connections];
       while (targets.length > 0 && !cancelled) {
         const batch = targets.splice(0, BATCH_SIZE);
-        const results = await Promise.all(batch.map(async (connection) => {
-          const result = await window.electron
-            .probeHost({ host: connection.host, port: connection.port || 22 })
-            .catch(() => ({ ok: false as const }));
-          return [connection.id, { ms: result.ok ? result.ms ?? null : null }] as const;
-        }));
+        const results = await Promise.all(
+          batch.map(async (connection) => {
+            const result = await window.electron
+              .probeHost({ host: connection.host, port: connection.port || 22 })
+              .catch(() => ({ ok: false as const }));
+            return [connection.id, { ms: result.ok ? (result.ms ?? null) : null }] as const;
+          }),
+        );
         if (cancelled) return;
         setProbes((current) => ({ ...current, ...Object.fromEntries(results) }));
       }
     };
 
-    void sweep();
-    const timer = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
+    const schedule = () => {
+      tail.current = tail.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (!cancelled) await sweep();
+        })
+        .finally(() => {
+          if (!cancelled) timer = setTimeout(schedule, SWEEP_INTERVAL_MS);
+        });
+    };
+    schedule();
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, [connections]);
+  }, [targetKey]);
 
   return probes;
 }

@@ -9,6 +9,7 @@ import { mergeUsageDelta, normalizeUsageStats } from '../src/shared/usage.js';
 import { SSHManager } from './ssh/sshManager.js';
 import { getLogDirectory, getLogFilePath, readRecentLog, writeLog, type LogLevel } from './logger.js';
 import { registerAgentHandlers } from './agent/ipc.js';
+import type { ServerCatalog } from '../src/shared/serverManagement';
 
 const store = new Store();
 
@@ -275,6 +276,13 @@ export function setupIpcHandlers() {
     return probeHost(host, port);
   });
 
+  ipcMain.handle('server-management-save', (_event, value: { connections: SSHConnection[]; catalog: ServerCatalog }) => {
+    if (!value || !Array.isArray(value.connections) || !Array.isArray(value.catalog?.groups) || !Array.isArray(value.catalog?.tags)) throw new Error('Invalid server management data');
+    for (const c of value.connections) {
+      if (!c.id) throw new Error('Invalid server data');
+    }
+    store.set({ connections: mapSecrets(value.connections, encryptSecret), serverCatalog: value.catalog });
+  });
   ipcMain.handle('store-get', (_event, key: string) => {
     assertStoreKey(key);
     const value = store.get(key);

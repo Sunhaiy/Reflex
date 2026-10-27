@@ -26,6 +26,7 @@ import type { AppUpdateState } from './shared/update';
 declare global {
   interface Window {
     electron: {
+      saveServerManagement: (value: { connections: SSHConnection[]; catalog: import('./shared/serverManagement').ServerCatalog }) => Promise<void>;
       getVersion: () => Promise<string>;
       updateGetState: () => Promise<AppUpdateState>;
       updateCheck: () => Promise<void>;

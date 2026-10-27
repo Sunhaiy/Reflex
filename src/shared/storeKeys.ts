@@ -9,6 +9,7 @@
  */
 export const STORE_KEYS = [
   'connections',
+  'serverCatalog',
   'connectionDraft',
   'lastConnectedAt',
   'openSessions',

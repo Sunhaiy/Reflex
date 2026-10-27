@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { serialWriter } from '../shared/serialWriter';
+import type { ServerCatalog } from '../shared/serverManagement';
+import { managementText } from '../shared/managementLocale';
 import { log } from '../lib/logger';
 import type { StoreKey } from '../shared/storeKeys';
 import type { ConnectionDraft, SSHConnection } from '../shared/types';
@@ -15,20 +18,61 @@ export function useConnections() {
   // keep exactly the fields the user entered.
   const [lastConnectedAt, setLastConnectedAt] = useState<Record<string, number>>({});
   const [restored, setRestored] = useState(false);
+  const [catalog, setCatalog] = useState<ServerCatalog>({ groups: [], tags: [] });
+  const managementReady = useRef(false);
+  const [writer] = useState(() =>
+    serialWriter<{ connections: SSHConnection[]; catalog: ServerCatalog }>(
+      { connections: [], catalog: { groups: [], tags: [] } },
+      (value) => {
+        if (!managementReady.current)
+          return Promise.reject(new Error('Server data could not be restored; restart before saving'));
+        return window.electron.saveServerManagement(value);
+      },
+      (value) => {
+        setConnections(value.connections);
+        setCatalog(value.catalog);
+      },
+    ),
+  );
 
   useEffect(() => {
-    // Read independently rather than through one Promise.all: a single rejected key took
-    // the whole batch down with it, and the server list silently came back empty because
-    // setConnections simply never ran.
-    const readKey = (key: StoreKey) => window.electron.storeGet(key).catch((error) => {
-      log.error(`[Boot] Could not read "${key}"`, error);
-      return undefined;
-    });
+    // Ancillary settings fail independently. Connections and categories restore together;
+    // if either fails, block writes so an empty fallback cannot overwrite saved servers.
+    const readKey = (key: StoreKey) =>
+      window.electron.storeGet(key).catch((error) => {
+        log.error(`[Boot] Could not read "${key}"`, error);
+        return undefined;
+      });
 
     void Promise.all([
-      readKey('connections').then((stored) => {
-        if (Array.isArray(stored)) setConnections(stored as SSHConnection[]);
-      }),
+      Promise.all([
+        window.electron.storeGet('connections'),
+        window.electron.storeGet('serverCatalog'),
+        readKey('language'),
+      ])
+        .then(([stored, categories, language]) => {
+          const c = categories as ServerCatalog | undefined;
+          if (stored !== undefined && !Array.isArray(stored)) throw new Error('Invalid saved server list');
+          if (categories !== undefined && !(c && Array.isArray(c.groups) && Array.isArray(c.tags)))
+            throw new Error('Invalid saved categories');
+          writer.restore({
+            connections: Array.isArray(stored) ? stored : [],
+            catalog:
+              c && Array.isArray(c.groups) && Array.isArray(c.tags)
+                ? c
+                : {
+                    groups: ['personal', 'company'].map((id) => ({
+                      id,
+                      name: managementText(String(language ?? 'en'), id as 'personal' | 'company'),
+                    })),
+                    tags: [],
+                  },
+          });
+          managementReady.current = true;
+        })
+        .catch((error) => {
+          log.error('[Boot] Could not restore server management data', error);
+        }),
       readKey('connectionDraft').then((stored) => {
         // Drafts saved by the old two-step wizard carry an extra `step` field, which is simply ignored.
         if (stored && typeof stored === 'object' && 'data' in stored) {
@@ -41,33 +85,33 @@ export function useConnections() {
         }
       }),
     ]).then(() => setRestored(true));
-  }, []);
-
-  const persist = async (next: SSHConnection[]) => {
-    setConnections(next);
-    await window.electron.storeSet('connections', next);
-  };
+  }, [writer]);
 
   const upsert = async (connection: SSHConnection) => {
-    const exists = connections.some((item) => item.id === connection.id);
-    await persist(exists
-      ? connections.map((item) => (item.id === connection.id ? connection : item))
-      : [...connections, connection]);
+    await writer.update((current) => ({
+      ...current,
+      connections: current.connections.some((c) => c.id === connection.id)
+        ? current.connections.map((c) => (c.id === connection.id ? connection : c))
+        : [...current.connections, connection],
+    }));
   };
 
   const remove = async (connectionId: string) => {
-    await persist(connections.filter((item) => item.id !== connectionId));
+    await writer.update((current) => ({
+      ...current,
+      connections: current.connections.filter((c) => c.id !== connectionId),
+    }));
   };
 
   const saveDraft = async (data: Partial<SSHConnection>) => {
     const next: ConnectionDraft = { data, savedAt: Date.now() };
-    setDraft(next);
     await window.electron.storeSet('connectionDraft', next);
+    setDraft(next);
   };
 
   const clearDraft = async () => {
+    await window.electron.storeDelete('connectionDraft');
     setDraft(null);
-    await window.electron.storeDelete('connectionDraft').catch(() => undefined);
   };
 
   const markConnected = (connectionId: string) => {
@@ -78,5 +122,39 @@ export function useConnections() {
     });
   };
 
-  return { connections, draft, lastConnectedAt, restored, upsert, remove, saveDraft, clearDraft, markConnected };
+  const updateManagement = (
+    change: (current: { connections: SSHConnection[]; catalog: ServerCatalog }) => {
+      connections: SSHConnection[];
+      catalog: ServerCatalog;
+    },
+  ) => writer.update(change);
+  const createCategory = async (kind: 'groups' | 'tags', name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Category name is required');
+    let id = '';
+    await writer.update((current) => {
+      const existing = current.catalog[kind].find(
+        (item) => item.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase(),
+      );
+      id = existing?.id ?? crypto.randomUUID();
+      return existing
+        ? current
+        : { ...current, catalog: { ...current.catalog, [kind]: [...current.catalog[kind], { id, name: trimmed }] } };
+    });
+    return id;
+  };
+  return {
+    connections,
+    catalog,
+    updateManagement,
+    createCategory,
+    draft,
+    lastConnectedAt,
+    restored,
+    upsert,
+    remove,
+    saveDraft,
+    clearDraft,
+    markConnected,
+  };
 }

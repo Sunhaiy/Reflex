@@ -12,7 +12,12 @@ export interface SSHConnection {
   passphrase?: string;
   /** Optional IDC/cloud provider console link, stored as typed (the scheme is optional). */
   providerUrl?: string;
+  /** Optional domain associated with this server, separate from its SSH host. */
+  domain?: string;
   os?: string;
+  groupId?: string;
+  tagIds?: string[];
+  renewal?: import('./serverManagement').Renewal;
 }
 
 export type SessionStatus = 'connecting' | 'connected' | 'disconnected';

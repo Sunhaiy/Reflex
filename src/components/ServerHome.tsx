@@ -1,194 +1,683 @@
-import { HugeiconsIcon } from '@hugeicons/react';
-import { Add01Icon, ServerStack01Icon } from '@hugeicons/core-free-icons';
-import { useEffect, useMemo, useState } from 'react';
-import { cn } from '../lib/utils';
-import { HomeOverview } from './HomeOverview';
-import { ServerCard } from './home/ServerCard';
-import { useHostProbes } from '../hooks/useHostProbes';
-import { Input } from './ui/input';
-import { useTranslation } from '../hooks/useTranslation';
-import type { Session, SSHConnection } from '../shared/types';
+import { useEffect, useMemo, useState } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  Cancel01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  Folder01Icon,
+  PencilIcon,
+  Search01Icon,
+  ServerStack01Icon,
+  Settings01Icon,
+  Tag01Icon,
+  Tick02Icon,
+  ArrowDown01Icon,
+  ArrowUpRight01Icon,
+  Link01Icon,
+  Globe02Icon,
+} from "@hugeicons/core-free-icons";
+import { useHostProbes } from "../hooks/useHostProbes";
+import { useHomePreferences } from "../hooks/useHomePreferences";
+import { useManagementText } from "../hooks/useManagementText";
+import {
+  aggregateStatus,
+  localDate,
+  type ServerCatalog,
+} from "../shared/serverManagement";
+import type { Session, SSHConnection } from "../shared/types";
+import { cn } from "../lib/utils";
+import { normalizeProviderUrl } from "../shared/providerUrl";
+import { tagColor } from "./home/tagColors";
+import { Modal } from "./ui/modal";
+import { Input } from "./ui/input";
+import {
+  ManagementFields,
+  type CreateCategory,
+  managementButton as button,
+  managementInput as input,
+} from "./home/ManagementFields";
 
-interface ServerHomeProps {
-  connections: SSHConnection[];
+type Data = { connections: SSHConnection[]; catalog: ServerCatalog };
+interface Props extends Data {
   sessions: Session[];
+  updateManagement: (change: (current: Data) => Data) => Promise<void>;
   onConnect: (connection: SSHConnection) => void;
-  /** Epoch ms of the last successful connect, keyed by connection id. */
-  lastConnectedAt: Record<string, number>;
   onNew: () => void;
   onEdit: (connection: SSHConnection) => void;
-  onDelete: (connection: SSHConnection) => void;
+  onDelete: (connection: SSHConnection) => Promise<void>;
+  onCreateCategory: CreateCategory;
 }
+const iconButton =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40";
 
-/**
- * Buckets follow how the greetings actually read in Chinese, which splits midday out on
- * its own; the other languages reuse their afternoon greeting for that slot.
- */
-function greetingKey(hour: number) {
-  if (hour >= 5 && hour < 11) return 'home.greetingMorning';
-  if (hour >= 11 && hour < 13) return 'home.greetingNoon';
-  if (hour >= 13 && hour < 18) return 'home.greetingAfternoon';
-  if (hour >= 18 && hour < 23) return 'home.greetingEvening';
-  return 'home.greetingNight';
-}
-
-export function ServerHome({ connections, sessions, onConnect, lastConnectedAt, onNew, onEdit, onDelete }: ServerHomeProps) {
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [hour, setHour] = useState(() => new Date().getHours());
-  const { t } = useTranslation();
-
-  // A window left open overnight would otherwise still be wishing you good morning.
+export function ServerHome({
+  connections,
+  catalog,
+  sessions,
+  updateManagement,
+  onConnect,
+  onNew,
+  onEdit,
+  onDelete,
+  onCreateCategory,
+}: Props) {
+  const t = useManagementText();
+  const [today, setToday] = useState(localDate());
   useEffect(() => {
-    const timer = setInterval(() => setHour(new Date().getHours()), 60_000);
-    return () => clearInterval(timer);
+    const refresh = () => setToday(localDate());
+    const timer = setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
+  const {
+    query,
+    setQuery,
+    group,
+    setGroup,
+    tags,
+    setTags,
+    limit,
+    setLimit,
+    listRef,
+    onScroll,
+  } = useHomePreferences(connections.length);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState("");
+  const [managing, setManaging] = useState(false);
+  const [kind, setKind] = useState<"groups" | "tags">("groups");
+  const [editingId, setEditingId] = useState("");
+  const [name, setName] = useState("");
+  const [confirmation, setConfirmation] = useState<{
+    text: string;
+    action: () => Promise<void>;
+  } | null>(null);
 
-  const probes = useHostProbes(connections);
-  const [query, setQuery] = useState('');
-  const [onlyConnected, setOnlyConnected] = useState(false);
-
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return connections.filter((connection) => {
-      if (onlyConnected) {
-        const session = sessions.find((item) => item.connection.id === connection.id);
-        if (session?.status !== 'connected') return false;
-      }
-      if (!needle) return true;
-      // Matched against everything visible on the card, so typing an address works
-      // as readily as typing the name.
-      return [connection.name, connection.host, connection.username, connection.providerUrl]
-        .some((field) => field?.toLowerCase().includes(needle));
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return connections.filter((c) => {
+      const category = catalog.groups.find((g) => g.id === c.groupId);
+      const labels = catalog.tags.filter((tag) => c.tagIds?.includes(tag.id));
+      return (
+        (!group || (group === "ungrouped" ? !category : c.groupId === group)) &&
+        (!tags.length || tags.some((id) => c.tagIds?.includes(id))) &&
+        (!needle ||
+          [
+            c.name,
+            c.host,
+            c.username,
+            c.providerUrl,
+            c.domain,
+            category?.name,
+            ...labels.map((tag) => tag.name),
+          ].some((value) => value?.toLocaleLowerCase().includes(needle)))
+      );
     });
-  }, [connections, onlyConnected, query, sessions]);
-
-  const copyAddress = async (connection: SSHConnection) => {
+  }, [connections, catalog, query, group, tags]);
+  const visible = useMemo(() => filtered.slice(0, limit), [filtered, limit]);
+  const probes = useHostProbes(visible);
+  const run = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
     try {
-      await navigator.clipboard.writeText(`${connection.username || 'root'}@${connection.host}`);
-      setCopiedId(connection.id);
-      setTimeout(() => setCopiedId((current) => (current === connection.id ? null : current)), 1500);
+      await action();
     } catch {
-      // Clipboard access can be refused; the address stays visible on the card either way.
+      setError(t("error"));
+    } finally {
+      setBusy(false);
     }
   };
+  const resetEditor = () => {
+    setEditingId("");
+    setName("");
+  };
+  const saveCategory = () => {
+    const trimmed = name.trim();
+    if (
+      !trimmed ||
+      catalog[kind].some(
+        (c) =>
+          c.id !== editingId &&
+          c.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase(),
+      )
+    ) {
+      setError(t("nameRequired"));
+      return;
+    }
+    void run(async () => {
+      await updateManagement((current) => ({
+        ...current,
+        catalog: {
+          ...current.catalog,
+          [kind]: editingId
+            ? current.catalog[kind].map((c) =>
+                c.id === editingId ? { ...c, name: trimmed } : c,
+              )
+            : [
+                ...current.catalog[kind],
+                { id: crypto.randomUUID(), name: trimmed },
+              ],
+        },
+      }));
+      resetEditor();
+    });
+  };
+  const removeCategory = (id: string) =>
+    setConfirmation({
+      text: t("deleteCategory"),
+      action: async () => {
+        await updateManagement((current) => ({
+          catalog: {
+            ...current.catalog,
+            [kind]: current.catalog[kind].filter((c) => c.id !== id),
+          },
+          connections: current.connections.map((c) =>
+            kind === "groups"
+              ? c.groupId === id
+                ? { ...c, groupId: undefined }
+                : c
+              : { ...c, tagIds: c.tagIds?.filter((tag) => tag !== id) },
+          ),
+        }));
+        if (kind === "groups" && group === id) setGroup("");
+        if (kind === "tags")
+          setTags((current) => current.filter((tag) => tag !== id));
+        resetEditor();
+      },
+    });
 
   return (
-    <main className="relative z-10 h-full overflow-hidden">
-      {/* Padded past the floating button so the last row never hides underneath it. */}
-      <div className="h-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1440px] px-5 pb-24 pt-7 lg:px-6">
-          {/* Bottom margin clears the slab that sits above the first row of cards. */}
-          <header className="mb-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-            <h1 className="text-[22px] font-semibold tracking-tight">{t(greetingKey(hour))}</h1>
-
-            {connections.length > 0 && (
-              <div className="flex items-center gap-3">
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t('home.searchPlaceholder')}
-                  className="h-9 w-[220px] rounded-xl bg-background/55 px-3 text-xs"
-                  aria-label={t('home.searchPlaceholder')}
-                />
-
-                {/* A segmented pair rather than one toggle button beside the field: two
-                    buttons of the same weight read as a filter, where a lone button
-                    looked like it had been stuck onto the search box. Matches the
-                    auth-method control in the connection form. */}
-                <div className="flex shrink-0 items-center gap-1 rounded-xl bg-foreground/[0.045] p-1">
-                  {[
-                    { value: false, label: t('home.filterAll') },
-                    { value: true, label: t('home.filterConnected') },
-                  ].map((option) => (
-                    <button
-                      key={option.label}
-                      type="button"
-                      onClick={() => setOnlyConnected(option.value)}
-                      className={cn(
-                        'h-7 rounded-lg px-3 text-[11px] font-medium transition-colors',
-                        onlyConnected === option.value
-                          ? 'bg-foreground text-background'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </header>
-
-          {/* The extra margin is not decoration: each card's slab reaches 32px above
-              it, so a plain gap here collapses to almost nothing. */}
-          <div className="mb-[72px]">
-            {connections.length > 0 && (
-              <HomeOverview />
-            )}
+    <main className="relative z-10 flex h-full flex-col overflow-hidden">
+      <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col px-5 py-5 lg:px-7">
+        <header className="mb-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <HugeiconsIcon
+              icon={ServerStack01Icon}
+              className="h-5 w-5 text-muted-foreground"
+            />
+            <h1 className="text-lg font-semibold tracking-tight">
+              {t("title")}
+            </h1>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {connections.length}
+            </span>
           </div>
-
-          {connections.length > 0 && visible.length === 0 && (
-            <div className="flex min-h-[30vh] flex-col items-center justify-center text-center">
-              <p className="text-xs text-muted-foreground">{t('home.noMatches')}</p>
-            </div>
-          )}
-
-          {connections.length === 0 && (
-            <div className="flex min-h-[62vh] flex-col items-center justify-center text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-[calc(20px*var(--radius-scale))] border border-dashed border-border/70 bg-background/50">
-                <HugeiconsIcon icon={ServerStack01Icon} className="h-6 w-6 text-muted-foreground" />
-              </span>
-              <h2 className="mt-5 text-[15px] font-semibold tracking-tight">{t('home.emptyTitle')}</h2>
-              <p className="mt-1.5 text-xs text-muted-foreground">{t('home.newConnectionHint')}</p>
-            </div>
-          )}
-
-          <div className="grid gap-x-4 gap-y-14 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((connection) => {
-            const session = sessions.find((item) => item.connection.id === connection.id);
-            return (
-              <ServerCard
-                key={connection.id}
-                connection={connection}
-                status={session?.status}
-                hasSession={Boolean(session)}
-                probe={probes[connection.id]}
-                lastConnectedAt={lastConnectedAt[connection.id]}
-                deleting={pendingDeleteId === connection.id}
-                copied={copiedId === connection.id}
-                onConnect={() => onConnect(connection)}
-                onCopy={() => void copyAddress(connection)}
-                onEdit={() => onEdit(connection)}
-                onRequestDelete={() => setPendingDeleteId(connection.id)}
-                onCancelDelete={() => setPendingDeleteId(null)}
-                onConfirmDelete={() => {
-                  setPendingDeleteId(null);
-                  onDelete(connection);
-                }}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <HugeiconsIcon
+                icon={Search01Icon}
+                className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"
               />
-            );
-          })}
+              <Input
+                aria-label={t("search")}
+                placeholder={t("search")}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setLimit(50);
+                }}
+                className="h-9 w-[180px] rounded-xl bg-background/50 pl-9 text-xs sm:w-[260px]"
+              />
+            </div>
+            <button
+              onClick={onNew}
+              className="flex h-9 items-center gap-1.5 rounded-xl bg-foreground px-3 text-xs font-medium text-background hover:bg-foreground/90"
+            >
+              <HugeiconsIcon icon={Add01Icon} className="h-4 w-4" />
+              <span>{t("new")}</span>
+            </button>
           </div>
+        </header>
+        <div className="mb-4 space-y-2">
+          <div className="flex items-start gap-3">
+            <HugeiconsIcon
+              icon={Folder01Icon}
+              className="mt-2 h-4 w-4 shrink-0 text-muted-foreground"
+            />
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+              {[
+                { id: "", name: t("all") },
+                ...catalog.groups,
+                { id: "ungrouped", name: t("ungrouped") },
+              ].map((g) => (
+                <button
+                  key={g.id}
+                  aria-pressed={group === g.id}
+                  onClick={() => {
+                    setGroup(g.id);
+                    setLimit(50);
+                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs transition-colors",
+                    group === g.id
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    g.id && g.id !== "ungrouped" && tagColor(g.id),
+                    g.id &&
+                      g.id !== "ungrouped" &&
+                      group === g.id &&
+                      "ring-1 ring-current font-medium",
+                  )}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+            <button
+              className={iconButton}
+              title={t("manage")}
+              aria-label={t("manage")}
+              onClick={() => {
+                setError("");
+                setManaging(true);
+              }}
+            >
+              <HugeiconsIcon icon={Settings01Icon} className="h-4 w-4" />
+            </button>
+          </div>
+          {catalog.tags.length > 0 && (
+            <div className="flex items-start gap-3">
+              <HugeiconsIcon
+                icon={Tag01Icon}
+                className="mt-1.5 h-4 w-4 shrink-0 text-muted-foreground"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {catalog.tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    aria-pressed={tags.includes(tag.id)}
+                    onClick={() => {
+                      setTags((current) =>
+                        current.includes(tag.id)
+                          ? current.filter((id) => id !== tag.id)
+                          : [...current, tag.id],
+                      );
+                      setLimit(50);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors",
+                      tagColor(tag.id),
+                      tags.includes(tag.id)
+                        ? "font-medium ring-1 ring-current"
+                        : "hover:opacity-75",
+                    )}
+                  >
+                    {tags.includes(tag.id) && (
+                      <HugeiconsIcon icon={Tick02Icon} className="h-3 w-3" />
+                    )}
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        {error && !managing && !confirmation && (
+          <p role="alert" className="mb-3 text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <div
+          ref={listRef}
+          onScroll={onScroll}
+          className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-background/25"
+        >
+          <ul className="divide-y divide-border/45">
+            {visible.map((c) => {
+              const status = aggregateStatus(sessions, c.id) ?? "idle";
+              const probe = probes[c.id];
+              const providerLink = normalizeProviderUrl(c.providerUrl);
+              return (
+                <li
+                  key={c.id}
+                  className="group flex min-h-[84px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 transition-colors hover:bg-accent/30 sm:px-4 xl:grid xl:grid-cols-[36px_minmax(100px,1fr)_200px_324px_40px_184px]"
+                >
+                  <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-foreground/[0.04]">
+                    <HugeiconsIcon
+                      icon={ServerStack01Icon}
+                      className="h-[18px] w-[18px] text-muted-foreground"
+                    />
+                    <span
+                      title={t(status)}
+                      className={cn(
+                        "absolute bottom-0 right-0 h-2 w-2 rounded-full ring-2 ring-background",
+                        status === "connected"
+                          ? "bg-primary"
+                          : status === "connecting"
+                            ? "bg-amber-500"
+                            : "bg-muted-foreground/40",
+                      )}
+                    />
+                  </span>
+                  <button
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => onConnect(c)}
+                  >
+                    <div
+                      className="truncate text-[13px] font-medium"
+                      title={c.name}
+                    >
+                      {c.name}
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                      {c.username}@{c.host}:{c.port}
+                    </div>
+                  </button>
+                  <div
+                    className={cn(
+                      "order-last min-w-0 w-full pl-[48px] xl:order-none xl:w-full xl:pl-0",
+                      !providerLink && !c.domain?.trim() && "hidden xl:block",
+                    )}
+                  >
+                    {providerLink && (
+                      <a
+                        href={providerLink}
+                        title={providerLink}
+                        aria-label={`${t("provider")} · ${providerLink}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void window.electron
+                            .openExternal(providerLink)
+                            .catch(() => setError(t("error")));
+                        }}
+                        className="flex w-56 max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                      >
+                        <HugeiconsIcon
+                          icon={Link01Icon}
+                          className="h-3.5 w-3.5 shrink-0"
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {c.providerUrl?.trim()}
+                        </span>
+                        <HugeiconsIcon
+                          icon={ArrowUpRight01Icon}
+                          className="h-3.5 w-3.5 shrink-0"
+                        />
+                      </a>
+                    )}
+                    {c.domain?.trim() && (
+                      <span
+                        title={`${t("domain")} · ${c.domain.trim()}`}
+                        className="flex w-56 max-w-full items-center gap-1.5 px-1 py-1 text-xs text-muted-foreground"
+                      >
+                        <HugeiconsIcon
+                          icon={Globe02Icon}
+                          className="h-3.5 w-3.5 shrink-0"
+                        />
+                        <span className="min-w-0 truncate">
+                          {c.domain.trim()}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  <ManagementFields
+                    className="order-last w-full pl-[48px] xl:order-none xl:grid xl:grid-cols-[76px_112px_128px] xl:gap-1 xl:pl-0 [&>button]:min-w-0 [&>button]:max-w-full [&>button]:justify-self-start [&>button]:overflow-hidden"
+                    value={c}
+                    catalog={catalog}
+                    today={today}
+                    onCreateCategory={onCreateCategory}
+                    onChange={(patch) =>
+                      updateManagement((current) => ({
+                        ...current,
+                        connections: current.connections.map((item) =>
+                          item.id === c.id ? { ...item, ...patch } : item,
+                        ),
+                      }))
+                    }
+                  />
+                  <span className="hidden text-right text-[10px] tabular-nums text-muted-foreground xl:block">
+                    {status === "connected"
+                      ? t("connected")
+                      : probe?.ms !== null && probe?.ms !== undefined
+                        ? `${probe.ms} ms`
+                        : t(status)}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      className={iconButton}
+                      title={copied === c.id ? t("copied") : t("copy")}
+                      aria-label={`${c.name} ${t("copy")}`}
+                      onClick={() =>
+                        void navigator.clipboard
+                          .writeText(`${c.username}@${c.host}`)
+                          .then(() => {
+                            setCopied(c.id);
+                            setTimeout(() => setCopied(""), 1500);
+                          })
+                          .catch(() => setError(t("error")))
+                      }
+                    >
+                      <HugeiconsIcon
+                        icon={copied === c.id ? Tick02Icon : Copy01Icon}
+                        className="h-3.5 w-3.5"
+                      />
+                    </button>
+                    <button
+                      className={iconButton}
+                      disabled={busy}
+                      title={t("edit")}
+                      aria-label={`${c.name} ${t("edit")}`}
+                      onClick={() => onEdit(c)}
+                    >
+                      <HugeiconsIcon
+                        icon={PencilIcon}
+                        className="h-3.5 w-3.5"
+                      />
+                    </button>
+                    <button
+                      className={cn(iconButton, "hover:text-destructive")}
+                      disabled={busy}
+                      title={t("delete")}
+                      aria-label={`${c.name} ${t("delete")}`}
+                      onClick={() =>
+                        setConfirmation({
+                          text: `${c.name}: ${t("deleteServer")}`,
+                          action: () => onDelete(c),
+                        })
+                      }
+                    >
+                      <HugeiconsIcon
+                        icon={Delete02Icon}
+                        className="h-3.5 w-3.5"
+                      />
+                    </button>
+                    <button
+                      className="ml-2 flex h-8 min-w-[72px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-foreground/[0.06] px-3 text-xs font-medium hover:bg-foreground/[0.1]"
+                      onClick={() => onConnect(c)}
+                    >
+                      {t(
+                        sessions.some((s) => s.connection.id === c.id)
+                          ? "open"
+                          : "connect",
+                      )}
+                      <HugeiconsIcon
+                        icon={ArrowRight01Icon}
+                        className="h-3.5 w-3.5"
+                      />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {!visible.length && (
+            <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-muted-foreground">
+              <HugeiconsIcon
+                icon={ServerStack01Icon}
+                className="h-8 w-8 opacity-50"
+              />
+              <p className="text-xs">{t("none")}</p>
+              {(query || group || tags.length > 0) && (
+                <button
+                  className="flex items-center gap-1 text-xs hover:text-foreground"
+                  onClick={() => {
+                    setQuery("");
+                    setGroup("");
+                    setTags([]);
+                  }}
+                >
+                  <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
+                  {t("clear")}
+                </button>
+              )}
+            </div>
+          )}
+          {filtered.length > visible.length && (
+            <button
+              className="flex w-full items-center justify-center gap-2 border-t border-border/50 py-3 text-xs text-muted-foreground hover:bg-accent"
+              onClick={() => setLimit((n) => n + 50)}
+            >
+              {t("more")}
+              <HugeiconsIcon icon={ArrowDown01Icon} className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
-
-      {/* Floating primary action: it stays reachable while the list scrolls, and keeps
-          the grid made purely of real servers. Its own backdrop blur does the separating,
-          so no scrim or drop shadow is needed behind it. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center pb-6">
-        <button
-          type="button"
-          onClick={onNew}
-          className="beam-line glass-panel group pointer-events-auto flex h-12 items-center gap-2.5 rounded-full pl-3 pr-5 text-[13px] font-medium text-foreground transition-colors duration-200 hover:border-foreground/20 hover:bg-card/85"
-        >
-          {/* The beam renders in ::before/::after, which paint over children by default. */}
-          <span className="relative z-[1] flex h-8 w-8 items-center justify-center rounded-full bg-foreground/[0.07] transition-colors duration-200 group-hover:bg-foreground/[0.11]">
-            <HugeiconsIcon icon={Add01Icon} className="h-4 w-4" />
-          </span>
-          <span className="relative z-[1]">{t('home.newConnection')}</span>
-        </button>
-      </div>
+      <Modal
+        isOpen={managing && !confirmation}
+        onClose={() => !busy && setManaging(false)}
+        title={t("manage")}
+      >
+        <div className="space-y-4">
+          <div className="flex gap-1 rounded-xl bg-accent/40 p-1">
+            {(["groups", "tags"] as const).map((key) => (
+              <button
+                key={key}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs",
+                  kind === key
+                    ? "bg-background font-medium"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => {
+                  setKind(key);
+                  resetEditor();
+                }}
+              >
+                <HugeiconsIcon
+                  icon={key === "groups" ? Folder01Icon : Tag01Icon}
+                  className="h-3.5 w-3.5"
+                />
+                {t(key)}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-1">
+            {catalog[kind].map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs"
+              >
+                <HugeiconsIcon
+                  icon={kind === "groups" ? Folder01Icon : Tag01Icon}
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                />
+                <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                <button
+                  className={iconButton}
+                  disabled={busy}
+                  aria-label={`${c.name} ${t("rename")}`}
+                  onClick={() => {
+                    setEditingId(c.id);
+                    setName(c.name);
+                  }}
+                >
+                  <HugeiconsIcon icon={PencilIcon} className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  className={iconButton}
+                  disabled={busy}
+                  aria-label={`${c.name} ${t("delete")}`}
+                  onClick={() => removeCategory(c.id)}
+                >
+                  <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveCategory();
+            }}
+          >
+            <input
+              className={input}
+              aria-label={t(kind === "groups" ? "groupName" : "tagName")}
+              placeholder={t(kind === "groups" ? "groupName" : "tagName")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button
+              className={cn(button, "flex shrink-0 items-center gap-1")}
+              disabled={busy}
+            >
+              <HugeiconsIcon
+                icon={editingId ? Tick02Icon : Add01Icon}
+                className="h-3.5 w-3.5"
+              />
+              {t(editingId ? "save" : "add")}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                className={iconButton}
+                title={t("cancel")}
+                aria-label={t("cancel")}
+                onClick={resetEditor}
+              >
+                <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" />
+              </button>
+            )}
+          </form>
+          {error && (
+            <p role="alert" className="text-xs text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+      </Modal>
+      <Modal
+        isOpen={Boolean(confirmation)}
+        onClose={() => !busy && setConfirmation(null)}
+        title={t("delete")}
+      >
+        <p className="mb-4 text-sm">{confirmation?.text}</p>
+        {error && (
+          <p role="alert" className="mb-3 text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            className={button}
+            disabled={busy}
+            onClick={() => setConfirmation(null)}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className={cn(button, "flex items-center gap-1 text-destructive")}
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await confirmation?.action();
+                setConfirmation(null);
+              })
+            }
+          >
+            <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
+            {t("delete")}
+          </button>
+        </div>
+      </Modal>
     </main>
   );
 }
